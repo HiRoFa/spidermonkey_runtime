@@ -7,6 +7,11 @@ description = "es_runtime crate which is an api around the spidermonkey script e
 homepage = "https://gitlab.com/drfos/es_runtime"
 keywords = ["ecma", "script", "runtime", "engine", "utils", "javascript", "es6", "ecmascript", "scripting", "spidermonkey"]
 repository = "https://gitlab.com/drfos/es_runtime.git"
+license = "GNU General Public License v3.0"
+license-file = "LICENSE.txt"
+documentation = "https://gitlab.com/drfos/es_runtime"
+readme = "README.md"
+categories = ["development-tools"]
 
 [dependencies]
 mozjs = "0.10.1"
