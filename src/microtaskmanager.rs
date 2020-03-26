@@ -1,0 +1,221 @@
+use log::trace;
+use std::cell::RefCell;
+use std::mem::replace;
+use std::sync::mpsc::channel;
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread;
+use std::time::Duration;
+use uuid::Uuid;
+
+type LocalJob = dyn FnOnce() -> () + 'static;
+
+thread_local!(
+    pub static LOCAL_JOBS: RefCell<Vec<Box<LocalJob>>> = RefCell::new(vec![]);
+);
+///
+/// the MicroTaksManager is a single threaded threadpool which is used to act as the only thread
+/// using an instance of the spidermonkey runtime
+/// besides being able to add taks from any thread by add_task
+/// a running task can add jobs to the current thread by calling add_task_from_worker
+/// those tasks need not impl the Send trait and there is no locking happening to add
+/// the task to the queue
+pub struct MicroTaskManager {
+    jobs: Mutex<Vec<Box<dyn FnOnce() -> () + Send + 'static>>>,
+    empty_cond: Condvar,
+    worker_thread_name: String,
+}
+
+impl MicroTaskManager {
+    pub fn new() -> Arc<Self> {
+        let uuid = format!("sttm_wt_{}", Uuid::new_v4());
+        let sttm = MicroTaskManager {
+            jobs: Mutex::new(vec![]),
+            empty_cond: Condvar::new(),
+            worker_thread_name: uuid.clone(),
+        };
+        let rc = Arc::new(sttm);
+
+        let wrc = Arc::downgrade(&rc);
+
+        thread::Builder::new()
+            .name(uuid)
+            .spawn(move || loop {
+                let rcc = wrc.upgrade();
+                if rcc.is_some() {
+                    rcc.unwrap().worker_loop();
+                } else {
+                    trace!("Arc to MicroTaskManager was dropped, stopping worker thread");
+                    break;
+                }
+            })
+            .unwrap();
+
+        rc
+    }
+
+    /// add a task which will run asynchronously
+    pub fn add_task<T: FnOnce() -> () + Send + 'static>(&self, task: T) -> () {
+        {
+            let mut lck = self.jobs.lock().unwrap();
+            let jobs = &mut *lck;
+            jobs.push(Box::new(task));
+        }
+        self.empty_cond.notify_all();
+    }
+
+    /// execute a task synchronously in the worker thread
+    pub fn exe_task<R: Send + 'static, T: FnOnce() -> R + Send + 'static>(&self, task: T) -> R {
+        // create a channel, put sender in job, wait for receiver here
+        // don;t block from worker threads
+        self.assert_is_not_worker_thread();
+
+        let (sender, receiver) = channel();
+        let job = move || {
+            let res: R = task();
+            sender.send(res).unwrap();
+        };
+        self.add_task(job);
+        receiver.recv().unwrap()
+    }
+
+    /// method for adding tasks from worker, these do not need to impl Send
+    /// also there is no locks we need to wait for
+    pub fn add_task_from_worker<T: FnOnce() -> () + 'static>(&self, task: T) -> () {
+        // assert current thread is worker thread
+        // add to a thread_local st_tasks list
+        // plan a job to run a single task from that list
+        // this way the list does not need to be locked
+        self.assert_is_worker_thread();
+
+        LOCAL_JOBS.with(move |rc| {
+            let vec = &mut *rc.borrow_mut();
+            vec.push(Box::new(task));
+        });
+        self.empty_cond.notify_all();
+    }
+
+    fn has_local_jobs(&self) -> bool {
+        LOCAL_JOBS.with(|rc| {
+            let local_jobs = &*rc.borrow();
+            !local_jobs.is_empty()
+        })
+    }
+
+    pub fn assert_is_worker_thread(&self) {
+        let handle = thread::current();
+        assert_eq!(handle.name(), Some(self.worker_thread_name.as_str()));
+    }
+
+    pub fn assert_is_not_worker_thread(&self) {
+        let handle = thread::current();
+        assert_ne!(handle.name(), Some(self.worker_thread_name.as_str()));
+    }
+
+    fn worker_loop(&self) {
+        let jobs: Vec<Box<dyn FnOnce() -> () + Send + 'static>>;
+        {
+            let mut jobs_lck = self.jobs.lock().unwrap();
+
+            if jobs_lck.is_empty() && !self.has_local_jobs() {
+                let dur = Duration::from_secs(1);
+                jobs_lck = self.empty_cond.wait_timeout(jobs_lck, dur).ok().unwrap().0;
+            }
+
+            jobs = replace(&mut *jobs_lck, vec![]);
+        }
+
+        // do local jobs first
+        LOCAL_JOBS.with(|rc| {
+            let mut local_todos = vec![];
+            {
+                let local_jobs = &mut *rc.borrow_mut();
+                while !local_jobs.is_empty() {
+                    let local_job = local_jobs.remove(0);
+                    local_todos.push(local_job);
+                }
+            }
+            for local_todo in local_todos {
+                local_todo();
+            }
+        });
+
+        for job in jobs {
+            job();
+        }
+    }
+}
+
+impl Drop for MicroTaskManager {
+    fn drop(&mut self) {
+        trace!("drop MicroTaskManager");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::microtaskmanager::MicroTaskManager;
+    use log::debug;
+
+    use std::thread;
+    use std::time::Duration;
+    #[test]
+    fn t() {
+        thread::spawn(|| {
+            t1();
+        })
+        .join()
+        .ok()
+        .unwrap();
+    }
+
+    fn t1() {
+        {
+            let sttm = MicroTaskManager::new();
+
+            let sttm2 = sttm.clone();
+            let sttm3 = sttm.clone();
+            let sttm4 = sttm.clone();
+
+            let j = thread::spawn(move || {
+                debug!("add t1 to sttm3");
+                sttm3.add_task(|| {
+                    debug!("t1");
+                });
+                debug!("add t2 to sttm4");
+                sttm4.add_task(|| {
+                    debug!("t2");
+                });
+                debug!("dropping sttm3 and 4");
+            });
+
+            sttm.add_task(|| {
+                debug!("sp something");
+            });
+            sttm.add_task(|| {
+                debug!("sp something");
+            });
+            sttm.add_task(move || {
+                debug!("sp something");
+                sttm2.add_task_from_worker(|| {
+                    debug!("sp something from worker");
+                });
+                sttm2.add_task_from_worker(|| {
+                    debug!("sp something from worker");
+                });
+            });
+            sttm.add_task(|| {
+                debug!("sp something");
+            });
+
+            let a = sttm.exe_task(|| 12);
+            assert_eq!(a, 12);
+
+            std::thread::sleep(Duration::from_secs(2));
+            j.join().ok().unwrap();
+            debug!("done");
+        }
+        debug!("sttm should drop now");
+        thread::sleep(Duration::from_secs(1));
+        debug!("sttm should be dropped now");
+    }
+}
