@@ -16,7 +16,7 @@ Currently i'm working towards creating a 0.1 version which has a couple of goals
 
 * [ ] easy loading script files
 * [x] error handling (get ES errors in rust with filename/linenumber etc)
-* [ ] adding rust function to the engine so they are callable from ECMA-Script
+* [x] adding rust function to the engine so they are callable from ECMA-Script
   * [x] blocking
   * [x] non-blocking (returns a Promise in script)
 * [x] easy way to call ECMA-Script functions from rust
