@@ -50,46 +50,62 @@ These are in a very early testing stage and may become available later as a sepe
 Cargo.toml
 
 ```toml
-[dependencies]
-es_runtime = "0.0.1"
+    [dependencies]
+    es_runtime = "0.0.1"
 ```
 
 my_app.rs
 
 ```rust
 
-// start a runtime
+    #[test]
+    fn example() {
+        // start a runtime
 
-let rt = EsRuntimeWrapper::new(None);
+        let rt = EsRuntimeWrapper::new(None);
 
-// create an example object
+        // create an example object
 
-rt.eval_sync("this.myObj = {a: 1, b: 2};");
+        rt.eval_sync("this.myObj = {a: 1, b: 2};", "test1.es")
+            .ok()
+            .unwrap();
 
-// register a native rust method
+        // register a native rust method
 
-rt.register_op("my_rusty_op", |args: Vec<EsValueFacade>| {
-    let a = args.get(0).unwrap().get_i32();
-    let b = args.get(1).unwrap().get_i32();
-    a * b
-});
+        rt.register_op(
+            "my_rusty_op",
+            Box::new(|_sm_rt, args: Vec<EsValueFacade>| {
+                let a = args.get(0).unwrap().get_i32();
+                let b = args.get(1).unwrap().get_i32();
+                Ok(EsValueFacade::new_i32(a * b))
+            }),
+        );
 
-// call the rust method from ES
+        // call the rust method from ES
 
-rt.eval_sync("this.myObj.c = esses.invoke_rust_op_sync('my_rusty_op', 3, 7);");
+        rt.eval_sync(
+            "this.myObj.c = esses.invoke_rust_op_sync('my_rusty_op', 3, 7);",
+            "test2.es",
+        )
+        .ok()
+        .unwrap();
 
-let c: EsValueFacade = rt.eval_sync("return(this.myObj.c);");
+        let c: Result<EsValueFacade, EsErrorInfo> =
+            rt.eval_sync("return(this.myObj.c);", "test3.es");
 
-assert_eq!(21, c.get_i32());
+        assert_eq!(&21, c.ok().unwrap().get_i32());
 
-// define an ES method and calling it from rust
+        // define an ES method and calling it from rust
 
-rt.eval_sync("this.my_method = (a, b) => {return a * b;};");
+        rt.eval_sync("this.my_method = (a, b) => {return a * b;};", "test4.es")
+            .ok()
+            .unwrap();
 
-let args = vec![EsValueFacade::new_i32(12), EsValueFacade::new_i32(5)];
-let c_res: Result<EsValueFacade, EsErrorInfo> = rt.call_sync("my_method", args);
-let c: EsValueFacade = c_res.ok().unwrap();
-assert_eq!(60, c.get_i32());
+        let args = vec![EsValueFacade::new_i32(12), EsValueFacade::new_i32(5)];
+        let c_res: Result<EsValueFacade, EsErrorInfo> = rt.call_sync("my_method", args);
+        let c: EsValueFacade = c_res.ok().unwrap();
+        assert_eq!(&60, c.get_i32());
+    }
 
 
 
