@@ -15,7 +15,7 @@ categories = ["development-tools"]
 
 [dependencies]
 mozjs = "0.10.1"
-libc = "*"
+libc = "0.2.68"
 lazy_static = "1.4.0"
 log = "0.4.8"
 simple_logger = "1.3.0"
