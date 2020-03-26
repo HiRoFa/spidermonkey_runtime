@@ -111,3 +111,14 @@ my_app.rs
 
 ```
 
+# a word on compiling
+
+Currently i have only compiled this on and for a 64 bit linux machine (i use openSUSE) 
+
+Besides rust (duh) you'll the following packages to compile the mozjs crate
+
+* gcc-7
+* autoconf2.13
+* automake
+* clang
+* python
