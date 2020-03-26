@@ -50,6 +50,7 @@ These are in a very early testing stage and may become available later as a sepe
 Cargo.toml
 
 ```toml
+[dependencies]
 es_runtime = "0.0.1"
 ```
 
