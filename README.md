@@ -10,11 +10,11 @@ This project was started as a hobby project for me to learn rust. I hope some of
 
 Nowhere near production ready, it is untested and i'm pretty sure i created some memory leaks in the unsafe sections...
 
-it works with the mozjs crate version 0.10.1 which is allready pretty old but there are no newer releases, when i get more comfortable with spidermonkey and mozjs i'll see about using a git pull of a newer version.
+It works with the mozjs crate version 0.10.1 which is allready pretty old but there are no newer releases, when I get more comfortable with spidermonkey and mozjs I'll see about using a git pull of a newer version.
 
 Currently i'm working towards creating a 0.1 version which has a couple of goals
 
-* [ ] easy loading script files
+* [x] easy loading script files
 * [x] error handling (get ES errors in rust with filename/linenumber etc)
 * [x] adding rust function to the engine so they are callable from ECMA-Script
   * [x] blocking
@@ -113,9 +113,9 @@ my_app.rs
 
 # a word on compiling
 
-Currently i have only compiled this on and for a 64 bit linux machine (i use openSUSE) 
+Currently I have only compiled this on and for a 64 bit linux machine (I use openSUSE) 
 
-Besides rust (duh) you'll the following packages to compile the mozjs crate
+Besides rust (duh) you'll need to install the following packages to compile the mozjs crate
 
 * gcc-7
 * autoconf2.13
