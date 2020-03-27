@@ -10,11 +10,7 @@ This project was started as a hobby project for me to learn rust. I hope some of
 
 Nowhere near production ready, it is untested and i'm pretty sure i created some memory leaks in the unsafe sections...
 
-<<<<<<< HEAD
-It works with the mozjs crate version 0.10.1 which is allready pretty old but there are no newer releases, when I get more comfortable with spidermonkey and mozjs I'll see about using a git pull of a newer version.
-=======
 it works with the mozjs crate version 0.10.1 which is already pretty old but there are no newer releases, when i get more comfortable with spidermonkey and mozjs i'll see about using a git pull of a newer version.
->>>>>>> updated docs
 
 Currently i'm working towards creating a 0.1 version which has a couple of goals
 
