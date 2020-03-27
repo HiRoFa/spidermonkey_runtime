@@ -13,11 +13,13 @@ pub struct EsRuntimeWrapperInner {
 }
 
 impl EsRuntimeWrapperInner {
-    pub fn call(&self, function_name: &str, args: Vec<EsValueFacade>) -> () {
+    pub fn call(&self, obj_names: Vec<&'static str>, function_name: &str, args: Vec<EsValueFacade>) -> () {
         debug!("call {} in thread {}", function_name, thread_id::get());
         let f_n = function_name.to_string();
+
         self.do_in_es_runtime_thread(Box::new(move |sm_rt: &SmRuntime| {
-            let res = sm_rt.call(f_n.as_str(), args);
+
+            let res = sm_rt.call(obj_names,f_n.as_str(), args);
             if res.is_err() {
                 debug!("async call failed: {}", res.err().unwrap().message);
             }
@@ -26,13 +28,14 @@ impl EsRuntimeWrapperInner {
 
     pub fn call_sync(
         &self,
+        obj_names: Vec<&'static str>,
         function_name: &str,
         args: Vec<EsValueFacade>,
     ) -> Result<EsValueFacade, EsErrorInfo> {
         trace!("call_sync {} in thread {}", function_name, thread_id::get());
         let f_n = function_name.to_string();
         self.do_in_es_runtime_thread_sync(Box::new(move |sm_rt: &SmRuntime| {
-            sm_rt.call(f_n.as_str(), args)
+            sm_rt.call(obj_names, f_n.as_str(), args)
         }))
     }
 

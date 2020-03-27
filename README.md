@@ -21,7 +21,7 @@ Currently i'm working towards creating a 0.1 version which has a couple of goals
   * [x] non-blocking (returns a Promise in script)
 * [x] easy way to call ECMA-Script functions from rust
   * [x] by name (run_global_function())
-  * [ ] by object name and name (myObj.doSomething())
+  * [x] by object name and name (myObj.doSomething())
   * [x] passing params from rust
 * [ ] getting data from engine as primitives or vecs and maps
   * [x] primitives

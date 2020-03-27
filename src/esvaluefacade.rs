@@ -547,6 +547,7 @@ mod tests {
         let obj = EsValueFacade::new_obj(map);
 
         let res_esvf_res = rt.call_sync(
+            vec![],
             "test_set_object",
             vec![obj, EsValueFacade::new_str("p1".to_string())],
         );

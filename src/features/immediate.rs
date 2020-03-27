@@ -28,7 +28,7 @@ pub(crate) fn init(rt: &EsRuntimeWrapper) {
 
             sm_rt.do_with_sm_rt_async(move |sm_rt| {
                 sm_rt
-                    .call("_run_immediate_from_rust", vec![EsValueFacade::new_i32(id)])
+                    .call(vec!["esses", "async"], "_run_immediate_from_rust", vec![EsValueFacade::new_i32(id)])
                     .ok()
                     .expect("could not invoke _run_immediate_from_rust");
             });

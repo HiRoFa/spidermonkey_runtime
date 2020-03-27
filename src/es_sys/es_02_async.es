@@ -54,8 +54,4 @@ this.setImmediate = function(f, ...args) {
 }
 
 
-this._run_immediate_from_rust = function(id){
-    return esses.async._run_immediate_from_rust(id);
-};
-
 

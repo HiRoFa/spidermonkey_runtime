@@ -18,7 +18,7 @@ pub(crate) fn init(rt: &EsRuntimeWrapper) {
         let rt = &sm_rt.runtime;
         let context = rt.cx();
 
-        // todo write a define_funciton method which uses JS_DefineFunction which will effectively do the same as create and set prop
+        // todo write a define_function method which uses JS_DefineFunction which will effectively do the same as create and set prop
         let console_obj: *mut JSObject = crate::es_utils::new_object(context);
         let console_obj_val: JSVal = ObjectValue(console_obj);
 

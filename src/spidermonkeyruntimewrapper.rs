@@ -130,6 +130,7 @@ impl SmRuntime {
     /// call a function by name, the function needs to be defined on the root of the global scope
     pub fn call(
         &self,
+        obj_names: Vec<&str>,
         func_name: &str,
         arguments: Vec<EsValueFacade>,
     ) -> Result<EsValueFacade, EsErrorInfo> {
@@ -141,7 +142,7 @@ impl SmRuntime {
 
         trace!("smrt.call {} in thread {}", func_name, thread_id::get());
 
-        es_utils::call_method_name(context, *global, func_name, arguments)
+        es_utils::call_obj_method_name(context, *global,obj_names, func_name, arguments)
     }
 
     /// eval a piece of script
@@ -181,7 +182,7 @@ impl SmRuntime {
 
         // todo, should this return a list of available scopes in the runtime? (eventually stored in the esruntimeInner)
 
-        let cleanup_res = self.call("_esses_cleanup", Vec::new());
+        let cleanup_res = self.call(vec!["esses"],"cleanup", Vec::new());
         assert!(cleanup_res.is_ok());
 
         let runtime: &mozjs::rust::Runtime = &self.runtime;

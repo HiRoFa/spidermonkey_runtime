@@ -96,10 +96,11 @@ impl EsRuntimeWrapper {
     /// call a function by name and wait for it to complete
     pub fn call_sync(
         &self,
+        obj_names: Vec<&'static str>,
         function_name: &str,
         args: Vec<EsValueFacade>,
     ) -> Result<EsValueFacade, EsErrorInfo> {
-        self.do_with_inner(move |inner| inner.call_sync(function_name, args))
+        self.do_with_inner(move |inner| inner.call_sync(obj_names,function_name, args))
     }
 
     /// eval a script and don't wait for it to complete
@@ -108,8 +109,8 @@ impl EsRuntimeWrapper {
     }
 
     /// call a function by name and don't wait for it to complete
-    pub fn call(&self, function_name: &str, args: Vec<EsValueFacade>) -> () {
-        self.do_with_inner(move |inner| inner.call(function_name, args))
+    pub fn call(&self, obj_names: Vec<&'static str>, function_name: &str, args: Vec<EsValueFacade>) -> () {
+        self.do_with_inner(move |inner| inner.call(obj_names, function_name, args))
     }
 
     pub fn do_with_inner<R, F: FnOnce(&EsRuntimeWrapperInner) -> R>(&self, f: F) -> R {
@@ -165,6 +166,19 @@ pub mod tests {
         esrt.start_gc_deamon(Duration::from_secs(1));
         thread::sleep(Duration::from_secs(6));
         debug!("should have cleaned up at least 5 times by now");
+
+    }
+
+    #[test]
+    fn call_method() {
+        let rt: Arc<EsRuntimeWrapper> = TEST_RT.clone();
+        rt.eval_sync("this.myObj = {childObj: {myMethod: function(a, b){return a*b;}}};", "call_method").ok().unwrap();
+        let call_res: Result<EsValueFacade, EsErrorInfo> = rt.call_sync(vec!["myObj", "childObj"], "myMethod", vec![EsValueFacade::new_i32(12), EsValueFacade::new_i32(14)]);
+        match call_res {
+            Ok(esvf) => println!("answer was {}", esvf.get_i32()),
+            Err(eei) => println!("failed because {}", eei.message)
+        }
+
     }
 
 }
