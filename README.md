@@ -1,16 +1,20 @@
 # es_runtime
 
-es_runtime is a crate aimed at making it possible for rust devs to integrate an ECMA-Script engine in their rust projects
+es_runtime is a crate aimed at making it possible for rust developers to integrate an ECMA-Script engine in their rust projects
 
-The engine used is mozilla's SpiderMonkey engine (https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey)
+The engine used is the Mozilla SpiderMonkey engine (https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey)
 
-This project was started as a hobby project for me to learn rust. I hope some of you find it usefull to learn about using spidermonkey from rust.
+This project was started as a hobby project for me to learn rust. I hope some of you find it useful to learn about using spidermonkey from rust.
 
 # status
 
 Nowhere near production ready, it is untested and i'm pretty sure i created some memory leaks in the unsafe sections...
 
+<<<<<<< HEAD
 It works with the mozjs crate version 0.10.1 which is allready pretty old but there are no newer releases, when I get more comfortable with spidermonkey and mozjs I'll see about using a git pull of a newer version.
+=======
+it works with the mozjs crate version 0.10.1 which is already pretty old but there are no newer releases, when i get more comfortable with spidermonkey and mozjs i'll see about using a git pull of a newer version.
+>>>>>>> updated docs
 
 Currently i'm working towards creating a 0.1 version which has a couple of goals
 
@@ -21,7 +25,7 @@ Currently i'm working towards creating a 0.1 version which has a couple of goals
   * [x] non-blocking (returns a Promise in script)
 * [x] easy way to call ECMA-Script functions from rust
   * [x] by name (run_global_function())
-  * [ ] by objectname and name (myObj.doSomething())
+  * [ ] by object name and name (myObj.doSomething())
   * [x] passing params from rust
 * [ ] getting data from engine as primitives or vecs and maps
   * [x] primitives
@@ -34,7 +38,7 @@ Currently i'm working towards creating a 0.1 version which has a couple of goals
 
 # future goals / todo's
 
-* [ ] typedArrays from and to vecs
+* [ ] typedArrays from and to Vecs
 * [ ] typescript support
 * [ ] import/export statement support
 * [ ] much more
@@ -50,8 +54,8 @@ These are in a very early testing stage and may become available later as a sepe
 Cargo.toml
 
 ```toml
-    [dependencies]
-    es_runtime = "0.0.1"
+[dependencies]
+es_runtime = "0.0.1"
 ```
 
 my_app.rs
@@ -63,6 +67,9 @@ my_app.rs
         // start a runtime
 
         let rt = EsRuntimeWrapper::new(None);
+    
+        // run the garbage collector every 5 secs
+        rt.start_gc_deamon(Duration::from_secs(5));
 
         // create an example object
 
@@ -122,3 +129,8 @@ Besides rust (duh) you'll need to install the following packages to compile the 
 * automake
 * clang
 * python
+
+
+# howtos
+
+[HOWTO](docs/HOWTO.md)
