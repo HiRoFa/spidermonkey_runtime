@@ -1,6 +1,6 @@
 [package]
 name = "es_runtime"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["Andries Hiemstra"]
 edition = "2018"
 description = "es_runtime crate which is an api around the spidermonkey script engine"

@@ -1,4 +1,3 @@
-use crate::esvaluefacade::EsValueFacade;
 use log::{debug, trace};
 use mozjs::conversions::jsstr_to_string;
 use mozjs::glue::RUST_JSID_IS_STRING;
@@ -14,24 +13,24 @@ use mozjs::jsapi::JS_GetObjectPrototype;
 use mozjs::jsapi::JS_GetPendingException;
 use mozjs::jsapi::JS_GetProperty;
 use mozjs::jsapi::JS_IsExceptionPending;
-use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_NewObjectWithGivenProto;
 use mozjs::jsapi::JS_NewPlainObject;
 use mozjs::jsapi::JS_NewStringCopyN;
-use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsapi::JSCLASS_FOREGROUND_FINALIZE;
 use mozjs::jsapi::JSITER_OWNONLY;
 use mozjs::jsapi::JS_GC;
 use mozjs::jsval::{JSVal, StringValue, UndefinedValue};
 use mozjs::rust::jsapi_wrapped::GetPropertyKeys;
-use mozjs::rust::jsapi_wrapped::JS_CallFunctionName;
 use mozjs::rust::wrappers::JS_DefineProperty;
 use mozjs::rust::{HandleObject, HandleValue, IdVector, IntoHandle, Runtime};
 use std::marker::PhantomData;
+use mozjs::jsapi::JSType;
+use mozjs::jsapi::JS_TypeOfValue;
 
 use std::str;
 
 pub mod promises;
+pub mod functions;
 
 /// get a single member of a JSObject
 #[allow(dead_code)]
@@ -58,6 +57,12 @@ pub fn get_es_obj_prop_val(
     *prop_val
 }
 
+/// get the type of a JSVal
+pub fn get_type_of(context: *mut JSContext, val: JSVal) -> JSType {
+    rooted!(in(context) let val_root = val);
+    unsafe {JS_TypeOfValue(context, val_root.handle().into())}
+}
+
 /// see if there is a pending exception and return it
 #[allow(dead_code)]
 pub fn report_es_ex(context: *mut JSContext) -> Option<EsErrorInfo> {
@@ -79,16 +84,16 @@ pub fn report_es_ex(context: *mut JSContext) -> Option<EsErrorInfo> {
             let column_value: mozjs::jsapi::Value =
                 get_es_obj_prop_val(context, js_error_obj, "columnNumber");
 
-            let message_esvf = EsValueFacade::new_v(context, message_value);
-            let filename_esvf = EsValueFacade::new_v(context, filename_value);
-            let lineno_esvf = EsValueFacade::new_v(context, lineno_value);
-            let column_esvf = EsValueFacade::new_v(context, column_value);
+            let message = es_value_to_str(context, &message_value);
+            let filename = es_value_to_str(context, &filename_value);
+            let lineno = lineno_value.to_int32();
+            let column = column_value.to_int32();
 
             let error_info: EsErrorInfo = EsErrorInfo {
-                message: message_esvf.get_string().to_string(),
-                filename: filename_esvf.get_string().to_string(),
-                lineno: lineno_esvf.get_i32().clone(),
-                column: column_esvf.get_i32().clone(),
+                message,
+                filename,
+                lineno,
+                column,
             };
 
             debug!(
@@ -134,7 +139,10 @@ pub fn eval(
     scope: *mut JSObject,
     code: &str,
     file_name: &str,
-) -> Result<EsValueFacade, EsErrorInfo> {
+) -> Result<JSVal, EsErrorInfo> {
+
+    // todo rebuild this so you have to pass a mut handle which you need to root yourself before calling this
+
     let context = runtime.cx();
 
     rooted!(in(context) let scope_root = scope);
@@ -145,7 +153,7 @@ pub fn eval(
     let eval_res = runtime.evaluate_script(scope, code, file_name, 0, rval.handle_mut());
 
     if eval_res.is_ok() {
-        Ok(EsValueFacade::new(context, rval.handle()))
+        Ok(*rval)
     } else {
         let ex_opt = report_es_ex(context);
         if let Some(ex) = ex_opt {
@@ -161,80 +169,7 @@ pub fn eval(
     }
 }
 
-/// call a method by name on an object by name
-/// e.g. esses.cleanup() can be called by calling
-/// call_obj_method_name(cx, glob, vec!["esses"], "cleanup", vec![]);
-#[allow(dead_code)]
-pub fn call_obj_method_name(context: *mut JSContext,
-                        scope: *mut JSObject,
-                        obj_names: Vec<&str>,
-                        function_name: &str,
-                        args: Vec<EsValueFacade>,) -> Result<EsValueFacade, EsErrorInfo> {
 
-    let mut scope = scope;
-    for obj_name in obj_names {
-        let val: mozjs::jsapi::Value = get_es_obj_prop_val(context, scope, obj_name);
-
-        if !val.is_object() {
-            return Err(EsErrorInfo{message: format!("{} was not an object.", obj_name), column:0, lineno:0, filename:"".to_string()});
-        }
-
-        scope = val.to_object();
-
-    }
-
-    call_method_name(context, scope, function_name, args)
-
-}
-
-/// call a method by name
-#[allow(dead_code)]
-pub fn call_method_name(
-    context: *mut JSContext,
-    scope: *mut JSObject,
-    function_name: &str,
-    args: Vec<EsValueFacade>,
-) -> Result<EsValueFacade, EsErrorInfo> {
-    let n = format!("{}\0", function_name);
-    rooted!(in(context) let mut rval = UndefinedValue());
-
-    rooted!(in(context) let scope_root = scope);
-    let scope_handle = scope_root.handle();
-
-    let mut arguments_value_vec: Vec<JSVal> = vec![];
-
-    for arg_vf in args {
-        arguments_value_vec.push(arg_vf.to_es_value(context));
-    }
-
-    let arguments_value_array =
-        unsafe { HandleValueArray::from_rooted_slice(&*arguments_value_vec) };
-
-    rooted!(in(context) let _argument_object = unsafe {JS_NewArrayObject(context, &arguments_value_array)});
-
-    if unsafe {
-        JS_CallFunctionName(
-            context,
-            scope_handle.into(),
-            n.as_ptr() as *const libc::c_char,
-            &arguments_value_array,
-            &mut rval.handle_mut(),
-        )
-    } {
-        Ok(EsValueFacade::new(context, rval.handle()))
-    } else {
-        if let Some(err) = report_es_ex(context) {
-            Err(err)
-        } else {
-            Err(EsErrorInfo {
-                message: "unknown error".to_string(),
-                filename: "".to_string(),
-                lineno: 0,
-                column: 0,
-            })
-        }
-    }
-}
 
 /// create a new object in the engine
 #[allow(dead_code)]
@@ -394,8 +329,6 @@ pub fn get_js_obj_prop_names(context: *mut JSContext, obj: *mut JSObject) -> Vec
         assert!(unsafe { RUST_JSID_IS_STRING(id.handle().into()) });
         rooted!(in(context) let id = unsafe{RUST_JSID_TO_STRING(id.handle().into())});
 
-        //let id_esvf = EsValueFacade::new_v(context, id.handle());
-
         let prop_name = es_jsstring_to_string(context, *id);
 
         ret.push(prop_name);
@@ -405,12 +338,13 @@ pub fn get_js_obj_prop_names(context: *mut JSContext, obj: *mut JSObject) -> Vec
 
 #[cfg(test)]
 mod tests {
-    use crate::es_utils::{call_method_name, es_value_to_str, eval, get_es_obj_prop_val, get_js_obj_prop_names, report_es_ex, EsErrorInfo, call_obj_method_name};
+    use crate::es_utils::{es_value_to_str, eval, get_es_obj_prop_val, get_js_obj_prop_names, report_es_ex, EsErrorInfo};
 
     use crate::esvaluefacade::EsValueFacade;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
-    use mozjs::jsval::UndefinedValue;
+    use mozjs::jsval::{UndefinedValue, JSVal};
     use std::collections::HashMap;
+
 
     pub fn test_with_sm_rt<F, R: Send + 'static>(test_fn: F) -> R where F: FnOnce(&SmRuntime) -> R + Send + 'static {
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
@@ -531,7 +465,6 @@ mod tests {
     #[test]
     fn test_a_lot() {
         for _x in 0..20 {
-            test_call_method_name();
             test_get_obj_props();
             test_get_js_obj_prop_names();
             test_get_js_obj_prop_values();
@@ -549,91 +482,6 @@ mod tests {
         assert_eq!(map.get(&"b".to_string()).unwrap().get_string(), "abc");
     }
 
-    #[test]
-    fn test_call_method_name() {
-        //simple_logger::init().unwrap();
-
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
-        let res = rt.do_with_inner(|inner| {
-            inner.do_in_es_runtime_thread_sync(
-
-                Box::new(|sm_rt: &SmRuntime| {
-                    let runtime: &mozjs::rust::Runtime = &sm_rt.runtime;
-                    let context = runtime.cx();
-
-                    rooted!(in(context) let global_root = sm_rt.global_obj);
-                    let global = global_root.handle();
-
-                    rooted!(in(context) let mut rval = UndefinedValue());
-                    let _eval_res = runtime.evaluate_script(
-                        global,
-                        "this.test_func_1 = function test_func_1(a, b, c){return (a + '_' + b + '_' + c);};",
-                        "test_call_method_name.es",
-                        0,
-                        rval.handle_mut(),
-                    );
-
-                    let esvf: EsValueFacade = call_method_name(
-                        context,
-                        sm_rt.global_obj,
-                        "test_func_1",
-                        vec![
-                            EsValueFacade::new_str("abc".to_string()),
-                            EsValueFacade::new_bool(true),
-                            EsValueFacade::new_i32(123)
-                        ],
-                    ).ok().unwrap();
-
-                    esvf.get_string().to_string()
-                }
-            ))
-        });
-
-        assert_eq!(res, "abc_true_123".to_string());
-    }
-
-    #[test]
-    fn test_call_method_obj_name() {
-
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
-        let res = rt.do_with_inner(|inner| {
-            inner.do_in_es_runtime_thread_sync(
-
-                Box::new(|sm_rt: &SmRuntime| {
-                    let runtime: &mozjs::rust::Runtime = &sm_rt.runtime;
-                    let context = runtime.cx();
-
-                    rooted!(in(context) let global_root = sm_rt.global_obj);
-                    let global = global_root.handle();
-
-                    rooted!(in(context) let mut rval = UndefinedValue());
-                    let _eval_res = runtime.evaluate_script(
-                        global,
-                        "this.myobj = {sub: {}};myobj.sub.test_func_1 = function test_func_1(a, b, c){return (a + '_' + b + '_' + c);};",
-                        "test_call_method_name.es",
-                        0,
-                        rval.handle_mut(),
-                    );
-
-                    let esvf: EsValueFacade = call_obj_method_name(
-                        context,
-                        sm_rt.global_obj,
-                        vec!["myobj", "sub"],
-                        "test_func_1",
-                        vec![
-                            EsValueFacade::new_str("abc".to_string()),
-                            EsValueFacade::new_bool(true),
-                            EsValueFacade::new_i32(123)
-                        ],
-                    ).ok().unwrap();
-
-                    esvf.get_string().to_string()
-                }
-                ))
-        });
-
-        assert_eq!(res, "abc_true_123".to_string());
-    }
 
     #[test]
     fn test_eval() {
@@ -642,14 +490,14 @@ mod tests {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
                 let runtime: &mozjs::rust::Runtime = &sm_rt.runtime;
 
-                let res: Result<EsValueFacade, EsErrorInfo> = eval(
+                let res: Result<JSVal, EsErrorInfo> = eval(
                     runtime,
                     sm_rt.global_obj,
                     "let a = 'i am eval'; a",
                     "test_eval.es",
                 );
-
-                res.ok().unwrap().get_string().to_string()
+                let str = es_value_to_str(runtime.cx(), &res.ok().unwrap());
+                str
             }))
         });
 

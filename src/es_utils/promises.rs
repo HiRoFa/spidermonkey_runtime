@@ -9,7 +9,7 @@ use mozjs::jsval::NullValue;
 
 pub fn object_is_promise(context: *mut JSContext, _scope: *mut mozjs::jsapi::JSObject, obj: *mut mozjs::jsapi::JSObject) -> bool {
     // todo this is not the best way of doing this, we need to get the promise object of the global scope and see if that is the same as the objects constructor
-    // that's wy the function requires the global_scope obj
+    // that's why the function requires the global_scope obj
 
     rooted!(in(context) let obj_root = obj);
 
@@ -27,6 +27,7 @@ pub fn object_is_promise(context: *mut JSContext, _scope: *mut mozjs::jsapi::JSO
     false
 }
 
+/// create a new Promise, this will be used later by invoke_rust_op
 pub fn new_promise(context: *mut JSContext) -> *mut JSObject {
     // second is executor
     // third is proto
@@ -47,7 +48,6 @@ mod tests {
     use crate::es_utils::promises::object_is_promise;
     use mozjs::jsval::UndefinedValue;
     use mozjs::jsapi::JSObject;
-    use log::debug;
     use crate::es_utils::report_es_ex;
 
     #[test]

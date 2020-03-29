@@ -51,7 +51,7 @@ Cargo.toml
 
 ```toml
 [dependencies]
-es_runtime = "0.0.2"
+es_runtime = "0.0.3"
 ```
 
 my_app.rs
@@ -118,13 +118,15 @@ my_app.rs
 
 Currently I have only compiled this on and for a 64 bit linux machine (I use openSUSE) 
 
-Besides rust (duh) you'll need to install the following packages to compile the mozjs crate
+Besides rust you'll need to install the following packages to compile the mozjs crate
 
 * gcc-7
 * autoconf2.13
 * automake
 * clang
 * python
+
+for more detailed info please visit https://github.com/servo/mozjs#building 
 
 
 # howtos
