@@ -8,7 +8,6 @@ homepage = "https://gitlab.com/drfos/es_runtime"
 keywords = ["script", "javascript", "es6", "ecmascript", "spidermonkey"]
 repository = "https://gitlab.com/drfos/es_runtime.git"
 license = "GPL-3.0"
-license-file = "LICENSE"
 documentation = "https://gitlab.com/drfos/es_runtime"
 readme = "README.md"
 categories = ["development-tools"]

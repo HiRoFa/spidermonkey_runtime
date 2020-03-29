@@ -31,6 +31,8 @@ use std::marker::PhantomData;
 
 use std::str;
 
+pub mod promises;
+
 /// get a single member of a JSObject
 #[allow(dead_code)]
 pub fn get_es_obj_prop_val(
@@ -409,6 +411,14 @@ mod tests {
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use mozjs::jsval::UndefinedValue;
     use std::collections::HashMap;
+
+    pub fn test_with_sm_rt<F, R: Send + 'static>(test_fn: F) -> R where F: FnOnce(&SmRuntime) -> R + Send + 'static {
+        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+
+        rt.do_with_inner(|inner| {
+            inner.do_in_es_runtime_thread_sync(Box::new(test_fn))
+        })
+    }
 
     #[test]
     fn test_get_js_obj_prop_names() {
