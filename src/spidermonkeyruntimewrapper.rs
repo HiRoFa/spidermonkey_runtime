@@ -1,5 +1,5 @@
 use crate::es_utils;
-use crate::es_utils::{EsErrorInfo, get_es_obj_prop_val};
+use crate::es_utils::{EsErrorInfo};
 use crate::esruntimewrapper::EsRuntimeWrapper;
 
 use crate::esvaluefacade::EsValueFacade;
@@ -138,11 +138,10 @@ impl SmRuntime {
         let context = runtime.cx();
 
         rooted!(in(context) let global_root = self.global_obj);
-        let global = global_root.handle();
 
         trace!("smrt.call {} in thread {}", func_name, thread_id::get());
 
-        call_obj_method_name(context, *global,obj_names, func_name, arguments)
+        call_obj_method_name(context, global_root.handle(),obj_names, func_name, arguments)
     }
 
 
@@ -256,24 +255,27 @@ impl SmRuntime {
 /// call_obj_method_name(cx, glob, vec!["esses"], "cleanup", vec![]);
 #[allow(dead_code)]
 pub fn call_obj_method_name(context: *mut JSContext,
-                            scope: *mut JSObject,
+                            scope: HandleObject,
                             obj_names: Vec<&str>,
                             function_name: &str,
                             args: Vec<EsValueFacade>,) -> Result<EsValueFacade, EsErrorInfo> {
 
-    let mut scope = scope;
-    for obj_name in obj_names {
-        let val: mozjs::jsapi::Value = get_es_obj_prop_val(context, scope, obj_name);
+    let mut arguments_value_vec: Vec<JSVal> = vec![];
 
-        if !val.is_object() {
-            return Err(EsErrorInfo{message: format!("{} was not an object.", obj_name), column:0, lineno:0, filename:"".to_string()});
-        }
-
-        scope = val.to_object();
-
+    for arg_vf in args {
+        arguments_value_vec.push(arg_vf.to_es_value(context));
     }
 
-    call_method_name(context, scope, function_name, args)
+    rooted!(in(context) let mut rval = UndefinedValue());
+
+    let res2: Result<(), EsErrorInfo>  = es_utils::functions::call_obj_method_name(context, scope, obj_names, function_name, arguments_value_vec, &mut rval.handle_mut());
+
+    if res2.is_ok() {
+        return Ok(EsValueFacade::new(context, rval.handle()));
+    } else {
+        return Err(res2.err().unwrap());
+    }
+
 
 }
 
@@ -281,7 +283,7 @@ pub fn call_obj_method_name(context: *mut JSContext,
 #[allow(dead_code)]
 fn call_method_name(
     context: *mut JSContext,
-    scope: *mut JSObject,
+    scope: HandleObject,
     function_name: &str,
     args: Vec<EsValueFacade>,
 ) -> Result<EsValueFacade, EsErrorInfo> {
@@ -293,8 +295,8 @@ fn call_method_name(
     }
 
     rooted!(in(context) let mut rval = UndefinedValue());
-    rooted!(in(context) let mut scope_root = scope);
-    let res2: Result<(), EsErrorInfo>  = es_utils::functions::call_method_name(context, scope_root.handle(), function_name, arguments_value_vec, &mut rval.handle_mut());
+
+    let res2: Result<(), EsErrorInfo>  = es_utils::functions::call_method_name(context, scope, function_name, arguments_value_vec, &mut rval.handle_mut());
 
     if res2.is_ok() {
         return Ok(EsValueFacade::new(context, rval.handle()));
@@ -582,18 +584,24 @@ mod tests {
                         rval.handle_mut(),
                     );
 
-                    let esvf: EsValueFacade = call_method_name(
+                    let res = call_method_name(
                         context,
-                        sm_rt.global_obj,
+                        global_root.handle(),
                         "test_func_1",
                         vec![
                             EsValueFacade::new_str("abc".to_string()),
                             EsValueFacade::new_bool(true),
                             EsValueFacade::new_i32(123)
                         ],
-                    ).ok().unwrap();
+                    );
 
-                    esvf.get_string().to_string()
+                    if res.is_ok() {
+                        let esvf = res.ok().unwrap();
+                        return esvf.get_string().to_string();
+                    } else {
+                        let err = res.err().unwrap();
+                        panic!("err {}", err.message);
+                    }
                 }
                 ))
         });
@@ -624,9 +632,9 @@ mod tests {
                         rval.handle_mut(),
                     );
 
-                    let esvf: EsValueFacade = call_obj_method_name(
+                    let res = call_obj_method_name(
                         context,
-                        sm_rt.global_obj,
+                        global_root.handle(),
                         vec!["myobj", "sub"],
                         "test_func_1",
                         vec![
@@ -634,9 +642,17 @@ mod tests {
                             EsValueFacade::new_bool(true),
                             EsValueFacade::new_i32(123)
                         ],
-                    ).ok().unwrap();
+                    );
 
-                    esvf.get_string().to_string()
+                    if res.is_ok() {
+                        let esvf = res.ok().unwrap();
+                        return esvf.get_string().to_string();
+                    } else {
+                        let err = res.err().unwrap();
+                        panic!("err {}", err.message);
+                    }
+
+
                 }
                 ))
         });

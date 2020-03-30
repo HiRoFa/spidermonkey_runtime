@@ -23,7 +23,6 @@ use mozjs::jsval::{JSVal, StringValue, UndefinedValue};
 use mozjs::rust::jsapi_wrapped::GetPropertyKeys;
 use mozjs::rust::wrappers::JS_DefineProperty;
 use mozjs::rust::{HandleObject, HandleValue, IdVector, IntoHandle, Runtime};
-use std::marker::PhantomData;
 use mozjs::jsapi::JSType;
 use mozjs::jsapi::JS_TypeOfValue;
 
@@ -36,20 +35,18 @@ pub mod functions;
 #[allow(dead_code)]
 pub fn get_es_obj_prop_val(
     context: *mut JSContext,
-    obj: *mut mozjs::jsapi::JSObject,
+    obj: HandleObject,
     prop_name: &str,
+
 ) -> mozjs::jsapi::Value {
     rooted!(in(context) let mut prop_val = UndefinedValue());
 
-    let jso_handle: mozjs::jsapi::Handle<*mut mozjs::jsapi::JSObject> = mozjs::jsapi::Handle {
-        ptr: &obj,
-        _phantom_0: PhantomData,
-    };
+
     let n = format!("{}\0", prop_name);
     unsafe {
         JS_GetProperty(
             context,
-            jso_handle,
+            obj.into(),
             n.as_ptr() as *const libc::c_char,
             prop_val.handle_mut().into(),
         );
@@ -75,14 +72,15 @@ pub fn report_es_ex(context: *mut JSContext) -> Option<EsErrorInfo> {
         rooted!(in(context) let mut error_value = UndefinedValue());
         if unsafe { JS_GetPendingException(context, error_value.handle_mut().into()) } {
             let js_error_obj: *mut mozjs::jsapi::JSObject = error_value.to_object();
+            rooted!(in(context) let mut js_error_obj_root = js_error_obj);
             let message_value: mozjs::jsapi::Value =
-                get_es_obj_prop_val(context, js_error_obj, "message");
+                get_es_obj_prop_val(context, js_error_obj_root.handle(), "message");
             let filename_value: mozjs::jsapi::Value =
-                get_es_obj_prop_val(context, js_error_obj, "fileName");
+                get_es_obj_prop_val(context, js_error_obj_root.handle(), "fileName");
             let lineno_value: mozjs::jsapi::Value =
-                get_es_obj_prop_val(context, js_error_obj, "lineNumber");
+                get_es_obj_prop_val(context, js_error_obj_root.handle(), "lineNumber");
             let column_value: mozjs::jsapi::Value =
-                get_es_obj_prop_val(context, js_error_obj, "columnNumber");
+                get_es_obj_prop_val(context, js_error_obj_root.handle(), "columnNumber");
 
             let message = es_value_to_str(context, &message_value);
             let filename = es_value_to_str(context, &filename_value);
@@ -417,8 +415,9 @@ mod tests {
                 let prop_vec: Vec<String> = get_js_obj_prop_names(context, jso);
 
                 let mut test_vec = vec![];
+                rooted!(in(context) let jso_root = jso);
                 for prop_name in prop_vec {
-                    let prop_val = get_es_obj_prop_val(context, jso, prop_name.as_str());
+                    let prop_val = get_es_obj_prop_val(context, jso_root.handle(), prop_name.as_str());
                     test_vec.push(es_value_to_str(context, &prop_val).to_string());
                 }
 

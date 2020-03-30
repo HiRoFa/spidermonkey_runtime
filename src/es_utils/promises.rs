@@ -7,17 +7,16 @@ use mozjs::jsapi::JSObject;
 use mozjs::jsval::NullValue;
 
 
-pub fn object_is_promise(context: *mut JSContext, _scope: *mut mozjs::jsapi::JSObject, obj: *mut mozjs::jsapi::JSObject) -> bool {
+pub fn object_is_promise(context: *mut JSContext, _scope: HandleObject, obj: HandleObject) -> bool {
     // todo this is not the best way of doing this, we need to get the promise object of the global scope and see if that is the same as the objects constructor
     // that's why the function requires the global_scope obj
 
-    rooted!(in(context) let obj_root = obj);
-
-    let constr_res = get_constructor(context, obj_root.handle());
+    let constr_res = get_constructor(context, obj);
     if  constr_res.is_ok() {
         let constr: *mut JSObject = constr_res.ok().unwrap();
+        rooted!(in (context) let constr_root = constr);
         if !constr.is_null() {
-            let name_prop: mozjs::jsapi::Value = get_es_obj_prop_val(context, constr, "name");
+            let name_prop: mozjs::jsapi::Value = get_es_obj_prop_val(context, constr_root.handle(), "name");
             if name_prop.is_string() {
                 let name_str = es_value_to_str(context, &name_prop);
                 return name_str.as_str().eq("Promise");
@@ -68,9 +67,10 @@ mod tests {
                 println!("getting value");
                 let p_value: mozjs::jsapi::Value = *rval;
                 println!("getting obj {}", p_value.is_object());
-                let p_obj: *mut JSObject = p_value.to_object();
+
+                rooted!(in(context) let prom_obj_root = p_value.to_object());
                 println!("is_prom");
-                return object_is_promise(context, global, p_obj);
+                return object_is_promise(context, global_root.handle(), prom_obj_root.handle());
             }
             false
 
@@ -96,9 +96,9 @@ mod tests {
                 println!("getting value");
                 let p_value: mozjs::jsapi::Value = *rval;
                 println!("getting obj {}", p_value.is_object());
-                let p_obj: *mut JSObject = p_value.to_object();
+                rooted!(in(context) let prom_obj_root = p_value.to_object());
                 println!("is_prom");
-                return object_is_promise(context, global, p_obj);
+                return object_is_promise(context, global_root.handle(), prom_obj_root.handle());
             }
             false
 

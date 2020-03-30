@@ -4,7 +4,7 @@ use std::{str, thread};
 
 use std::sync::{Arc, Weak};
 
-use crate::es_sys;
+use crate::es_sys_scripts;
 use crate::features;
 
 use crate::es_utils::EsErrorInfo;
@@ -48,7 +48,7 @@ impl EsRuntimeWrapper {
         // init default methods and es code
 
         features::init(&rt);
-        es_sys::init_es(&rt);
+        es_sys_scripts::init_es(&rt);
 
         rt
     }

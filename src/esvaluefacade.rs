@@ -147,13 +147,13 @@ impl EsValueFacade {
         } else if rval.is_object() {
             let mut map = HashMap::new();
             let obj: *mut JSObject = rval.to_object();
-            rooted!(in(context) let mut _obj_root = obj);
+            rooted!(in(context) let obj_root = obj);
 
             let prop_names: Vec<String> = crate::es_utils::get_js_obj_prop_names(context, obj);
 
             if prop_names.contains(&"__esses_future_obj_id".to_string()) {
                 let obj_id_val =
-                    crate::es_utils::get_es_obj_prop_val(context, obj, "__esses_future_obj_id");
+                    crate::es_utils::get_es_obj_prop_val(context, obj_root.handle(), "__esses_future_obj_id");
 
                 let obj_id = obj_id_val.to_int32();
 
@@ -175,7 +175,7 @@ impl EsValueFacade {
             } else {
                 for prop_name in prop_names {
                     let prop_val: mozjs::jsapi::Value =
-                        crate::es_utils::get_es_obj_prop_val(context, obj, prop_name.as_str());
+                        crate::es_utils::get_es_obj_prop_val(context, obj_root.handle(), prop_name.as_str());
                     let prop_esvf = EsValueFacade::new_v(context, prop_val);
                     map.insert(prop_name, prop_esvf);
                 }
