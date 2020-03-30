@@ -181,4 +181,14 @@ pub mod tests {
 
     }
 
+    #[test]
+    fn test_async_await(){
+        let rt: Arc<EsRuntimeWrapper> = TEST_RT.clone();
+        let prom_facade = rt.eval_sync("let async_method = async function(){let p = new Promise((resolve, reject) => {setImmediate(() => {resolve(123);});});return p;}; let async_method_2 = async function(){let res = await async_method(); return res;}; async_method_2();", "call_method").ok().unwrap();
+        let wait_res = prom_facade.get_promise_result_blocking(Duration::from_secs(5));
+        let prom_res = wait_res.ok().unwrap();
+        let esvf_res = prom_res.ok().unwrap();
+        assert_eq!(&123, esvf_res.get_i32());
+    }
+
 }
