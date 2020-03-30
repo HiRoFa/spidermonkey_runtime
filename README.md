@@ -10,11 +10,11 @@ This project was started as a hobby project for me to learn rust. I hope some of
 
 Nowhere near production ready, it is untested and i'm pretty sure i created some memory leaks in the unsafe sections...
 
-it works with the mozjs crate version 0.10.1 which is already pretty old but there are no newer releases, when i get more comfortable with spidermonkey and mozjs i'll see about using a git pull of a newer version.
+It works with the mozjs crate version 0.10.1 which is already pretty old but there are no newer releases, when i get more comfortable with spidermonkey and mozjs i'll see about using a git pull of a newer version.
 
 Currently i'm working towards creating a 0.1 version which has a couple of goals
 
-* [ ] Get a grip on when to use rooted values (Handle) and when to use Values (JSVal) 
+* [x] Get a grip on when to use rooted values (Handle) and when to use Values (JSVal) 
 * [x] Easy loading script files
 * [x] Error handling (get ES errors in rust with filename/linenumber etc)
 * [x] Adding rust function to the engine so they are callable from ECMA-Script
@@ -95,7 +95,7 @@ my_app.rs
         .unwrap();
 
         let c: Result<EsValueFacade, EsErrorInfo> =
-            rt.eval_sync("return(this.myObj.c);", "test3.es");
+            rt.eval_sync("(this.myObj.c);", "test3.es");
 
         assert_eq!(&21, c.ok().unwrap().get_i32());
 

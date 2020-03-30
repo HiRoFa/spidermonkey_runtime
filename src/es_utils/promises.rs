@@ -46,7 +46,6 @@ mod tests {
     use crate::es_utils::tests::test_with_sm_rt;
     use crate::es_utils::promises::object_is_promise;
     use mozjs::jsval::UndefinedValue;
-    use mozjs::jsapi::JSObject;
     use crate::es_utils::report_es_ex;
 
     #[test]

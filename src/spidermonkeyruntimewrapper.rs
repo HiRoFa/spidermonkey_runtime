@@ -35,6 +35,7 @@ use std::ptr;
 use std::rc::Rc;
 use std::str;
 use std::sync::{Arc, Weak};
+use std::ops::Deref;
 
 /// the type for registering rust_ops in the script engine
 pub type OP = Box<dyn Fn(&SmRuntime, Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send>;
@@ -141,7 +142,7 @@ impl SmRuntime {
 
         trace!("smrt.call {} in thread {}", func_name, thread_id::get());
 
-        call_obj_method_name(context, global_root.handle(),obj_names, func_name, arguments)
+        self.call_obj_method_name(context, global_root.handle(),obj_names, func_name, arguments)
     }
 
 
@@ -154,29 +155,15 @@ impl SmRuntime {
     pub fn eval(&self, eval_code: &str, file_name: &str) -> Result<EsValueFacade, EsErrorInfo> {
         debug!("smrt.eval {} in thread {}", eval_code, thread_id::get());
 
-        // todo remove outer function
-        let wrapped_code = format!(
-            "\
-             (function(){{\
-             let retVal = function(){{\
-             {}\
-             }}.apply(this);\
-             retVal = esses.prepValForOutputToRust(retVal);\
-             return retVal;\
-             }}).apply(this);\
-             ",
-            eval_code
-        );
-
         let eval_res: Result<JSVal, EsErrorInfo> = es_utils::eval(
             &self.runtime,
             self.global_obj,
-            wrapped_code.as_str(),
+            eval_code,
             file_name,
         );
 
         if eval_res.is_ok() {
-            return Ok(EsValueFacade::new_v(self.runtime.cx(),eval_res.ok().unwrap()));
+            return Ok(EsValueFacade::new_v(self, self.runtime.cx(),eval_res.ok().unwrap()));
         } else {
             return Err(eval_res.err().unwrap());
         }
@@ -248,63 +235,65 @@ impl SmRuntime {
             f(&*inner_clone);
         });
     }
-}
 
-/// call a method by name on an object by name
+    /// call a method by name on an object by name
 /// e.g. esses.cleanup() can be called by calling
 /// call_obj_method_name(cx, glob, vec!["esses"], "cleanup", vec![]);
-#[allow(dead_code)]
-pub fn call_obj_method_name(context: *mut JSContext,
-                            scope: HandleObject,
-                            obj_names: Vec<&str>,
-                            function_name: &str,
-                            args: Vec<EsValueFacade>,) -> Result<EsValueFacade, EsErrorInfo> {
+    #[allow(dead_code)]
+    fn call_obj_method_name(&self, context: *mut JSContext,
+                                scope: HandleObject,
+                                obj_names: Vec<&str>,
+                                function_name: &str,
+                                args: Vec<EsValueFacade>,) -> Result<EsValueFacade, EsErrorInfo> {
 
-    let mut arguments_value_vec: Vec<JSVal> = vec![];
+        let mut arguments_value_vec: Vec<JSVal> = vec![];
 
-    for arg_vf in args {
-        arguments_value_vec.push(arg_vf.to_es_value(context));
+        for arg_vf in args {
+            arguments_value_vec.push(arg_vf.to_es_value(context));
+        }
+
+        rooted!(in(context) let mut rval = UndefinedValue());
+
+        let res2: Result<(), EsErrorInfo>  = es_utils::functions::call_obj_method_name(context, scope, obj_names, function_name, arguments_value_vec, &mut rval.handle_mut());
+
+        if res2.is_ok() {
+            return Ok(EsValueFacade::new(self,context, rval.handle()));
+        } else {
+            return Err(res2.err().unwrap());
+        }
+
+
     }
 
-    rooted!(in(context) let mut rval = UndefinedValue());
+    /// call a method by name
+    #[allow(dead_code)]
+    fn call_method_name(&self,
+        context: *mut JSContext,
+        scope: HandleObject,
+        function_name: &str,
+        args: Vec<EsValueFacade>,
+    ) -> Result<EsValueFacade, EsErrorInfo> {
 
-    let res2: Result<(), EsErrorInfo>  = es_utils::functions::call_obj_method_name(context, scope, obj_names, function_name, arguments_value_vec, &mut rval.handle_mut());
+        let mut arguments_value_vec: Vec<JSVal> = vec![];
 
-    if res2.is_ok() {
-        return Ok(EsValueFacade::new(context, rval.handle()));
-    } else {
-        return Err(res2.err().unwrap());
+        for arg_vf in args {
+            arguments_value_vec.push(arg_vf.to_es_value(context));
+        }
+
+        rooted!(in(context) let mut rval = UndefinedValue());
+
+        let res2: Result<(), EsErrorInfo>  = es_utils::functions::call_method_name(context, scope, function_name, arguments_value_vec, &mut rval.handle_mut());
+
+        if res2.is_ok() {
+            return Ok(EsValueFacade::new(self,context, rval.handle()));
+        } else {
+            return Err(res2.err().unwrap());
+        }
+
     }
-
-
 }
 
-/// call a method by name
-#[allow(dead_code)]
-fn call_method_name(
-    context: *mut JSContext,
-    scope: HandleObject,
-    function_name: &str,
-    args: Vec<EsValueFacade>,
-) -> Result<EsValueFacade, EsErrorInfo> {
 
-    let mut arguments_value_vec: Vec<JSVal> = vec![];
-
-    for arg_vf in args {
-        arguments_value_vec.push(arg_vf.to_es_value(context));
-    }
-
-    rooted!(in(context) let mut rval = UndefinedValue());
-
-    let res2: Result<(), EsErrorInfo>  = es_utils::functions::call_method_name(context, scope, function_name, arguments_value_vec, &mut rval.handle_mut());
-
-    if res2.is_ok() {
-        return Ok(EsValueFacade::new(context, rval.handle()));
-    } else {
-        return Err(res2.err().unwrap());
-    }
-
-}
 
 /// deprecated log function used for debugging, should be removed now that the native console obj is working
 unsafe extern "C" fn log(context: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi::Value) -> bool {
@@ -354,14 +343,18 @@ unsafe extern "C" fn invoke_rust_op(
 
     // todo parse multiple args and stuff.. and scope... etc
     let mut args_vec: Vec<EsValueFacade> = Vec::new();
-    for x in 1..args.argc_ {
-        let var_arg: HandleValue = mozjs::rust::Handle::from_raw(args.get(x));
-        args_vec.push(EsValueFacade::new(context, var_arg));
-    }
+
 
     let op_res: Result<EsValueFacade, String> = SM_RT.with(move |sm_rt_rc| {
         trace!("about to borrow sm_rt");
-        let sm_rt = sm_rt_rc.borrow();
+        let sm_rt_ref = sm_rt_rc.borrow();
+        let sm_rt: &SmRuntime = sm_rt_ref.deref();
+
+        for x in 1..args.argc_ {
+            let var_arg: HandleValue = mozjs::rust::Handle::from_raw(args.get(x));
+            args_vec.push(EsValueFacade::new(sm_rt, context, var_arg));
+        }
+
         trace!("about to invoke op {} from sm_rt", op_name);
         sm_rt.invoke_op(op_name, args_vec)
     });
@@ -556,7 +549,7 @@ impl PartialEq for CallbackObject {
 
 #[cfg(test)]
 mod tests {
-    use crate::spidermonkeyruntimewrapper::{SmRuntime, call_method_name, call_obj_method_name};
+    use crate::spidermonkeyruntimewrapper::{SmRuntime};
     use crate::esvaluefacade::EsValueFacade;
     use mozjs::jsval::UndefinedValue;
 
@@ -584,7 +577,7 @@ mod tests {
                         rval.handle_mut(),
                     );
 
-                    let res = call_method_name(
+                    let res = sm_rt.call_method_name(
                         context,
                         global_root.handle(),
                         "test_func_1",
@@ -632,7 +625,7 @@ mod tests {
                         rval.handle_mut(),
                     );
 
-                    let res = call_obj_method_name(
+                    let res = sm_rt.call_obj_method_name(
                         context,
                         global_root.handle(),
                         vec!["myobj", "sub"],

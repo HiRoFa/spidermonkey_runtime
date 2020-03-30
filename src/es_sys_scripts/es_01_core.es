@@ -6,25 +6,27 @@ this.esses = new (class Esses {
 
         this._next_id = 0;
         this._cleanup_jobs = [];
+        this._registered_promises = new Map();
 
     }
 
     /**
-    * Promises are returned in the form of {"__esses_future_obj_id": 12, "runtime_id": 4}
-    *
+    * generate a new id and resolve values with that id later
     */
-    prepValForOutputToRust(val) {
-        // for now we only store Promises as managed, all other objects are returned by ref and serialized in rust
-        // if you want it to behave differently, reg the var yourself from js
-        if (typeof val === 'object' && val instanceof Promise) {
+    registerPromiseForResolutionInRust(prom) {
+        if (typeof prom === 'object' && prom instanceof Promise) {
             let id = this.next_id();
-            let prom = val;
-            val = {"__esses_future_obj_id": id};
+            // then and catch are registered async to prevent direct resolution without id being registered in rust
+            // we also store the promise in a Map so it is not garbage collected
+            this._registered_promises.set(id, prom);
+
             setImmediate(function(prom, id) {
                 esses.register_waitfor_promise(prom, id);
             }, prom, id);
+            return id;
+        } else {
+            throw Error("value pass to registerPromiseForResolutionInRust was not a Promise [" + typeof prom + "]");
         }
-        return val;
     }
 
     next_id() {
@@ -66,8 +68,7 @@ this.esses = new (class Esses {
 
         console.log("invoke_rust_op_sync %s ", name);
         try {
-            let prepped_args = args.map((arg) => this.prepValForOutputToRust(arg));
-            let rust_result = __invoke_rust_op(name, ...prepped_args);
+            let rust_result = __invoke_rust_op(name, ...args);
             return rust_result;
         } catch(ex) {
             console.error("invoke_rust_op_sync %s failed with %s", name, "" + ex);
@@ -85,6 +86,9 @@ this.esses = new (class Esses {
             val.catch((ex) => {
                 console.trace('rejecting esvf from es to {}', ex);
                 esses.invoke_rust_op_sync('reject_waiting_esvf_future', man_obj_id, ex);
+            });
+            val.finally(() => {
+                esses._registered_promises.remove(id);
             });
         } else {
             let t = "" + val;

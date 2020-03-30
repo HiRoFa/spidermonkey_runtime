@@ -14,6 +14,8 @@ use std::collections::HashMap;
 
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::time::Duration;
+use crate::spidermonkeyruntimewrapper::SmRuntime;
+use crate::es_utils::EsErrorInfo;
 
 /// the EsValueFacade is a converter between rust variables and script objects
 /// when receiving a EsValueFacade from the script engine it's data is allways a clone from the actual data so we need not worry about the value being garbage collected
@@ -120,11 +122,11 @@ impl EsValueFacade {
         }
     }
 
-    pub fn new(context: *mut JSContext, rval: HandleValue) -> Self {
-        Self::new_v(context, *rval)
+    pub fn new(sm_rt: &SmRuntime, context: *mut JSContext, rval: HandleValue) -> Self {
+        Self::new_v(sm_rt,context, *rval)
     }
 
-    pub fn new_v(context: *mut JSContext, rval: mozjs::jsapi::Value) -> Self {
+    pub fn new_v(sm_rt: &SmRuntime, context: *mut JSContext, rval: mozjs::jsapi::Value) -> Self {
         let mut val_string = None;
         let mut val_i32 = None;
         let mut val_f64 = None;
@@ -149,34 +151,55 @@ impl EsValueFacade {
             let obj: *mut JSObject = rval.to_object();
             rooted!(in(context) let obj_root = obj);
 
-            let prop_names: Vec<String> = crate::es_utils::get_js_obj_prop_names(context, obj);
+            let rt = &sm_rt.runtime;
+            let cx = rt.cx();
+            rooted!(in (cx) let global_root = sm_rt.global_obj);
 
-            if prop_names.contains(&"__esses_future_obj_id".to_string()) {
-                let obj_id_val =
-                    crate::es_utils::get_es_obj_prop_val(context, obj_root.handle(), "__esses_future_obj_id");
+            if es_utils::promises::object_is_promise(context, global_root.handle(), obj_root.handle()) {
 
-                let obj_id = obj_id_val.to_int32();
+                // call esses.registerPromiseForResolutionInRust(prom);
 
-                let (tx, rx) = channel();
-                let opt_receiver = Some(rx);
 
-                PROMISE_RESOLUTION_TRANSMITTERS.with(move |rc| {
-                    let map: &mut HashMap<i32, Sender<Result<EsValueFacade, EsValueFacade>>> =
-                        &mut *rc.borrow_mut();
-                    map.insert(obj_id, tx);
-                });
+                rooted!(in (cx) let mut id_val = UndefinedValue());
 
-                let rmev: RustManagedEsVar = RustManagedEsVar {
-                    obj_id: obj_id_val.to_int32(),
-                    opt_receiver,
-                };
+                // ok it's a promse, now we're gonna call a method which will add then and catch to
+                // the promise so the result is reported to rust under an id
+                let reg_res : Result<(), EsErrorInfo> = es_utils::functions::call_obj_method_name(
+                    cx,
+                    global_root.handle(),
+                    vec!["esses"],
+                    "registerPromiseForResolutionInRust",
+                    vec![rval],
+                    &mut id_val.handle_mut());
 
-                val_managed_var = Some(rmev);
+                if reg_res.is_err() {
+                    panic!("could not reg promise due to error {}", reg_res.err().unwrap().message);
+                } else {
+
+                    let obj_id = id_val.to_int32();
+
+                    let (tx, rx) = channel();
+                    let opt_receiver = Some(rx);
+
+                    PROMISE_RESOLUTION_TRANSMITTERS.with(move |rc| {
+                        let map: &mut HashMap<i32, Sender<Result<EsValueFacade, EsValueFacade>>> =
+                            &mut *rc.borrow_mut();
+                        map.insert(obj_id.clone(), tx);
+                    });
+
+                    let rmev: RustManagedEsVar = RustManagedEsVar {
+                        obj_id: obj_id.clone(),
+                        opt_receiver,
+                    };
+
+                    val_managed_var = Some(rmev);
+                }
             } else {
+            let prop_names: Vec<String> = crate::es_utils::get_js_obj_prop_names(context, obj);
                 for prop_name in prop_names {
                     let prop_val: mozjs::jsapi::Value =
                         crate::es_utils::get_es_obj_prop_val(context, obj_root.handle(), prop_name.as_str());
-                    let prop_esvf = EsValueFacade::new_v(context, prop_val);
+                    let prop_esvf = EsValueFacade::new_v(sm_rt,context, prop_val);
                     map.insert(prop_name, prop_esvf);
                 }
             }
@@ -347,6 +370,7 @@ mod tests {
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use std::collections::HashMap;
     use std::time::Duration;
+    use crate::es_utils::EsErrorInfo;
 
     #[test]
     fn in_and_output_vars() {
@@ -407,19 +431,19 @@ mod tests {
             );
 
             let res0 = inner.eval_sync(
-                "return esses.invoke_rust_op_sync('test_op_0', 13, 17);",
+                "esses.invoke_rust_op_sync('test_op_0', 13, 17);",
                 "test_vars0.es",
             );
             let res1 = inner.eval_sync(
-                "return esses.invoke_rust_op_sync('test_op_1', 13, 17);",
+                "esses.invoke_rust_op_sync('test_op_1', 13, 17);",
                 "test_vars1.es",
             );
             let res2 = inner.eval_sync(
-                "return esses.invoke_rust_op_sync('test_op_2', 13, 17);",
+                "esses.invoke_rust_op_sync('test_op_2', 13, 17);",
                 "test_vars2.es",
             );
             let res3 = inner.eval_sync(
-                "return esses.invoke_rust_op_sync('test_op_3', 13, 17);",
+                "esses.invoke_rust_op_sync('test_op_3', 13, 17);",
                 "test_vars3.es",
             );
             let esvf0 = res0.ok().expect("1 did not get a result");
@@ -441,7 +465,7 @@ mod tests {
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let esvf_prom = rt
             .eval_sync(
-                "let p = new Promise((resolve, reject) => {resolve(123);});p = p.then((v) => {return v;});p = p.then((v) => {return v;});p = p.then((v) => {return v;});p = p.then((v) => {return v;});p = p.then((v) => {return v;});p = p.then((v) => {return v;});return p;",
+                "let p = new Promise((resolve, reject) => {resolve(123);});p = p.then((v) => {return v;});p = p.then((v) => {return v;});p = p.then((v) => {return v;});p = p.then((v) => {return v;});p = p.then((v) => {return v;});p = p.then((v) => {return v;}); p;",
                 "wait_for_prom.es",
             )
             .ok()
@@ -465,7 +489,7 @@ mod tests {
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let esvf_prom = rt
             .eval_sync(
-                "let p = new Promise((resolve, reject) => {resolve(123);});return p;",
+                "let test_wait_for_prom_prom = new Promise((resolve, reject) => {resolve(123);}); test_wait_for_prom_prom;",
                 "wait_for_prom.es",
             )
             .ok()
@@ -487,24 +511,27 @@ mod tests {
         println!("test_wait_for_prom_2");
 
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
-        let esvf_prom = rt
+        let esvf_prom_res: Result<EsValueFacade, EsErrorInfo> = rt
             .eval_sync(
-                "let p = new Promise((resolve, reject) => {reject(\"foo\");});return p;",
+                "let test_wait_for_prom2_prom = new Promise((resolve, reject) => {reject(\"foo\");}); test_wait_for_prom2_prom;",
                 "wait_for_prom.es",
-            )
-            .ok()
-            .unwrap();
-        assert!(esvf_prom.is_promise());
-        let esvf_prom_resolved = esvf_prom
-            .get_promise_result_blocking(Duration::from_secs(60))
-            .ok()
-            .unwrap()
-            .err()
-            .unwrap();
+            );
+        if esvf_prom_res.is_err(){
+            panic!("error evaling wait_for_prom.es : {}", esvf_prom_res.err().unwrap().message);
+        } else {
+            let esvf_prom = esvf_prom_res.ok().expect("wait_for_prom.es did not eval ok");
+            assert!(esvf_prom.is_promise());
+            let esvf_prom_resolved = esvf_prom
+                .get_promise_result_blocking(Duration::from_secs(60))
+                .ok()
+                .unwrap()
+                .err()
+                .unwrap();
 
-        assert!(esvf_prom_resolved.is_string());
+            assert!(esvf_prom_resolved.is_string());
 
-        assert_eq!(esvf_prom_resolved.get_string(), "foo");
+            assert_eq!(esvf_prom_resolved.get_string(), "foo");
+        }
     }
 
     #[test]
@@ -512,7 +539,7 @@ mod tests {
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let esvf = rt
             .eval_sync(
-                "return {a: 1, b: true, c: 'hello', d: {a: 2}};",
+                "({a: 1, b: true, c: 'hello', d: {a: 2}});",
                 "test_get_object.es",
             )
             .ok()

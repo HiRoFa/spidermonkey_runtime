@@ -362,7 +362,7 @@ mod tests {
     fn test_console() {
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let console: EsValueFacade = rt
-            .eval_sync("return console;", "test_console.es")
+            .eval_sync("(console);", "test_console.es")
             .ok()
             .unwrap();
 
