@@ -292,10 +292,12 @@ fn call_method_name(
         arguments_value_vec.push(arg_vf.to_es_value(context));
     }
 
-    let res2: Result<JSVal, EsErrorInfo>  = es_utils::functions::call_method_name(context, scope, function_name, arguments_value_vec);
+    rooted!(in(context) let mut rval = UndefinedValue());
+    rooted!(in(context) let mut scope_root = scope);
+    let res2: Result<(), EsErrorInfo>  = es_utils::functions::call_method_name(context, scope_root.handle(), function_name, arguments_value_vec, &mut rval.handle_mut());
 
     if res2.is_ok() {
-        return Ok(EsValueFacade::new_v(context, res2.ok().unwrap()));
+        return Ok(EsValueFacade::new(context, rval.handle()));
     } else {
         return Err(res2.err().unwrap());
     }

@@ -6,9 +6,9 @@ use mozjs::jsval::JSVal;
 use crate::es_utils::{get_type_of, EsErrorInfo, report_es_ex};
 use mozjs::jsapi::JS_ObjectIsFunction;
 use mozjs::jsapi::JS::HandleValueArray;
-use mozjs::jsval::UndefinedValue;
 use mozjs::rust::jsapi_wrapped::JS_CallFunctionName;
 use mozjs::jsapi::JS_NewArrayObject;
+use mozjs::rust::{MutableHandle, HandleObject};
 
 
 
@@ -16,19 +16,15 @@ use mozjs::jsapi::JS_NewArrayObject;
 #[allow(dead_code)]
 pub fn call_method_name (
     context: *mut JSContext,
-    scope: *mut JSObject,
+    scope: HandleObject,
     function_name: &str,
     args: Vec<JSVal>,
-) -> Result<JSVal, EsErrorInfo> {
+    ret_val: &mut MutableHandle<JSVal>
+) -> Result<(), EsErrorInfo> {
 
-    // todo rebuild so you need to pass a mut handle which you need to root yourself before calling this
+    // todo args should be a vec of HandleValue
 
     let n = format!("{}\0", function_name);
-    rooted!(in(context) let mut rval = UndefinedValue());
-
-    rooted!(in(context) let scope_root = scope);
-    let scope_handle = scope_root.handle();
-
 
     let arguments_value_array =
         unsafe { HandleValueArray::from_rooted_slice(&*args) };
@@ -38,13 +34,13 @@ pub fn call_method_name (
     if unsafe {
         JS_CallFunctionName(
             context,
-            scope_handle.into(),
+            scope.into(),
             n.as_ptr() as *const libc::c_char,
             &arguments_value_array,
-            &mut rval.handle_mut(),
+            ret_val,
         )
     } {
-        Ok(*rval)
+        Ok(())
     } else {
         if let Some(err) = report_es_ex(context) {
             Err(err)
@@ -76,8 +72,8 @@ pub fn object_is_function(cx: *mut JSContext, obj: *mut JSObject) -> bool {
 mod tests {
     use crate::es_utils::tests::test_with_sm_rt;
     use crate::es_utils::report_es_ex;
-    use crate::es_utils::functions::{ value_is_function};
-    use mozjs::jsval::UndefinedValue;
+    use crate::es_utils::functions::{value_is_function, call_method_name};
+    use mozjs::jsval::{UndefinedValue, Int32Value, JSVal};
 
     #[test]
     fn test_instance_of_function() {
@@ -104,4 +100,33 @@ mod tests {
         });
         assert_eq!(res, true);
     }
+
+    #[test]
+    fn test_method_by_name(){
+        let ret = test_with_sm_rt(|sm_rt| {
+
+            let global = sm_rt.global_obj;
+            let runtime = &sm_rt.runtime;
+            let context = runtime.cx();
+
+            rooted!(in(context) let mut rval = UndefinedValue());
+            rooted!(in(context) let mut global_root = global);
+            let res = sm_rt.runtime.evaluate_script(global_root.handle(), "this.test_method_by_name_func = function(a, b){return a * b;};", "test_method_by_name.es", 0, rval.handle_mut());
+            let a: JSVal =  Int32Value(7);
+            let b: JSVal =  Int32Value(5);
+            let fres = call_method_name(context, global_root.handle(), "test_method_by_name_func", vec![a, b], &mut rval.handle_mut());
+            if fres.is_err() {
+                panic!(fres.err().unwrap().message);
+            }
+            let ret_val: JSVal = *rval;
+            let ret: i32 = ret_val.to_int32();
+            ret
+
+        });
+
+        assert_eq!(ret, 35);
+
+
+    }
+
 }

@@ -14,23 +14,24 @@ it works with the mozjs crate version 0.10.1 which is already pretty old but the
 
 Currently i'm working towards creating a 0.1 version which has a couple of goals
 
-* [x] easy loading script files
-* [x] error handling (get ES errors in rust with filename/linenumber etc)
-* [x] adding rust function to the engine so they are callable from ECMA-Script
-  * [x] blocking
-  * [x] non-blocking (returns a Promise in script)
-* [x] easy way to call ECMA-Script functions from rust
-  * [x] by name (run_global_function())
-  * [x] by object name and name (myObj.doSomething())
-  * [x] passing params from rust
-* [ ] getting data from engine as primitives or vecs and maps
-  * [x] primitives
-  * [x] objects from and to maps
-  * [ ] arrays as vecs
-* [x] working console (logging)
-* [x] working Promises in Script
-* [x] waiting for Promises from rust
-* [ ] no more memory leaks
+* [ ] Get a grip on when to use rooted values (Handle) and when to use Values (JSVal) 
+* [x] Easy loading script files
+* [x] Error handling (get ES errors in rust with filename/linenumber etc)
+* [x] Adding rust function to the engine so they are callable from ECMA-Script
+  * [x] Blocking
+  * [x] Non-blocking (returns a Promise in script)
+* [x] Easy way to call ECMA-Script functions from rust
+  * [x] By name (run_global_function())
+  * [x] By object name and name (myObj.doSomething())
+  * [x] Passing params from rust
+* [ ] Getting data from engine as primitives or vecs and maps
+  * [x] Primitives
+  * [x] Objects from and to maps
+  * [ ] Arrays as Vecs
+* [x] Working console (logging)
+* [x] Working Promises in Script
+* [x] Waiting for Promises from rust
+* [ ] No more memory leaks
 
 # future goals / todo's
 
