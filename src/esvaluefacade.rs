@@ -18,7 +18,7 @@ use crate::spidermonkeyruntimewrapper::SmRuntime;
 use crate::es_utils::EsErrorInfo;
 
 /// the EsValueFacade is a converter between rust variables and script objects
-/// when receiving a EsValueFacade from the script engine it's data is allways a clone from the actual data so we need not worry about the value being garbage collected
+/// when receiving a EsValueFacade from the script engine it's data is always a clone from the actual data so we need not worry about the value being garbage collected
 ///
 
 struct RustManagedEsVar {
@@ -155,7 +155,10 @@ impl EsValueFacade {
             let cx = rt.cx();
             rooted!(in (cx) let global_root = sm_rt.global_obj);
 
-            if es_utils::promises::object_is_promise(context, global_root.handle(), obj_root.handle()) {
+            if es_utils::arrays::object_is_array(context, obj_root.handle()) {
+                //panic!("ESVF does not support arrays yet");
+                println!("!!! ESVF does not support arrays yet");
+            } else if es_utils::promises::object_is_promise(context, global_root.handle(), obj_root.handle()) {
 
                 // call esses.registerPromiseForResolutionInRust(prom);
 
@@ -195,7 +198,7 @@ impl EsValueFacade {
                     val_managed_var = Some(rmev);
                 }
             } else {
-            let prop_names: Vec<String> = crate::es_utils::get_js_obj_prop_names(context, obj);
+                let prop_names: Vec<String> = crate::es_utils::get_js_obj_prop_names(context, obj);
                 for prop_name in prop_names {
                     let prop_val: mozjs::jsapi::Value =
                         crate::es_utils::get_es_obj_prop_val(context, obj_root.handle(), prop_name.as_str());

@@ -30,10 +30,14 @@ use std::str;
 
 pub mod promises;
 pub mod functions;
+pub mod arrays;
 
 /// get a single member of a JSObject
 #[allow(dead_code)]
 pub fn get_es_obj_prop_val(
+
+    // todo rebuild with ret_val: MutableHandle instead of returning Value
+
     context: *mut JSContext,
     obj: HandleObject,
     prop_name: &str,

@@ -7,6 +7,7 @@ use mozjs::jsapi::JSObject;
 use mozjs::jsval::NullValue;
 
 
+
 pub fn object_is_promise(context: *mut JSContext, _scope: HandleObject, obj: HandleObject) -> bool {
     // todo this is not the best way of doing this, we need to get the promise object of the global scope and see if that is the same as the objects constructor
     // that's why the function requires the global_scope obj
