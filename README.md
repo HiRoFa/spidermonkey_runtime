@@ -24,14 +24,15 @@ Currently i'm working towards creating a 0.1 version which has a couple of goals
   * [x] By name (run_global_function())
   * [x] By object name and name (myObj.doSomething())
   * [x] Passing params from rust
-* [ ] Getting data from engine as primitives or vecs and maps
+* [ ] Getting data from engine as primitives or Vecs and Maps
   * [x] Primitives
-  * [x] Objects from and to maps
+  * [x] Objects from and to Maps
   * [ ] Arrays as Vecs
 * [x] Working console (logging)
 * [x] Working Promises in Script
 * [x] Waiting for Promises from rust
 * [ ] No more memory leaks
+* [ ] Use PersistentRooted instead of deprecated Add\*Root and Remove\*Root
 
 # future goals / todo's
 
@@ -52,7 +53,7 @@ Cargo.toml
 
 ```toml
 [dependencies]
-es_runtime = "0.0.3"
+es_runtime = "0.0.4"
 ```
 
 my_app.rs

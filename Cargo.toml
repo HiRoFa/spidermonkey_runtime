@@ -1,14 +1,14 @@
 [package]
 name = "es_runtime"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["Andries Hiemstra"]
 edition = "2018"
-description = "es_runtime crate which is an api around the spidermonkey script engine"
+description = "An API and Utils around the spidermonkey script engine"
 homepage = "https://gitlab.com/drfos/es_runtime"
-keywords = ["script", "javascript", "es6", "ecmascript", "spidermonkey"]
+keywords = ["script", "javascript", "runtime", "engine", "spidermonkey"]
 repository = "https://gitlab.com/drfos/es_runtime.git"
 license = "GPL-3.0"
-documentation = "https://gitlab.com/drfos/es_runtime"
+documentation = "https://gitlab.com/drfos/es_runtime/blob/master/docs/HOWTO.md"
 readme = "README.md"
 categories = ["development-tools"]
 

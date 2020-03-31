@@ -313,10 +313,6 @@ impl EsValueFacade {
         &self,
         timeout: Duration,
     ) -> Result<Result<EsValueFacade, EsValueFacade>, RecvTimeoutError> {
-        // ok, hier gaan we dus pas .then en .catch aan de promise hangen
-        // hier gooien we ook pas de sender in een thread_local via een job
-        // dus de sender leeft in de worker thread thread_local
-
         if !self.is_promise() {
             return Ok(Err(EsValueFacade::new_str(
                 "esvf was not a Promise".to_string(),
