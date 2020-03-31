@@ -12,10 +12,11 @@ use crate::es_utils;
 use mozjs::jsval::{BooleanValue, DoubleValue, Int32Value, ObjectValue, UndefinedValue};
 use std::collections::HashMap;
 
+use crate::es_utils::arrays::{get_array_element, get_array_length};
+use crate::es_utils::EsErrorInfo;
+use crate::spidermonkeyruntimewrapper::SmRuntime;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::time::Duration;
-use crate::spidermonkeyruntimewrapper::SmRuntime;
-use crate::es_utils::EsErrorInfo;
 
 /// the EsValueFacade is a converter between rust variables and script objects
 /// when receiving a EsValueFacade from the script engine it's data is always a clone from the actual data so we need not worry about the value being garbage collected
@@ -34,6 +35,7 @@ pub struct EsValueFacade {
     val_managed_var: Option<RustManagedEsVar>,
 
     val_object: Option<HashMap<String, EsValueFacade>>,
+    val_array: Option<Vec<EsValueFacade>>,
 }
 
 thread_local! {
@@ -64,6 +66,7 @@ impl EsValueFacade {
             val_boolean: None,
             val_managed_var: None,
             val_object: None,
+            val_array: None,
         }
     }
 
@@ -75,6 +78,7 @@ impl EsValueFacade {
             val_boolean: None,
             val_managed_var: None,
             val_object: None,
+            val_array: None,
         }
     }
 
@@ -86,6 +90,7 @@ impl EsValueFacade {
             val_boolean: None,
             val_managed_var: None,
             val_object: Some(props),
+            val_array: None,
         }
     }
 
@@ -97,6 +102,7 @@ impl EsValueFacade {
             val_boolean: None,
             val_managed_var: None,
             val_object: None,
+            val_array: None,
         }
     }
 
@@ -108,6 +114,7 @@ impl EsValueFacade {
             val_boolean: None,
             val_managed_var: None,
             val_object: None,
+            val_array: None,
         }
     }
 
@@ -119,11 +126,24 @@ impl EsValueFacade {
             val_boolean: Some(b),
             val_managed_var: None,
             val_object: None,
+            val_array: None,
+        }
+    }
+
+    pub fn new_array(vals: Vec<EsValueFacade>) -> Self {
+        EsValueFacade {
+            val_string: None,
+            val_i32: None,
+            val_f64: None,
+            val_boolean: None,
+            val_managed_var: None,
+            val_object: None,
+            val_array: Some(vals),
         }
     }
 
     pub fn new(sm_rt: &SmRuntime, context: *mut JSContext, rval: HandleValue) -> Self {
-        Self::new_v(sm_rt,context, *rval)
+        Self::new_v(sm_rt, context, *rval)
     }
 
     pub fn new_v(sm_rt: &SmRuntime, context: *mut JSContext, rval: mozjs::jsapi::Value) -> Self {
@@ -133,6 +153,7 @@ impl EsValueFacade {
         let mut val_boolean = None;
         let mut val_managed_var = None;
         let mut val_object = None;
+        let mut val_array = None;
 
         if rval.is_boolean() {
             val_boolean = Some(rval.to_boolean());
@@ -156,29 +177,58 @@ impl EsValueFacade {
             rooted!(in (cx) let global_root = sm_rt.global_obj);
 
             if es_utils::arrays::object_is_array(context, obj_root.handle()) {
-                //panic!("ESVF does not support arrays yet");
-                println!("!!! ESVF does not support arrays yet");
-            } else if es_utils::promises::object_is_promise(context, global_root.handle(), obj_root.handle()) {
+                let mut vals = vec![];
+                // add vals
 
+                let arr_len = get_array_length(context, obj_root.handle()).ok().unwrap();
+                for x in 0..arr_len - 1 {
+                    rooted!(in (context) let mut arr_element_root = UndefinedValue());
+                    let get_res = get_array_element(
+                        context,
+                        obj_root.handle(),
+                        x,
+                        arr_element_root.handle_mut(),
+                    );
+                    if get_res.is_err() {
+                        panic!(
+                            "could not get element of array: {}",
+                            get_res.err().unwrap().message
+                        );
+                    }
+                    vals.push(EsValueFacade::new(
+                        sm_rt,
+                        context,
+                        arr_element_root.handle(),
+                    ));
+                }
+
+                val_array = Some(vals);
+            } else if es_utils::promises::object_is_promise(
+                context,
+                global_root.handle(),
+                obj_root.handle(),
+            ) {
                 // call esses.registerPromiseForResolutionInRust(prom);
-
 
                 rooted!(in (cx) let mut id_val = UndefinedValue());
 
-                // ok it's a promse, now we're gonna call a method which will add then and catch to
+                // ok it's a promise, now we're gonna call a method which will add then and catch to
                 // the promise so the result is reported to rust under an id
-                let reg_res : Result<(), EsErrorInfo> = es_utils::functions::call_obj_method_name(
+                let reg_res: Result<(), EsErrorInfo> = es_utils::functions::call_obj_method_name(
                     cx,
                     global_root.handle(),
                     vec!["esses"],
                     "registerPromiseForResolutionInRust",
                     vec![rval],
-                    &mut id_val.handle_mut());
+                    &mut id_val.handle_mut(),
+                );
 
                 if reg_res.is_err() {
-                    panic!("could not reg promise due to error {}", reg_res.err().unwrap().message);
+                    panic!(
+                        "could not reg promise due to error {}",
+                        reg_res.err().unwrap().message
+                    );
                 } else {
-
                     let obj_id = id_val.to_int32();
 
                     let (tx, rx) = channel();
@@ -198,17 +248,26 @@ impl EsValueFacade {
                     val_managed_var = Some(rmev);
                 }
             } else {
-                let prop_names: Vec<String> = crate::es_utils::objects::get_js_obj_prop_names(context, obj);
+                let prop_names: Vec<String> =
+                    crate::es_utils::objects::get_js_obj_prop_names(context, obj);
                 for prop_name in prop_names {
                     rooted!(in (context) let mut prop_val_root = UndefinedValue());
-                    let prop_val_res =
-                        crate::es_utils::objects::get_es_obj_prop_val(context, obj_root.handle(), prop_name.as_str(), prop_val_root.handle_mut());
+                    let prop_val_res = crate::es_utils::objects::get_es_obj_prop_val(
+                        context,
+                        obj_root.handle(),
+                        prop_name.as_str(),
+                        prop_val_root.handle_mut(),
+                    );
 
                     if prop_val_res.is_err() {
-                        panic!("error getting prop {}: {}", prop_name, prop_val_res.err().unwrap().message);
+                        panic!(
+                            "error getting prop {}: {}",
+                            prop_name,
+                            prop_val_res.err().unwrap().message
+                        );
                     }
 
-                    let prop_esvf = EsValueFacade::new(sm_rt,context, prop_val_root.handle());
+                    let prop_esvf = EsValueFacade::new(sm_rt, context, prop_val_root.handle());
                     map.insert(prop_name, prop_esvf);
                 }
             }
@@ -223,6 +282,7 @@ impl EsValueFacade {
             val_boolean,
             val_managed_var,
             val_object,
+            val_array,
         };
 
         ret
@@ -275,6 +335,10 @@ impl EsValueFacade {
         return self.val_object.as_ref().unwrap();
     }
 
+    pub fn get_array(&self) -> &Vec<EsValueFacade> {
+        return self.val_array.as_ref().unwrap();
+    }
+
     pub fn is_string(&self) -> bool {
         self.val_string.is_some()
     }
@@ -293,6 +357,9 @@ impl EsValueFacade {
     pub fn is_object(&self) -> bool {
         self.val_object.is_some()
     }
+    pub fn is_array(&self) -> bool {
+        self.val_array.is_some()
+    }
 
     pub fn as_js_expression_str(&self) -> String {
         if self.is_boolean() {
@@ -309,6 +376,8 @@ impl EsValueFacade {
             return format!("\"{}\"", self.get_string());
         } else if self.is_managed_object() {
             return format!("/* Future {} */", self.get_managed_object_id());
+        } else if self.is_array() {
+            panic!("NYI");
         } else if self.is_object() {
             let mut res: String = String::new();
             let map = self.get_object();
@@ -345,6 +414,9 @@ impl EsValueFacade {
         } else if self.is_string() {
             trace!("to_es_value.5");
             return es_utils::new_es_value_from_str(context, self.get_string());
+        } else if self.is_array() {
+            // todo
+            panic!("NYI");
         } else if self.is_object() {
             trace!("to_es_value.6");
             let obj: *mut JSObject = es_utils::objects::new_object(context);
@@ -375,11 +447,11 @@ impl EsValueFacade {
 #[cfg(test)]
 mod tests {
 
+    use crate::es_utils::EsErrorInfo;
     use crate::esvaluefacade::EsValueFacade;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use std::collections::HashMap;
     use std::time::Duration;
-    use crate::es_utils::EsErrorInfo;
 
     #[test]
     fn in_and_output_vars() {
@@ -525,10 +597,15 @@ mod tests {
                 "let test_wait_for_prom2_prom = new Promise((resolve, reject) => {reject(\"foo\");}); test_wait_for_prom2_prom;",
                 "wait_for_prom.es",
             );
-        if esvf_prom_res.is_err(){
-            panic!("error evaling wait_for_prom.es : {}", esvf_prom_res.err().unwrap().message);
+        if esvf_prom_res.is_err() {
+            panic!(
+                "error evaling wait_for_prom.es : {}",
+                esvf_prom_res.err().unwrap().message
+            );
         } else {
-            let esvf_prom = esvf_prom_res.ok().expect("wait_for_prom.es did not eval ok");
+            let esvf_prom = esvf_prom_res
+                .ok()
+                .expect("wait_for_prom.es did not eval ok");
             assert!(esvf_prom.is_promise());
             let esvf_prom_resolved = esvf_prom
                 .get_promise_result_blocking(Duration::from_secs(60))
