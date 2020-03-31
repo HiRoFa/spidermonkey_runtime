@@ -105,7 +105,7 @@ impl EsRuntimeWrapper {
         function_name: &str,
         args: Vec<EsValueFacade>,
     ) -> Result<EsValueFacade, EsErrorInfo> {
-        self.do_with_inner(move |inner| inner.call_sync(obj_names,function_name, args))
+        self.do_with_inner(move |inner| inner.call_sync(obj_names, function_name, args))
     }
 
     /// eval a script and don't wait for it to complete
@@ -114,7 +114,12 @@ impl EsRuntimeWrapper {
     }
 
     /// call a function by name and don't wait for it to complete
-    pub fn call(&self, obj_names: Vec<&'static str>, function_name: &str, args: Vec<EsValueFacade>) -> () {
+    pub fn call(
+        &self,
+        obj_names: Vec<&'static str>,
+        function_name: &str,
+        args: Vec<EsValueFacade>,
+    ) -> () {
         self.do_with_inner(move |inner| inner.call(obj_names, function_name, args))
     }
 
@@ -171,29 +176,53 @@ pub mod tests {
         esrt.start_gc_deamon(Duration::from_secs(1));
         thread::sleep(Duration::from_secs(6));
         debug!("should have cleaned up at least 5 times by now");
-
     }
 
     #[test]
     fn call_method() {
         let rt: Arc<EsRuntimeWrapper> = TEST_RT.clone();
-        rt.eval_sync("this.myObj = {childObj: {myMethod: function(a, b){return a*b;}}};", "call_method").ok().unwrap();
-        let call_res: Result<EsValueFacade, EsErrorInfo> = rt.call_sync(vec!["myObj", "childObj"], "myMethod", vec![EsValueFacade::new_i32(12), EsValueFacade::new_i32(14)]);
+        rt.eval_sync(
+            "this.myObj = {childObj: {myMethod: function(a, b){return a*b;}}};",
+            "call_method",
+        )
+        .ok()
+        .unwrap();
+        let call_res: Result<EsValueFacade, EsErrorInfo> = rt.call_sync(
+            vec!["myObj", "childObj"],
+            "myMethod",
+            vec![EsValueFacade::new_i32(12), EsValueFacade::new_i32(14)],
+        );
         match call_res {
             Ok(esvf) => println!("answer was {}", esvf.get_i32()),
-            Err(eei) => println!("failed because {}", eei.message)
+            Err(eei) => println!("failed because {}", eei.message),
         }
-
     }
 
     #[test]
-    fn test_async_await(){
+    fn test_async_await() {
         let rt: Arc<EsRuntimeWrapper> = TEST_RT.clone();
-        let prom_facade = rt.eval_sync("let async_method = async function(){let p = new Promise((resolve, reject) => {setImmediate(() => {resolve(123);});});return p;}; let async_method_2 = async function(){let res = await async_method(); return res;}; async_method_2();", "call_method").ok().unwrap();
+
+        let code = "\
+                    let async_method = async function(){\
+                    let p = new Promise((resolve, reject) => {\
+                    setImmediate(() => {\
+                    resolve(123);\
+                    });\
+                    });\
+                    return p;\
+                    };\
+                    \
+                    let async_method_2 = async function(){\
+                    let res = await async_method();\
+                    return res;\
+                    }; \
+                    async_method_2();\
+                    ";
+
+        let prom_facade = rt.eval_sync(code, "call_method").ok().unwrap();
         let wait_res = prom_facade.get_promise_result_blocking(Duration::from_secs(5));
         let prom_res = wait_res.ok().unwrap();
         let esvf_res = prom_res.ok().unwrap();
         assert_eq!(&123, esvf_res.get_i32());
     }
-
 }
