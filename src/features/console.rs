@@ -19,7 +19,7 @@ pub(crate) fn init(rt: &EsRuntimeWrapper) {
         let context = rt.cx();
 
         // todo write a define_function method which uses JS_DefineFunction which will effectively do the same as create and set prop
-        let console_obj: *mut JSObject = crate::es_utils::new_object(context);
+        let console_obj: *mut JSObject = crate::es_utils::objects::new_object(context);
         let console_obj_val: JSVal = ObjectValue(console_obj);
 
         let global_obj = sm_rt.global_obj;
@@ -27,7 +27,7 @@ pub(crate) fn init(rt: &EsRuntimeWrapper) {
         rooted!(in(context) let console_obj_val_root = console_obj_val);
         rooted!(in(context) let console_obj_root = console_obj);
 
-        crate::es_utils::set_es_obj_prop_val(
+        crate::es_utils::objects::set_es_obj_prop_val(
             context,
             global_root.handle(),
             "console",

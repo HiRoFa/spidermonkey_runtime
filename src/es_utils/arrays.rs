@@ -3,21 +3,26 @@ use mozjs::conversions::FromJSValConvertible;
 use mozjs::conversions::ToJSValConvertible;
 use mozjs::jsapi::IsArray;
 use mozjs::jsapi::JSContext;
+use mozjs::jsapi::JS_GetArrayLength;
 
 
 use mozjs::rust::{HandleObject, HandleValue, MutableHandleValue};
-use crate::es_utils::get_es_obj_prop_val;
 
 
 pub fn object_is_array(context: *mut JSContext, obj: HandleObject) -> bool {
     let mut is_array: bool = false;
-    unsafe {IsArray(context, obj.into(), &mut is_array)};
+    unsafe {
+        IsArray(context, obj.into(), &mut is_array);
+    };
     is_array
 }
 
-pub fn get_array_length(context: *mut JSContext, arr_obj: HandleObject) -> i32 {
-    let l_val = get_es_obj_prop_val(context, arr_obj, "length");
-    l_val.to_int32()
+pub fn get_array_length(context: *mut JSContext, arr_obj: HandleObject) -> u32 {
+   let mut l : u32 = 0;
+    unsafe{
+        JS_GetArrayLength(context, arr_obj.into(), &mut l);
+    };
+    l
 }
 
 pub fn get_array_slot(_context: *mut JSContext, _arr_obj: HandleObject, _idx: u32, _ret_val: MutableHandleValue) {

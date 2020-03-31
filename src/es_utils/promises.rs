@@ -1,11 +1,11 @@
 use  mozjs::rust::jsapi_wrapped::NewPromiseObject;
 use mozjs::rust::HandleObject;
 
-use crate::es_utils::{get_constructor, get_es_obj_prop_val, es_value_to_str};
+use crate::es_utils::{es_value_to_str};
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsval::NullValue;
-
+use crate::es_utils::objects::{get_es_obj_prop_val, get_constructor};
 
 
 pub fn object_is_promise(context: *mut JSContext, _scope: HandleObject, obj: HandleObject) -> bool {
