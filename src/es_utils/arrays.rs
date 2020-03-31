@@ -220,7 +220,7 @@ mod tests {
             rooted!(in (context) let mut test_create_array_root = arr_obj);
 
             rooted!(in (context) let v3_root = Int32Value(7));
-            let set_res = set_array_element(
+            let _set_res = set_array_element(
                 context,
                 test_create_array_root.handle(),
                 2,
@@ -231,7 +231,9 @@ mod tests {
             assert_eq!(3, length_res.ok().unwrap());
 
             rooted!(in (context) let v4_root = Int32Value(21));
-            push_array_element(context, test_create_array_root.handle(), v4_root.handle());
+            push_array_element(context, test_create_array_root.handle(), v4_root.handle())
+                .ok()
+                .unwrap();
 
             rooted!(in (context) let mut stringify_res_root = UndefinedValue());
 

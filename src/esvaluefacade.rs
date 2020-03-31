@@ -1,20 +1,15 @@
 use log::trace;
 
-use std::cell::RefCell;
-
-use mozjs::jsapi::JSContext;
-
-use mozjs::jsapi::JSObject;
-
-use mozjs::rust::HandleValue;
-
 use crate::es_utils;
-use mozjs::jsval::{BooleanValue, DoubleValue, Int32Value, ObjectValue, UndefinedValue};
-use std::collections::HashMap;
-
-use crate::es_utils::arrays::{get_array_element, get_array_length};
+use crate::es_utils::arrays::{get_array_element, get_array_length, new_array};
 use crate::es_utils::EsErrorInfo;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
+use mozjs::jsapi::JSContext;
+use mozjs::jsapi::JSObject;
+use mozjs::jsval::{BooleanValue, DoubleValue, Int32Value, ObjectValue, UndefinedValue};
+use mozjs::rust::HandleValue;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::time::Duration;
 
@@ -58,7 +53,6 @@ impl EsValueFacade {
     }
 
     pub fn undefined() -> Self {
-        // todo cache
         EsValueFacade {
             val_string: None,
             val_f64: None,
@@ -373,7 +367,8 @@ impl EsValueFacade {
         } else if self.is_managed_object() {
             return format!("/* Future {} */", self.get_managed_object_id());
         } else if self.is_array() {
-            panic!("NYI");
+            // todo
+            return format!("[]");
         } else if self.is_object() {
             let mut res: String = String::new();
             let map = self.get_object();
@@ -411,8 +406,14 @@ impl EsValueFacade {
             trace!("to_es_value.5");
             return es_utils::new_es_value_from_str(context, self.get_string());
         } else if self.is_array() {
-            // todo
-            panic!("NYI");
+            let mut items = vec![];
+            for item in self.val_array.as_ref().unwrap() {
+                items.push(item.to_es_value(context));
+            }
+
+            let arr: *mut JSObject = new_array(context, items);
+
+            ObjectValue(arr)
         } else if self.is_object() {
             trace!("to_es_value.6");
             let obj: *mut JSObject = es_utils::objects::new_object(context);
@@ -635,6 +636,42 @@ mod tests {
 
         assert!(esvf_a.is_i32());
         assert_eq!(esvf_a.get_i32(), &1);
+    }
+
+    #[test]
+    fn test_getset_array() {
+        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let esvf = rt
+            .eval_sync("([5, 7, 9]);", "test_getset_array.es")
+            .ok()
+            .unwrap();
+
+        assert!(esvf.is_array());
+
+        let vec: &Vec<EsValueFacade> = esvf.get_array();
+
+        let esvf_0 = vec.get(1).unwrap();
+
+        assert!(esvf_0.is_i32());
+        assert_eq!(esvf_0.get_i32(), &7);
+
+        let mut props = HashMap::new();
+        props.insert("a".to_string(), EsValueFacade::new_i32(12));
+        let new_vec = vec![
+            EsValueFacade::new_i32(8),
+            EsValueFacade::new_str("a".to_string()),
+            EsValueFacade::new_obj(props),
+        ];
+        let args = vec![EsValueFacade::new_array(new_vec)];
+        let res: Result<EsValueFacade, EsErrorInfo> = rt.call_sync(vec!["JSON"], "stringify", args);
+
+        if res.is_err() {
+            panic!(res.err().unwrap().message);
+        }
+
+        let res_esvf = res.ok().unwrap();
+        let str = res_esvf.get_string();
+        assert_eq!(str, &"[8,\"a\",{\"a\":12}]".to_string())
     }
 
     #[test]
