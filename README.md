@@ -24,10 +24,10 @@ Currently i'm working towards creating a 0.1 version which has a couple of goals
   * [x] By name (run_global_function())
   * [x] By object name and name (myObj.doSomething())
   * [x] Passing params from rust
-* [ ] Getting data from engine as primitives or Vecs and Maps
+* [x] Getting data from engine as primitives or Vecs and Maps
   * [x] Primitives
   * [x] Objects from and to Maps
-  * [ ] Arrays as Vecs
+  * [x] Arrays as Vecs
 * [x] Working console (logging)
 * [x] Working Promises in Script
 * [x] Waiting for Promises from rust
