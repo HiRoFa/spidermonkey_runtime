@@ -3,13 +3,14 @@ use mozjs::jsapi::JSType;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsval::JSVal;
-use crate::es_utils::{get_type_of, EsErrorInfo, report_es_ex, get_es_obj_prop_val};
+use crate::es_utils::{get_type_of, EsErrorInfo, report_es_ex};
 use mozjs::jsapi::JS_ObjectIsFunction;
 use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::rust::jsapi_wrapped::JS_CallFunctionName;
 use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::rust::{MutableHandle, HandleObject};
-
+use crate::es_utils::objects::get_es_obj_prop_val;
+use mozjs::jsval::UndefinedValue;
 
 
 /// call a method by name
@@ -71,16 +72,21 @@ pub fn call_obj_method_name(context: *mut JSContext,
 
     let mut sub_scope: *mut JSObject = *scope;
     for obj_name in obj_names {
-        rooted!(in(context) let sub_scope_root  = sub_scope);
-        let val: mozjs::jsapi::Value = get_es_obj_prop_val(context, sub_scope_root.handle(), obj_name);
+        rooted!(in(context) let sub_scope_root = sub_scope);
+        rooted!(in(context) let mut new_subscope_root = UndefinedValue());
+        let res = get_es_obj_prop_val(context, sub_scope_root.handle(), obj_name, new_subscope_root.handle_mut());
+
+        if res.is_err() {
+            panic!("could not get prop {}: {}", obj_name, res.err().unwrap().message);
+        }
+
+        let val: JSVal = *new_subscope_root.handle();
 
         if !val.is_object() {
             return Err(EsErrorInfo{message: format!("{} was not an object.", obj_name), column:0, lineno:0, filename:"".to_string()});
         }
 
-        rooted!(in(context) let val_obj_root = val.to_object());
-
-        sub_scope = *val_obj_root.handle();
+        sub_scope = val.to_object();
 
     }
 

@@ -93,6 +93,11 @@ impl EsRuntimeWrapper {
         self.do_with_inner(move |inner| inner.eval_sync(code, file_name))
     }
 
+    /// eval a script and wait for it to complete
+    pub fn eval_void_sync(&self, code: &str, file_name: &str) -> Result<(), EsErrorInfo> {
+        self.do_with_inner(move |inner| inner.eval_void_sync(code, file_name))
+    }
+
     /// call a function by name and wait for it to complete
     pub fn call_sync(
         &self,

@@ -200,9 +200,15 @@ impl EsValueFacade {
             } else {
                 let prop_names: Vec<String> = crate::es_utils::objects::get_js_obj_prop_names(context, obj);
                 for prop_name in prop_names {
-                    let prop_val: mozjs::jsapi::Value =
-                        crate::es_utils::objects::get_es_obj_prop_val(context, obj_root.handle(), prop_name.as_str());
-                    let prop_esvf = EsValueFacade::new_v(sm_rt,context, prop_val);
+                    rooted!(in (context) let mut prop_val_root = UndefinedValue());
+                    let prop_val_res =
+                        crate::es_utils::objects::get_es_obj_prop_val(context, obj_root.handle(), prop_name.as_str(), prop_val_root.handle_mut());
+
+                    if prop_val_res.is_err() {
+                        panic!("error getting prop {}: {}", prop_name, prop_val_res.err().unwrap().message);
+                    }
+
+                    let prop_esvf = EsValueFacade::new(sm_rt,context, prop_val_root.handle());
                     map.insert(prop_name, prop_esvf);
                 }
             }

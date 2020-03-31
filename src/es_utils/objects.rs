@@ -1,7 +1,7 @@
-use mozjs::rust::{HandleObject, HandleValue, IntoHandle, IdVector};
+use mozjs::rust::{HandleObject, HandleValue, IntoHandle, IdVector, MutableHandleValue};
 use mozjs::jsapi::JSContext;
-use crate::es_utils::{EsErrorInfo, report_es_ex, es_jsstring_to_string};
-use mozjs::jsval::UndefinedValue;
+use crate::es_utils::{EsErrorInfo, report_es_ex, es_jsstring_to_string, es_value_to_str};
+use mozjs::jsval::{UndefinedValue, JSVal};
 use mozjs::jsapi::JS_GetProperty;
 use mozjs::jsapi::JSObject;
 use mozjs::rust::jsapi_wrapped::GetPropertyKeys;
@@ -21,28 +21,65 @@ use mozjs::glue::RUST_JSID_TO_STRING;
 #[allow(dead_code)]
 pub fn get_es_obj_prop_val(
 
-    // todo rebuild with ret_val: MutableHandle instead of returning Value
-
     context: *mut JSContext,
     obj: HandleObject,
-    prop_name: &str,
-
-) -> mozjs::jsapi::Value {
-    rooted!(in(context) let mut prop_val = UndefinedValue());
-
+    prop_name: &str,ret_val: MutableHandleValue) -> Result<(), EsErrorInfo> {
 
     let n = format!("{}\0", prop_name);
-    unsafe {
+    let ok = unsafe {
         JS_GetProperty(
             context,
             obj.into(),
             n.as_ptr() as *const libc::c_char,
-            prop_val.handle_mut().into(),
-        );
+            ret_val.into(),
+        )
+    };
+
+    if !ok {
+        if let Some(err) = report_es_ex(context) {
+            return Err(err);
+        }
     }
-    *prop_val
+
+    Ok(())
+
 }
 
+pub fn get_es_obj_prop_val_as_string(
+
+    context: *mut JSContext,
+    obj: HandleObject,
+    prop_name: &str) -> String {
+
+    // todo in console we use something to convert any val to string, should we use that here or fail on non-strings?
+
+    rooted!(in (context) let mut rval = UndefinedValue());
+    let res = get_es_obj_prop_val(context, obj, prop_name, rval.handle_mut());
+    if res.is_err() {
+        panic!(res.err().unwrap().message);
+    }
+
+    es_value_to_str(context, &*rval)
+
+}
+
+
+pub fn get_es_obj_prop_val_as_i32(
+
+    context: *mut JSContext,
+    obj: HandleObject,
+    prop_name: &str) -> i32 {
+
+    rooted!(in (context) let mut rval = UndefinedValue());
+    let res = get_es_obj_prop_val(context, obj, prop_name, rval.handle_mut());
+    if res.is_err() {
+        panic!(res.err().unwrap().message);
+    }
+
+    let val: JSVal = *rval;
+    val.to_int32()
+
+}
 
 /// create a new object in the engine
 #[allow(dead_code)]
@@ -99,6 +136,8 @@ pub fn get_prototype(
 ) -> Result<*mut JSObject, EsErrorInfo> {
     let ret: *mut JSObject = unsafe { JS_GetObjectPrototype(context, obj.into_handle()) };
 
+// todo rebuild with ret_val: MutableHandle instead of returning Value
+
     if ret.is_null() {
         let err_opt = report_es_ex(context);
         if err_opt.is_some() {
@@ -118,6 +157,8 @@ pub fn get_constructor(
     obj: HandleObject,
 ) -> Result<*mut JSObject, EsErrorInfo> {
     let ret: *mut JSObject = unsafe { JS_GetConstructor(context, obj.into_handle()) };
+
+    // todo rebuild with ret_val: MutableHandle instead of returning Value
 
     if ret.is_null() {
         let err_opt = report_es_ex(context);
@@ -215,9 +256,14 @@ mod tests {
 
                 let mut test_vec = vec![];
                 rooted!(in(context) let jso_root = jso);
+
                 for prop_name in prop_vec {
-                    let prop_val = get_es_obj_prop_val(context, jso_root.handle(), prop_name.as_str());
-                    test_vec.push(es_value_to_str(context, &prop_val).to_string());
+
+                    rooted!(in (context) let mut rval = UndefinedValue());
+
+                    let _prop_val_res = get_es_obj_prop_val(context, jso_root.handle(), prop_name.as_str(), rval.handle_mut());
+
+                    test_vec.push(es_value_to_str(context, &*rval).to_string());
                 }
 
                 test_vec

@@ -1,3 +1,7 @@
+#0.0.4
+* added utils for arrays and objects (arrays.rs and obejcts.rs)
+* refactoring of getting obj props (root first)
+* created eval_void methods to eval without copying result to EsValueFacade
 #0.0.3
 * added utils for Promises (check if an object is a Promise and create a new Promise)
 * moved function invocation util to functions.rs

@@ -14,7 +14,7 @@ use mozjs::jsapi::JSType;
 use mozjs::jsapi::JS_TypeOfValue;
 
 use std::str;
-use crate::es_utils::objects::get_es_obj_prop_val;
+use crate::es_utils::objects::{get_es_obj_prop_val_as_string, get_es_obj_prop_val_as_i32};
 
 pub mod promises;
 pub mod functions;
@@ -42,19 +42,15 @@ pub fn report_es_ex(context: *mut JSContext) -> Option<EsErrorInfo> {
         if unsafe { JS_GetPendingException(context, error_value.handle_mut().into()) } {
             let js_error_obj: *mut mozjs::jsapi::JSObject = error_value.to_object();
             rooted!(in(context) let mut js_error_obj_root = js_error_obj);
-            let message_value: mozjs::jsapi::Value =
-                get_es_obj_prop_val(context, js_error_obj_root.handle(), "message");
-            let filename_value: mozjs::jsapi::Value =
-                get_es_obj_prop_val(context, js_error_obj_root.handle(), "fileName");
-            let lineno_value: mozjs::jsapi::Value =
-                get_es_obj_prop_val(context, js_error_obj_root.handle(), "lineNumber");
-            let column_value: mozjs::jsapi::Value =
-                get_es_obj_prop_val(context, js_error_obj_root.handle(), "columnNumber");
 
-            let message = es_value_to_str(context, &message_value);
-            let filename = es_value_to_str(context, &filename_value);
-            let lineno = lineno_value.to_int32();
-            let column = column_value.to_int32();
+            let message=
+                get_es_obj_prop_val_as_string(context, js_error_obj_root.handle(), "message");
+            let filename =
+                get_es_obj_prop_val_as_string(context, js_error_obj_root.handle(), "fileName");
+            let lineno =
+                get_es_obj_prop_val_as_i32(context, js_error_obj_root.handle(), "lineNumber");
+            let column =
+                get_es_obj_prop_val_as_i32(context, js_error_obj_root.handle(), "columnNumber");
 
             let error_info: EsErrorInfo = EsErrorInfo {
                 message,

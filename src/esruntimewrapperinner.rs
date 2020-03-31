@@ -46,7 +46,7 @@ impl EsRuntimeWrapperInner {
         let file_name = file_name.to_string();
 
         self.do_in_es_runtime_thread(Box::new(move |sm_rt: &SmRuntime| {
-            let res = sm_rt.eval(eval_code.as_str(), file_name.as_str());
+            let res = sm_rt.eval_void(eval_code.as_str(), file_name.as_str());
             if res.is_err() {
                 debug!("async code eval failed: {}", res.err().unwrap().message);
             }
@@ -54,12 +54,22 @@ impl EsRuntimeWrapperInner {
     }
 
     pub fn eval_sync(&self, code: &str, file_name: &str) -> Result<EsValueFacade, EsErrorInfo> {
-        debug!("eval_sync1 {} in thread {}", code, thread_id::get());
+        debug!("eval_sync {} in thread {}", code, thread_id::get());
         let eval_code = code.to_string();
         let file_name = file_name.to_string();
 
         self.do_in_es_runtime_thread_sync(Box::new(move |sm_rt: &SmRuntime| {
             sm_rt.eval(eval_code.as_str(), file_name.as_str())
+        }))
+    }
+
+    pub fn eval_void_sync(&self, code: &str, file_name: &str) -> Result<(), EsErrorInfo> {
+        debug!("eval_void_sync {} in thread {}", code, thread_id::get());
+        let eval_code = code.to_string();
+        let file_name = file_name.to_string();
+
+        self.do_in_es_runtime_thread_sync(Box::new(move |sm_rt: &SmRuntime| {
+            sm_rt.eval_void(eval_code.as_str(), file_name.as_str())
         }))
     }
 

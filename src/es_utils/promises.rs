@@ -1,11 +1,10 @@
 use  mozjs::rust::jsapi_wrapped::NewPromiseObject;
 use mozjs::rust::HandleObject;
 
-use crate::es_utils::{es_value_to_str};
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsval::NullValue;
-use crate::es_utils::objects::{get_es_obj_prop_val, get_constructor};
+use crate::es_utils::objects::{get_constructor, get_es_obj_prop_val_as_string};
 
 
 pub fn object_is_promise(context: *mut JSContext, _scope: HandleObject, obj: HandleObject) -> bool {
@@ -17,11 +16,10 @@ pub fn object_is_promise(context: *mut JSContext, _scope: HandleObject, obj: Han
         let constr: *mut JSObject = constr_res.ok().unwrap();
         rooted!(in (context) let constr_root = constr);
         if !constr.is_null() {
-            let name_prop: mozjs::jsapi::Value = get_es_obj_prop_val(context, constr_root.handle(), "name");
-            if name_prop.is_string() {
-                let name_str = es_value_to_str(context, &name_prop);
-                return name_str.as_str().eq("Promise");
-            }
+            let name_prop = get_es_obj_prop_val_as_string(context, constr_root.handle(), "name");
+
+            return name_prop.as_str().eq("Promise");
+
         }
     }
     false

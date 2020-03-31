@@ -147,11 +147,7 @@ impl SmRuntime {
 
 
 
-    /// eval a piece of script
-    /// please note that in order to return a value form script you need to eval with 'return value;'
-    /// and not just 'value;' because the script to be evaluated is wrapped in a function
-    /// this is needed for now because we do some preprocessing for when Promises are passed to rust
-    /// this will change in the future
+    /// eval a piece of script and return the result as a EsValueFacade
     pub fn eval(&self, eval_code: &str, file_name: &str) -> Result<EsValueFacade, EsErrorInfo> {
         debug!("smrt.eval {} in thread {}", eval_code, thread_id::get());
 
@@ -164,6 +160,24 @@ impl SmRuntime {
 
         if eval_res.is_ok() {
             return Ok(EsValueFacade::new_v(self, self.runtime.cx(),eval_res.ok().unwrap()));
+        } else {
+            return Err(eval_res.err().unwrap());
+        }
+    }
+
+    /// eval a piece of script and ignore the result
+    pub fn eval_void(&self, eval_code: &str, file_name: &str) -> Result<(), EsErrorInfo> {
+        debug!("smrt.eval_void {} in thread {}", eval_code, thread_id::get());
+
+        let eval_res: Result<JSVal, EsErrorInfo> = es_utils::eval(
+            &self.runtime,
+            self.global_obj,
+            eval_code,
+            file_name,
+        );
+
+        if eval_res.is_ok() {
+            return Ok(());
         } else {
             return Err(eval_res.err().unwrap());
         }
