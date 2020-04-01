@@ -12,6 +12,8 @@ Nowhere near production ready, it is untested and i'm pretty sure i created some
 
 It works with the mozjs crate version 0.10.1 which is already pretty old but there are no newer releases, when i get more comfortable with spidermonkey and mozjs i'll see about using a git pull of a newer version.
 
+Please see the [CHANGELOG](CHANGELOG.md) for what's new.
+
 Currently i'm working towards creating a 0.1 version which has a couple of goals
 
 * [x] Get a grip on when to use rooted values (Handle) and when to use Values (JSVal) 
