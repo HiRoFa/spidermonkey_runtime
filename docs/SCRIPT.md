@@ -24,7 +24,7 @@ let myAsyncMethod = function(a, b){
     console.log("multiplying %i and %i", a, b);
     return a * b;
 };
-setImmediate(myAsyncMethod, a, b);
+setImmediate(myAsyncMethod, 12, 14);
 ```
 
 * create a Promise
