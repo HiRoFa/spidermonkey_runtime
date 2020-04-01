@@ -1,9 +1,13 @@
 use crate::es_utils::objects::get_es_obj_prop_val;
 use crate::es_utils::{get_type_of, report_es_ex, EsErrorInfo};
 use mozjs::jsapi::JSContext;
+use mozjs::jsapi::JSFunction;
+use mozjs::jsapi::JSNative;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JSType;
+use mozjs::jsapi::JS_DefineFunction;
 use mozjs::jsapi::JS_NewArrayObject;
+use mozjs::jsapi::JS_NewFunction;
 use mozjs::jsapi::JS_ObjectIsFunction;
 use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsval::JSVal;
@@ -120,6 +124,49 @@ pub fn value_is_function(context: *mut JSContext, val: JSVal) -> bool {
 /// check whether an object is a function
 pub fn object_is_function(cx: *mut JSContext, obj: *mut JSObject) -> bool {
     unsafe { JS_ObjectIsFunction(cx, obj) }
+}
+
+/// define a new native function on an object
+/// JSNative = Option<unsafe extern "C" fn(*mut JSContext, u32, *mut Value) -> bool>
+pub fn define_native_function(
+    cx: *mut JSContext,
+    obj: HandleObject,
+    function_name: &str,
+    native_function: JSNative,
+) -> *mut JSFunction {
+    let n = format!("{}\0", function_name);
+
+    let ret: *mut JSFunction = unsafe {
+        JS_DefineFunction(
+            cx,
+            obj.into(),
+            n.as_ptr() as *const libc::c_char,
+            native_function,
+            1,
+            0,
+        )
+    };
+
+    ret
+
+    //https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/JSAPI_reference/JS_DefineFunction
+}
+
+/// define a new native function
+/// JSNative = Option<unsafe extern "C" fn(*mut JSContext, u32, *mut Value) -> bool>
+pub fn new_native_function(
+    cx: *mut JSContext,
+    function_name: &str,
+    native_function: JSNative,
+) -> *mut JSFunction {
+    let n = format!("{}\0", function_name);
+
+    let ret: *mut JSFunction =
+        unsafe { JS_NewFunction(cx, native_function, 1, 0, n.as_ptr() as *const libc::c_char) };
+
+    ret
+
+    //https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/JSAPI_reference/JS_DefineFunction
 }
 
 #[cfg(test)]
