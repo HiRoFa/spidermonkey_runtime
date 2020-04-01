@@ -111,6 +111,22 @@ let esvf_res = prom_res.ok().unwrap();
 assert_eq!(&123, esvf_res.get_i32());
 ```
 
-## Adding features
+## Adding rust_ops to script
 
-// todo
+In order to call a rust function from script you need to add the rust function to the EsRuntimeWrapper first.
+
+```rust
+fn reg_op(rt: &EsRuntimeWrapper) {
+    rt.register_op(
+        "my_rusty_op",
+        Box::new(|_sm_rt, args: Vec<EsValueFacade>| {
+            let a = args.get(0).unwrap().get_i32();
+            let b = args.get(1).unwrap().get_i32();
+            Ok(EsValueFacade::new_i32(a * b))
+        }),
+    );
+}
+```
+
+After that you can [call it from script](SCRIPT.md#calling-rust-ops).
+
