@@ -32,12 +32,17 @@ Currently i'm working towards creating a 0.1 version which has a couple of goals
 * [x] Working Promises in Script
 * [x] Waiting for Promises from rust
 * [ ] No more memory leaks
+
+# 0.2 goals
+
 * [ ] Use PersistentRooted instead of deprecated Add\*Root and Remove\*Root
+* [ ] typedArrays from and to Vecs
 
 # future goals / todo's
 
-* [ ] typedArrays from and to Vecs
-* [ ] typescript support
+* [ ] Interactive Debugging
+* [ ] Profiling
+* [ ] TypeScript support
 * [ ] import/export statement support
 * [ ] much more
 
@@ -46,6 +51,8 @@ Currently i'm working towards creating a 0.1 version which has a couple of goals
 I'm also working on a more feature rich runtime with a commandline tool and also an application server based on this runtime
 
 These are in a very early testing stage and may become available later as a seperate project.
+
+I'dd like to hear what you would want to see in this project, please drop me a line @ incoming+drfos-es-runtime-17727229-issue-@incoming.gitlab.com
 
 # examples
 
