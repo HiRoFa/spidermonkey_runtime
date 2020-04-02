@@ -180,7 +180,7 @@ pub mod tests {
     use crate::es_utils::EsErrorInfo;
     use crate::esruntimewrapper::EsRuntimeWrapper;
     use crate::esvaluefacade::EsValueFacade;
-    use log::{debug, LevelFilter};
+    use log::LevelFilter;
     use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
@@ -198,16 +198,43 @@ pub mod tests {
             format!("export default () => 123; export const other = Math.sqrt(8); console.log('running imported test module'); \n\nconsole.log('parsing a module from code loader for filename: {}');", file_name)
         };
         let rt = EsRuntimeWrapper::new_with_module_code_loader(module_code_loader);
+        rt.start_gc_deamon(Duration::from_secs(2));
 
         Arc::new(rt)
     }
 
     #[test]
-    fn test() {
+    fn test_module() {
         let esrt: Arc<EsRuntimeWrapper> = TEST_RT.clone();
-        esrt.start_gc_deamon(Duration::from_secs(1));
-        thread::sleep(Duration::from_secs(6));
-        debug!("should have cleaned up at least 5 times by now");
+
+        let load_mod_res = esrt.load_module_sync("import {other} from 'foo_test_mod.mes';\n\nlet test_method_0 = (a) => {return a * 11;};\n\nesses.test_method_1 = (a) => {return a * 12;};", "test_module_rt.mes");
+
+        if load_mod_res.is_err() {
+            let err = load_mod_res.err().unwrap();
+            panic!(
+                "error test_module: {}:{}:{} -> {}",
+                err.filename, err.lineno, err.column, err.message
+            );
+        }
+
+        thread::sleep(Duration::from_secs(4));
+
+        let flubber_res = esrt.eval_sync(
+            "let flubber = esses.test_method_1(5); flubber;",
+            "test_module_2.es",
+        );
+
+        if flubber_res.is_err() {
+            let err = flubber_res.err().unwrap();
+            panic!(
+                "error test_module: {}:{}:{} -> {}",
+                err.filename, err.lineno, err.column, err.message
+            );
+        }
+
+        let esvf = flubber_res.ok().unwrap();
+
+        assert_eq!(esvf.get_i32(), &60);
     }
 
     #[test]
