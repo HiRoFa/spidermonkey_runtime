@@ -18,6 +18,45 @@ fn load_file(rt: &EsRuntimeWrapper) {
 }
 ```
 
+## loading files while using modules
+
+Modules are a technique to load pieces of script
+
+See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules
+
+Dynamic loading is currently not supported
+
+### use load_module instead of eval
+
+In order to load files into the Runtime with support for export and import statements you need to use load_module_sync instead of eval.
+
+e.g.
+```rust
+fn load_a_module(rt: &EsRuntimeWrapper) {
+    
+    rt.load_module_sync(my_module_source, "my-module.mes");
+}
+```
+
+Using the import or export keywords in code passed to eval will not work.
+
+### pass a module_loader to the constructor of EsRuntimeWrapper
+
+Because your module might use an import statement like `import {stuff} from "my_module.mes";` you need to tell the runtime how to load code from files.
+
+This is done by passing a module_source_loader closure to the EsRuntimeWrapper::new_with_module_code_loader().
+
+e.g.
+
+```rust
+let module_code_loader = |file_name: &str| {
+    format!("export default () => 123; export const stuff = Math.sqrt(8);; \n\nconsole.log('parsing a module from code loader for filename: {}');", file_name)
+};
+let rt = EsRuntimeWrapper::new_with_module_code_loader(module_code_loader);
+```
+  
+### example
+
 ## calling a script function from rust
 
 calling a script function from rust is done by using the call or call_sync methods

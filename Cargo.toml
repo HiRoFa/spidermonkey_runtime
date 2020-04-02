@@ -1,6 +1,6 @@
 [package]
 name = "es_runtime"
-version = "0.0.4"
+version = "0.0.5"
 authors = ["Andries Hiemstra"]
 edition = "2018"
 description = "An API and Utils around the spidermonkey script engine"
@@ -17,7 +17,7 @@ mozjs = "0.10.1"
 libc = "0.2.68"
 lazy_static = "1.4.0"
 log = "0.4.8"
-simple_logger = "1.3.0"
+simple-logging = "2.0.2"
 thread-id = "3.3.0"
 num_cpus = "1.0"
 uuid = {version = "0.8.1", features =["v4"]}

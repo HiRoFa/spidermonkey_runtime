@@ -1,5 +1,3 @@
-use log::debug;
-
 use crate::esruntimewrapper::EsRuntimeWrapper;
 
 pub(crate) fn init_es(rt: &EsRuntimeWrapper) {
@@ -23,7 +21,6 @@ pub(crate) fn init_es(rt: &EsRuntimeWrapper) {
 }
 
 fn init_file(runtime: &EsRuntimeWrapper, file_name: &str, es_code: &str) {
-    debug!("es_sys_scripts :: evaluating init script {}", file_name);
     let init_res = runtime.eval_void_sync(es_code, file_name);
     if !init_res.is_ok() {
         let esei = init_res.err().unwrap();

@@ -3,30 +3,29 @@ use mozjs::conversions::jsstr_to_string;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JSString;
+use mozjs::jsapi::JSType;
 use mozjs::jsapi::JS_ClearPendingException;
 use mozjs::jsapi::JS_GetPendingException;
 use mozjs::jsapi::JS_IsExceptionPending;
 use mozjs::jsapi::JS_NewStringCopyN;
+use mozjs::jsapi::JS_TypeOfValue;
 use mozjs::jsapi::JS_GC;
 use mozjs::jsval::{JSVal, StringValue, UndefinedValue};
 use mozjs::rust::Runtime;
-use mozjs::jsapi::JSType;
-use mozjs::jsapi::JS_TypeOfValue;
 
+use crate::es_utils::objects::{get_es_obj_prop_val_as_i32, get_es_obj_prop_val_as_string};
 use std::str;
-use crate::es_utils::objects::{get_es_obj_prop_val_as_string, get_es_obj_prop_val_as_i32};
 
-pub mod promises;
-pub mod functions;
 pub mod arrays;
+pub mod functions;
+pub mod modules;
 pub mod objects;
-
-
+pub mod promises;
 
 /// get the type of a JSVal
 pub fn get_type_of(context: *mut JSContext, val: JSVal) -> JSType {
     rooted!(in(context) let val_root = val);
-    unsafe {JS_TypeOfValue(context, val_root.handle().into())}
+    unsafe { JS_TypeOfValue(context, val_root.handle().into()) }
 }
 
 /// see if there is a pending exception and return it
@@ -43,7 +42,7 @@ pub fn report_es_ex(context: *mut JSContext) -> Option<EsErrorInfo> {
             let js_error_obj: *mut mozjs::jsapi::JSObject = error_value.to_object();
             rooted!(in(context) let mut js_error_obj_root = js_error_obj);
 
-            let message=
+            let message =
                 get_es_obj_prop_val_as_string(context, js_error_obj_root.handle(), "message");
             let filename =
                 get_es_obj_prop_val_as_string(context, js_error_obj_root.handle(), "fileName");
@@ -103,7 +102,6 @@ pub fn eval(
     code: &str,
     file_name: &str,
 ) -> Result<JSVal, EsErrorInfo> {
-
     // todo rebuild this so you have to pass a mut handle which you need to root yourself before calling this
 
     let context = runtime.cx();
@@ -131,9 +129,6 @@ pub fn eval(
         }
     }
 }
-
-
-
 
 /// convert a string to a StringValue so it can be used in the engine
 #[allow(dead_code)]
@@ -168,27 +163,21 @@ pub fn gc(context: *mut JSContext) {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use crate::es_utils::{es_value_to_str, eval, report_es_ex, EsErrorInfo};
 
     use crate::spidermonkeyruntimewrapper::SmRuntime;
-    use mozjs::jsval::{UndefinedValue, JSVal};
+    use mozjs::jsval::{JSVal, UndefinedValue};
 
-
-
-    pub fn test_with_sm_rt<F, R: Send + 'static>(test_fn: F) -> R where F: FnOnce(&SmRuntime) -> R + Send + 'static {
+    pub fn test_with_sm_rt<F, R: Send + 'static>(test_fn: F) -> R
+    where
+        F: FnOnce(&SmRuntime) -> R + Send + 'static,
+    {
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
 
-        rt.do_with_inner(|inner| {
-            inner.do_in_es_runtime_thread_sync(Box::new(test_fn))
-        })
+        rt.do_with_inner(|inner| inner.do_in_es_runtime_thread_sync(Box::new(test_fn)))
     }
-
-
-
 
     #[test]
     fn test_es_value_to_string() {
@@ -226,7 +215,6 @@ mod tests {
             test_es_value_to_string();
         }
     }
-
 
     #[test]
     fn test_eval() {

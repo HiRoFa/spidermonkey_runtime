@@ -10,16 +10,41 @@ pub type MutableJob<R> = Box<dyn FnOnce(&mut SmRuntime) -> R + Send + 'static>;
 
 pub struct EsRuntimeWrapperInner {
     pub(crate) task_manager: Arc<MicroTaskManager>,
+    pub(crate) _pre_cleanup_tasks: Vec<Box<dyn Fn(&EsRuntimeWrapperInner) -> () + Send + Sync>>,
+    pub(crate) module_source_loader: Option<Box<dyn Fn(&str) -> String + Send + Sync>>,
 }
 
 impl EsRuntimeWrapperInner {
-    pub fn call(&self, obj_names: Vec<&'static str>, function_name: &str, args: Vec<EsValueFacade>) -> () {
+    pub(crate) fn new() -> Self {
+        EsRuntimeWrapperInner {
+            task_manager: MicroTaskManager::new(),
+            _pre_cleanup_tasks: vec![],
+            module_source_loader: None,
+        }
+    }
+
+    pub(crate) fn new_with_module_code_loader<C>(loader: C) -> Self
+    where
+        C: Fn(&str) -> String + Send + Sync + 'static,
+    {
+        EsRuntimeWrapperInner {
+            task_manager: MicroTaskManager::new(),
+            _pre_cleanup_tasks: vec![],
+            module_source_loader: Some(Box::new(loader)),
+        }
+    }
+
+    pub fn call(
+        &self,
+        obj_names: Vec<&'static str>,
+        function_name: &str,
+        args: Vec<EsValueFacade>,
+    ) -> () {
         debug!("call {} in thread {}", function_name, thread_id::get());
         let f_n = function_name.to_string();
 
         self.do_in_es_runtime_thread(Box::new(move |sm_rt: &SmRuntime| {
-
-            let res = sm_rt.call(obj_names,f_n.as_str(), args);
+            let res = sm_rt.call(obj_names, f_n.as_str(), args);
             if res.is_err() {
                 debug!("async call failed: {}", res.err().unwrap().message);
             }
@@ -64,12 +89,24 @@ impl EsRuntimeWrapperInner {
     }
 
     pub fn eval_void_sync(&self, code: &str, file_name: &str) -> Result<(), EsErrorInfo> {
-        debug!("eval_void_sync {} in thread {}", code, thread_id::get());
         let eval_code = code.to_string();
         let file_name = file_name.to_string();
 
         self.do_in_es_runtime_thread_sync(Box::new(move |sm_rt: &SmRuntime| {
             sm_rt.eval_void(eval_code.as_str(), file_name.as_str())
+        }))
+    }
+
+    pub fn load_module_sync(
+        &self,
+        module_src: &str,
+        module_file_name: &str,
+    ) -> Result<(), EsErrorInfo> {
+        let module_src_str = module_src.to_string();
+        let module_file_name_str = module_file_name.to_string();
+
+        self.do_in_es_runtime_thread_sync(Box::new(move |sm_rt: &SmRuntime| {
+            sm_rt.load_module(module_src_str.as_str(), module_file_name_str.as_str())
         }))
     }
 

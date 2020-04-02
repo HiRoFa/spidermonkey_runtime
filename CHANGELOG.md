@@ -1,3 +1,9 @@
+# 0.0.5
+
+* added support and utils for modules (see [RUST#modules](docs/RUST.md#loading-files-while-using-modules))
+* added a constructor for runtime for use with modules
+ * currently modules are not cached and thus loaded several times, will be fixed later
+
 # 0.0.4
 
 * added utils for arrays and objects (arrays.rs and obejcts.rs)

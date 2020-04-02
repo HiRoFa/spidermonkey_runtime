@@ -5,32 +5,29 @@ use crate::esruntimewrapper::EsRuntimeWrapper;
 use crate::esvaluefacade::EsValueFacade;
 use log::{debug, trace};
 
+use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
 use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::CompartmentOptions;
 use mozjs::jsapi::Heap;
 use mozjs::jsapi::JSAutoCompartment;
 use mozjs::jsapi::JSContext;
+use mozjs::jsapi::JSFunction;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JS_DefineFunction;
 use mozjs::jsapi::JS_NewGlobalObject;
-use mozjs::jsapi::SetModuleResolveHook;
-
 use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::OnNewGlobalHookOption;
 use mozjs::jsapi::SetEnqueuePromiseJobCallback;
+use mozjs::jsapi::SetModuleResolveHook;
 use mozjs::jsapi::JS::HandleValueArray;
-
 use mozjs::jsapi::{AddRawValueRoot, RemoveRawValueRoot};
+use mozjs::jsval::{JSVal, ObjectValue, UndefinedValue};
+use mozjs::panic::wrap_panic;
 use mozjs::rust::wrappers::JS_CallFunctionValue;
 use mozjs::rust::{HandleObject, HandleValue, JSEngine};
 use mozjs::rust::{Runtime, SIMPLE_GLOBAL_CLASS};
-
-use mozjs::jsval::{JSVal, ObjectValue, UndefinedValue};
 use std::cell::RefCell;
 use std::collections::HashMap;
-
-use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
-use mozjs::panic::wrap_panic;
 use std::ffi::CString;
 use std::ops::Deref;
 use std::panic::AssertUnwindSafe;
@@ -143,19 +140,10 @@ impl SmRuntime {
         let rt = &self.runtime;
         let cx = rt.cx();
         let global = self.global_obj;
-        rooted!(in (cx) let global_root = global);
-        rooted!(in (cx) let mut rval = UndefinedValue());
-        rt.evaluate_script(
-            global_root.handle(),
-            "this.__resolve_imported_module = (module, specifier) => {console.log('resolve module: ' + specifier + ' from ' + module); return {};};",
-            "",
-            0,
-            rval.handle_mut(),
-        )
-        .ok()
-        .unwrap();
+        rooted!(in (cx) let _global_root = global);
 
-        let func: *mut mozjs::jsapi::JSFunction = rval.to_object() as *mut mozjs::jsapi::JSFunction;
+        let func: *mut JSFunction =
+            es_utils::functions::new_native_function(cx, "import_module", Some(import_module));
         rooted!(in (cx) let func_root = func);
 
         unsafe {
@@ -186,9 +174,31 @@ impl SmRuntime {
         )
     }
 
+    pub fn load_module(&self, module_src: &str, module_file_name: &str) -> Result<(), EsErrorInfo> {
+        trace!(
+            "smrt.load_module {} in thread {}",
+            module_file_name,
+            thread_id::get()
+        );
+
+        let rt = &self.runtime;
+        let cx = rt.cx();
+
+        // todo cache modules like promise callbacks
+        //
+
+        let load_res = es_utils::modules::compile_module(cx, module_src, module_file_name);
+
+        if let Some(err) = load_res.err() {
+            return Err(err);
+        }
+
+        return Ok(());
+    }
+
     /// eval a piece of script and return the result as a EsValueFacade
     pub fn eval(&self, eval_code: &str, file_name: &str) -> Result<EsValueFacade, EsErrorInfo> {
-        debug!("smrt.eval {} in thread {}", eval_code, thread_id::get());
+        trace!("smrt.eval {} in thread {}", file_name, thread_id::get());
 
         let eval_res: Result<JSVal, EsErrorInfo> =
             es_utils::eval(&self.runtime, self.global_obj, eval_code, file_name);
@@ -206,7 +216,7 @@ impl SmRuntime {
 
     /// eval a piece of script and ignore the result
     pub fn eval_void(&self, eval_code: &str, file_name: &str) -> Result<(), EsErrorInfo> {
-        debug!(
+        trace!(
             "smrt.eval_void {} in thread {}",
             eval_code,
             thread_id::get()
@@ -356,6 +366,58 @@ impl SmRuntime {
             return Err(res2.err().unwrap());
         }
     }
+}
+
+/// native function used a import function for module loading
+unsafe extern "C" fn import_module(
+    context: *mut JSContext,
+    argc: u32,
+    vp: *mut mozjs::jsapi::Value,
+) -> bool {
+    let args = CallArgs::from_vp(vp, argc);
+
+    if args.argc_ != 2 {
+        JS_ReportErrorASCII(
+            context,
+            b"import_module() requires exactly 2 arguments\0".as_ptr() as *const libc::c_char,
+        );
+        return false;
+    }
+
+    let arg_module = mozjs::rust::Handle::from_raw(args.get(0));
+    let arg_specifier = mozjs::rust::Handle::from_raw(args.get(1));
+
+    let file_name = es_utils::es_value_to_str(context, &*arg_specifier);
+
+    // see if we got a module code loader
+    let module_src = SM_RT.with(|sm_rt_rc| {
+        let sm_rt = sm_rt_rc.borrow();
+        let es_rt_wrapper_inner = sm_rt.clone_rtw_inner();
+        if let Some(module_source_loader) = &es_rt_wrapper_inner.module_source_loader {
+            return module_source_loader(file_name.as_str());
+        }
+        return format!("");
+    });
+
+    // is this my outer module or something?
+    let _js_module_obj: *mut JSObject = arg_module.to_object();
+
+    let compiled_mod_obj_res =
+        es_utils::modules::compile_module(context, module_src.as_str(), file_name.as_str());
+
+    if compiled_mod_obj_res.is_err() {
+        let err = compiled_mod_obj_res.err().unwrap();
+        let err_str = format!(
+            "error loading module: at {}:{}:{} > {}\n",
+            err.filename, err.lineno, err.column, err.message
+        );
+        JS_ReportErrorASCII(context, err_str.as_ptr() as *const libc::c_char);
+        return false;
+    }
+
+    args.rval()
+        .set(ObjectValue(compiled_mod_obj_res.ok().unwrap()));
+    return true;
 }
 
 /// deprecated log function used for debugging, should be removed now that the native console obj is working
@@ -665,7 +727,7 @@ mod tests {
         assert_eq!(res, "abc_true_123".to_string());
     }
 
-    fn test_import() {
+    fn _test_import() {
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let import_res: Result<EsValueFacade, EsErrorInfo> = rt.eval_sync(
             "import {foo, bar} from 'test_module';\n\n'ok';",
@@ -679,7 +741,8 @@ mod tests {
         assert_eq!(esvf.get_string(), &"ok".to_string());
     }
 
-    fn test_dynamic_import() {
+    /// dynamic imports don't seem to be implemented in our version of JSAPI, so we'll skip this for now
+    fn _test_dynamic_import() {
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let import_res: Result<EsValueFacade, EsErrorInfo> = rt.eval_sync(
             "import('test_module').then((answer) => {console.log('imported module: ' + JSON.stringify(answer));});\n\n'ok';",

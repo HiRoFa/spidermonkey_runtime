@@ -25,3 +25,52 @@ fn call_jsapi_stuff(rt: &EsRuntimeWrapper) {
 }
 
 ```
+
+## objects
+
+utils in es_utils::objects
+
+### Creating a new Object
+
+// todo
+
+### Getting and settings properties of an Object
+
+// todo
+
+## functions
+
+utils in es_utils::functions
+
+// todo
+
+### Creating a new Function
+
+// todo
+
+## arrays
+
+utils in es_utils::arrays
+
+// todo
+
+### Creating a new Array
+
+// todo
+
+### Getting array size and adding values
+
+// todo
+
+## promises
+
+utils in es_utils::promises
+
+// todo
+
+## modules
+
+utils in es_utils::modules
+
+// todo
+

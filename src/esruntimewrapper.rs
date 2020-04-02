@@ -10,7 +10,7 @@ use crate::features;
 use crate::es_utils::EsErrorInfo;
 use crate::esruntimewrapperinner::{EsRuntimeWrapperInner, ImmutableJob, MutableJob};
 use crate::esvaluefacade::EsValueFacade;
-use crate::microtaskmanager::MicroTaskManager;
+
 use crate::spidermonkeyruntimewrapper::SmRuntime;
 use crate::taskmanager::TaskManager;
 use std::cell::RefCell;
@@ -28,10 +28,22 @@ pub struct EsRuntimeWrapper {
 }
 
 impl EsRuntimeWrapper {
-    pub fn new(_pre_cleanup_tasks: Option<Vec<Box<dyn Fn(&EsRuntimeWrapperInner) -> ()>>>) -> Self {
-        let inner = EsRuntimeWrapperInner {
-            task_manager: MicroTaskManager::new(),
-        };
+    #[allow(dead_code)]
+    pub fn new() -> Self {
+        let inner = EsRuntimeWrapperInner::new();
+        EsRuntimeWrapper::new_inner(inner)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn new_with_module_code_loader<C>(loader: C) -> Self
+    where
+        C: Fn(&str) -> String + Send + Sync + 'static,
+    {
+        let inner = EsRuntimeWrapperInner::new_with_module_code_loader(loader);
+        EsRuntimeWrapper::new_inner(inner)
+    }
+
+    fn new_inner(inner: EsRuntimeWrapperInner) -> Self {
         let arc_inner = Arc::new(inner);
         let sm_ref_inner: Weak<EsRuntimeWrapperInner> = Arc::downgrade(&arc_inner);
         let rt = EsRuntimeWrapper { inner: arc_inner };
@@ -91,6 +103,14 @@ impl EsRuntimeWrapper {
     /// eval a script and wait for it to complete
     pub fn eval_sync(&self, code: &str, file_name: &str) -> Result<EsValueFacade, EsErrorInfo> {
         self.do_with_inner(move |inner| inner.eval_sync(code, file_name))
+    }
+
+    pub fn load_module_sync(
+        &self,
+        module_src: &str,
+        module_file_name: &str,
+    ) -> Result<(), EsErrorInfo> {
+        self.do_with_inner(|inner| inner.load_module_sync(module_src, module_file_name))
     }
 
     /// eval a script and wait for it to complete
@@ -160,18 +180,30 @@ pub mod tests {
     use crate::es_utils::EsErrorInfo;
     use crate::esruntimewrapper::EsRuntimeWrapper;
     use crate::esvaluefacade::EsValueFacade;
-    use log::debug;
+    use log::{debug, LevelFilter};
     use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
 
     lazy_static! {
-        pub static ref TEST_RT: Arc<EsRuntimeWrapper> = Arc::new(EsRuntimeWrapper::new(None));
+        pub static ref TEST_RT: Arc<EsRuntimeWrapper> = init_test_runtime();
+    }
+
+    fn init_test_runtime() -> Arc<EsRuntimeWrapper> {
+        simple_logging::log_to_file("esruntimewrapper.log", LevelFilter::Trace)
+            .ok()
+            .unwrap();
+
+        let module_code_loader = |file_name: &str| {
+            format!("export default () => 123; export const other = Math.sqrt(8); console.log('running imported test module'); \n\nconsole.log('parsing a module from code loader for filename: {}');", file_name)
+        };
+        let rt = EsRuntimeWrapper::new_with_module_code_loader(module_code_loader);
+
+        Arc::new(rt)
     }
 
     #[test]
     fn test() {
-        simple_logger::init().unwrap();
         let esrt: Arc<EsRuntimeWrapper> = TEST_RT.clone();
         esrt.start_gc_deamon(Duration::from_secs(1));
         thread::sleep(Duration::from_secs(6));
