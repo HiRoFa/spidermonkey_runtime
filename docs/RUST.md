@@ -26,6 +26,25 @@ See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules
 
 Dynamic loading is currently not supported
 
+Please note that if you load your main project files as a module you will not have access to the global scope, obejcts added to the global scope before will be accessible hwoever.
+
+e.g.
+
+first eval:
+```ecmascript
+this.my_global = {};
+```
+
+then load module:
+```ecmascript
+import {mod_stuff} from "mymod.mes";
+
+my_global.something = (a) => {return a * 2};
+
+console.log("this is undefined here: " + typeof this);
+```
+
+
 ### use load_module instead of eval
 
 In order to load files into the Runtime with support for export and import statements you need to use load_module_sync instead of eval.
