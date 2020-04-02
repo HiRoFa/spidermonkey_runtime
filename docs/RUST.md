@@ -11,7 +11,7 @@ fn load_file(rt: &EsRuntimeWrapper) {
     if !init_res.is_ok() {
         let esei = init_res.err().unwrap();
         panic!(
-            "could not init file: {} at {}:{}:{} ",
+            "could not init file: {} at {}:{}:{}",
             esei.message, esei.filename, esei.lineno, esei.column
         );
     }
