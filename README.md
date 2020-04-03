@@ -56,7 +56,7 @@ I'm also working on a more feature rich runtime with a commandline tool and also
 
 These are in a very early testing stage and may become available later as a separate project.
 
-I'dd like to hear what you would want to see in this project, please drop me a line @ incoming+drfos-es-runtime-17727229-issue-@incoming.gitlab.com
+I'dd like to hear what you would want to see in this project and or what you'd like to use it for, please drop me a line @ incoming+drfos-es-runtime-17727229-issue-@incoming.gitlab.com
 
 # examples
 

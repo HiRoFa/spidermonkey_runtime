@@ -39,14 +39,20 @@ pub fn compile_module(
         }
     }
 
-    unsafe { mozjs::rust::wrappers::ModuleInstantiate(context, module_script_root.handle()) };
-    if let Some(err) = report_es_ex(context) {
-        return Err(err);
+    let res =
+        unsafe { mozjs::rust::wrappers::ModuleInstantiate(context, module_script_root.handle()) };
+    if !res {
+        if let Some(err) = report_es_ex(context) {
+            return Err(err);
+        }
     }
 
-    unsafe { mozjs::rust::wrappers::ModuleEvaluate(context, module_script_root.handle()) };
-    if let Some(err) = report_es_ex(context) {
-        return Err(err);
+    let res =
+        unsafe { mozjs::rust::wrappers::ModuleEvaluate(context, module_script_root.handle()) };
+    if !res {
+        if let Some(err) = report_es_ex(context) {
+            return Err(err);
+        }
     }
 
     Ok(*module_script_root)

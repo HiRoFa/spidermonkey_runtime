@@ -445,6 +445,7 @@ mod tests {
     use crate::es_utils::EsErrorInfo;
     use crate::esvaluefacade::EsValueFacade;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
+    use log::trace;
     use std::collections::HashMap;
     use std::time::Duration;
 
@@ -582,38 +583,26 @@ mod tests {
         assert_eq!(esvf_prom_resolved.get_i32().clone(), 123 as i32);
     }
 
-    fn slow_trace(log: &str) {
-        log::trace!("slow: {}", log);
-        std::thread::sleep(Duration::from_millis(250));
-    }
-
     #[test]
     fn test_wait_for_prom2() {
-        println!("test_wait_for_prom_2");
-
-        slow_trace("test_wait_for_prom_2 - 1");
+        trace!("test_wait_for_prom_2");
 
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
 
-        slow_trace("test_wait_for_prom_2 - 2");
         let esvf_prom_res: Result<EsValueFacade, EsErrorInfo> = rt
             .eval_sync(
                 "let test_wait_for_prom2_prom = new Promise((resolve, reject) => {console.log('rejecting promise with foo');reject(\"foo\");}); test_wait_for_prom2_prom;",
                 "wait_for_prom2.es",
             );
-        slow_trace("test_wait_for_prom_2 - 3");
         if esvf_prom_res.is_err() {
-            slow_trace("test_wait_for_prom_2 - 4");
             panic!(
                 "error evaling wait_for_prom2.es : {}",
                 esvf_prom_res.err().unwrap().message
             );
         } else {
-            slow_trace("test_wait_for_prom_2 - 5");
             let esvf_prom = esvf_prom_res
                 .ok()
                 .expect("wait_for_prom.es did not eval ok");
-            slow_trace("test_wait_for_prom_2 - 6");
             assert!(esvf_prom.is_promise());
             let esvf_prom_resolved = esvf_prom
                 .get_promise_result_blocking(Duration::from_secs(60))
@@ -621,15 +610,10 @@ mod tests {
                 .unwrap()
                 .err()
                 .unwrap();
-            slow_trace("test_wait_for_prom_2 - 7");
 
             assert!(esvf_prom_resolved.is_string());
 
-            slow_trace("test_wait_for_prom_2 - 8");
-
             assert_eq!(esvf_prom_resolved.get_string(), "foo");
-
-            slow_trace("test_wait_for_prom_2 - 9");
         }
     }
 

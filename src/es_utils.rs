@@ -19,6 +19,7 @@ pub mod functions;
 pub mod modules;
 pub mod objects;
 pub mod promises;
+pub mod rooting;
 
 /// get the type of a JSVal
 pub fn get_type_of(context: *mut JSContext, val: JSVal) -> JSType {

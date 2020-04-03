@@ -169,10 +169,6 @@ pub fn get_constructor(
 /// get all the propertynames of an object
 #[allow(dead_code)]
 pub fn get_js_obj_prop_names(context: *mut JSContext, obj: HandleObject) -> Vec<String> {
-    use log::trace;
-
-    trace!("get_js_obj_prop_names");
-
     let ids = unsafe { IdVector::new(context) };
 
     assert!(unsafe { GetPropertyKeys(context, obj.into(), JSITER_OWNONLY, ids.get()) });
@@ -181,12 +177,9 @@ pub fn get_js_obj_prop_names(context: *mut JSContext, obj: HandleObject) -> Vec<
 
     for x in 0..ids.len() {
         rooted!(in(context) let id = ids[x]);
-
         assert!(unsafe { RUST_JSID_IS_STRING(id.handle().into()) });
         rooted!(in(context) let id_str = unsafe{RUST_JSID_TO_STRING(id.handle().into())});
-
         let prop_name = es_jsstring_to_string(context, *id_str);
-
         ret.push(prop_name);
     }
     ret
@@ -298,7 +291,6 @@ mod tests {
 
     #[test]
     fn test_get_js_obj_prop_names() {
-        use log::trace;
         use mozjs::jsapi::JSObject;
 
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
@@ -307,27 +299,23 @@ mod tests {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
                 sm_rt.do_with_jsapi(|rt, cx, global| {
                     rooted!(in(cx) let mut rval = UndefinedValue());
-                    trace!("1");
                     let eval_res = es_utils::eval(
                         rt,
                         global,
-                        "({a: 1, b: 2, c: 3})",
+                        "({a: 1, b: 2, c: 3});",
                         "test_get_js_obj_prop_names.es",
                         rval.handle_mut(),
                     );
-                    trace!("2");
 
                     if eval_res.is_err() {
                         let e_opt = report_es_ex(cx);
                         assert!(e_opt.is_none());
-                        trace!("2.1");
                     }
 
                     let val: JSVal = *rval;
                     let jso: *mut JSObject = val.to_object();
                     rooted!(in (cx) let jso_root = jso);
 
-                    trace!("3");
                     get_js_obj_prop_names(cx, jso_root.handle())
                 })
             }))

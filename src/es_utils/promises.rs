@@ -43,14 +43,23 @@ mod tests {
     use crate::es_utils::promises::object_is_promise;
     use crate::es_utils::report_es_ex;
     use crate::es_utils::tests::test_with_sm_rt;
+    use log::trace;
     use mozjs::jsval::UndefinedValue;
+
+    #[test]
+    fn test_x() {
+        for _x in 0..10 {
+            test_instance_of_promise();
+            test_not_instance_of_promise();
+        }
+    }
 
     #[test]
     fn test_instance_of_promise() {
         let res = test_with_sm_rt(|sm_rt| {
             sm_rt.do_with_jsapi(|rt, cx, global| {
                 rooted!(in(cx) let mut rval = UndefinedValue());
-                println!("evalling new promise obj");
+                trace!("evalling new promise obj");
                 let res = es_utils::eval(
                     rt,
                     global,
@@ -60,15 +69,15 @@ mod tests {
                 );
                 if !res.is_ok() {
                     if let Some(err) = report_es_ex(cx) {
-                        println!("err: {}", err.message);
+                        trace!("err: {}", err.message);
                     }
                 } else {
-                    println!("getting value");
+                    trace!("getting value");
                     let p_value: mozjs::jsapi::Value = *rval;
-                    println!("getting obj {}", p_value.is_object());
+                    trace!("getting obj {}", p_value.is_object());
 
                     rooted!(in(cx) let prom_obj_root = p_value.to_object());
-                    println!("is_prom");
+                    trace!("is_prom");
                     return object_is_promise(cx, prom_obj_root.handle());
                 }
                 false
@@ -81,26 +90,25 @@ mod tests {
     fn test_not_instance_of_promise() {
         let res = test_with_sm_rt(|sm_rt| {
             sm_rt.do_with_jsapi(|rt, cx, global| {
-
                 rooted!(in(cx) let mut rval = UndefinedValue());
-                println!("evalling some obj");
+                trace!("evalling some obj");
                 let res = es_utils::eval(
                     rt,
-                                         global,
-                                         "let some_obj_test_not_instance_of_promise = {some: 'obj'}; some_obj_test_not_instance_of_promise;",
-                                        "test_not_instance_of_promise.es",
-                                         rval.handle_mut()
+                    global,
+                    "({some: 'obj'});",
+                    "test_not_instance_of_promise.es",
+                    rval.handle_mut(),
                 );
                 if !res.is_ok() {
                     if let Some(err) = report_es_ex(cx) {
-                        println!("err: {}", err.message);
+                        trace!("err: {}", err.message);
                     }
                 } else {
-                    println!("getting value");
+                    trace!("getting value");
                     let p_value: mozjs::jsapi::Value = *rval;
-                    println!("getting obj {}", p_value.is_object());
+                    trace!("getting obj {}", p_value.is_object());
                     rooted!(in(cx) let prom_obj_root = p_value.to_object());
-                    println!("is_prom");
+                    trace!("is_prom");
                     return object_is_promise(cx, prom_obj_root.handle());
                 }
                 false

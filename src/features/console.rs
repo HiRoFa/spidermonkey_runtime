@@ -252,7 +252,7 @@ unsafe extern "C" fn console_log(
     vp: *mut mozjs::jsapi::Value,
 ) -> bool {
     //
-    log::info!("{}", parse_line(context, argc, vp));
+    log::info!("console: {}", parse_line(context, argc, vp));
     true
 }
 
@@ -262,7 +262,7 @@ unsafe extern "C" fn console_debug(
     vp: *mut mozjs::jsapi::Value,
 ) -> bool {
     //
-    log::debug!("{}", parse_line(context, argc, vp));
+    log::debug!("console: {}", parse_line(context, argc, vp));
     true
 }
 
@@ -272,7 +272,7 @@ unsafe extern "C" fn console_warn(
     vp: *mut mozjs::jsapi::Value,
 ) -> bool {
     //
-    log::warn!("{}", parse_line(context, argc, vp));
+    log::warn!("console: {}", parse_line(context, argc, vp));
     true
 }
 
@@ -282,7 +282,7 @@ unsafe extern "C" fn console_info(
     vp: *mut mozjs::jsapi::Value,
 ) -> bool {
     //
-    log::info!("{}", parse_line(context, argc, vp));
+    log::info!("console: {}", parse_line(context, argc, vp));
     true
 }
 
@@ -292,7 +292,7 @@ unsafe extern "C" fn console_trace(
     vp: *mut mozjs::jsapi::Value,
 ) -> bool {
     //
-    log::trace!("{}", parse_line(context, argc, vp));
+    log::trace!("console: {}", parse_line(context, argc, vp));
     true
 }
 
@@ -302,7 +302,7 @@ unsafe extern "C" fn console_error(
     vp: *mut mozjs::jsapi::Value,
 ) -> bool {
     //
-    log::error!("{}", parse_line(context, argc, vp));
+    log::error!("console: {}", parse_line(context, argc, vp));
     true
 }
 

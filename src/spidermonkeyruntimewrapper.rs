@@ -5,6 +5,7 @@ use crate::esruntimewrapper::EsRuntimeWrapper;
 use crate::esvaluefacade::EsValueFacade;
 use log::{debug, trace};
 
+use crate::es_utils::rooting::MyPersistentRooted;
 use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
 use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::CompartmentOptions;
@@ -222,16 +223,28 @@ impl SmRuntime {
     /// run the cleanup function and run the garbage collector
     /// this also fires a pre-cleanup event in script so scripts can do a cleanup before the garbage collector runs
     pub fn cleanup(&self) {
-        trace!("cleaning up sm_rt");
-
-        // todo, should this return a list of available scopes in the runtime? (eventually stored in the esruntimeInner)
-
-        let cleanup_res = self.call(vec!["esses"], "cleanup", Vec::new());
-        assert!(cleanup_res.is_ok());
-
-        self.do_with_jsapi(|_rt, cx, _global| {
+        self.do_with_jsapi(|_rt, cx, global| {
+            trace!("running gc cleanup / 1");
+            {
+                rooted!(in (cx) let mut ret_val = UndefinedValue());
+                let cleanup_res = es_utils::functions::call_method_name(
+                    cx,
+                    global,
+                    "_esses_cleanup",
+                    vec![],
+                    &mut ret_val.handle_mut(),
+                );
+                if cleanup_res.is_err() {
+                    let err = cleanup_res.err().unwrap();
+                    debug!(
+                        "cleanup failed: {}:{}:{} -> {}",
+                        err.filename, err.lineno, err.column, err.message
+                    );
+                }
+            }
             es_utils::gc(cx);
         });
+        trace!("cleaning up sm_rt / 5");
     }
     pub fn register_op(&mut self, name: &str, op: OP) {
         let op_map = &mut self.op_container;
@@ -366,9 +379,14 @@ impl SmRuntime {
 
         rooted!(in (cx) let global_root = global);
 
-        let _ac = JSAutoCompartment::new(cx, global_root.get());
-
-        consumer(rt, cx, global_root.handle())
+        let ret;
+        {
+            trace!("do_with_jsapi _ac");
+            let _ac = JSAutoCompartment::new(cx, global);
+            trace!("do_with_jsapi consume");
+            ret = consumer(rt, cx, global_root.handle());
+        }
+        ret
     }
 }
 
@@ -824,5 +842,25 @@ mod tests {
         });
 
         assert_eq!(res, "abc_true_123".to_string());
+    }
+
+    // used for testing with gc_zeal opts
+    // #[test]
+    fn _test_simple_inner() {
+        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        rt.do_with_inner(|inner| {
+            for _x in 0..5000 {
+                inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
+                    sm_rt.do_with_jsapi(|rt, cx, global| {
+                        rooted!(in (cx) let mut ret_val = UndefinedValue());
+
+                        es_utils::eval(rt, global, "({a: 1});", "test.es", ret_val.handle_mut())
+                            .ok()
+                            .unwrap();
+                    })
+                }));
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        })
     }
 }

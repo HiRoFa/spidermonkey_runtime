@@ -201,13 +201,13 @@ pub mod tests {
         let rt = EsRuntimeWrapper::new_with_module_code_loader(module_code_loader);
 
         rt.do_in_es_runtime_thread_sync(Box::new(|sm_rt| {
-            sm_rt.do_with_jsapi(|_rt, cx, _global| {
+            sm_rt.do_with_jsapi(|_rt, _cx, _global| {
                 // uncomment this to test with gc in sadistic mode
-                //crate::es_utils::set_gc_zeal_options(cx);
+                // crate::es_utils::set_gc_zeal_options(cx);
             })
         }));
 
-        rt.start_gc_deamon(Duration::from_secs(2));
+        rt.start_gc_deamon(Duration::from_secs(5));
 
         Arc::new(rt)
     }
