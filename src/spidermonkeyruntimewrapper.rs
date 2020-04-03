@@ -41,9 +41,8 @@ pub type OP = Box<dyn Fn(&SmRuntime, Vec<EsValueFacade>) -> Result<EsValueFacade
 
 /// wrapper for the SpiderMonkey runtime
 pub struct SmRuntime {
-    pub(crate) runtime: mozjs::rust::Runtime,
-    pub(crate) global_obj: *mut JSObject,
-    _ac: JSAutoCompartment,
+    runtime: mozjs::rust::Runtime,
+    global_obj: *mut JSObject,
     op_container: HashMap<String, OP>,
     pub(crate) opt_es_rt_inner: Option<Weak<EsRuntimeWrapperInner>>,
 }
@@ -90,13 +89,24 @@ impl SmRuntime {
             );
         }
 
-        rooted!(in(context) let global_root = global_obj);
-        let global = global_root.handle();
-        let ac = JSAutoCompartment::new(context, global.get());
+        let ret = SmRuntime {
+            runtime,
+            global_obj,
+            op_container: HashMap::new(),
+            opt_es_rt_inner: None,
+        };
 
-        unsafe {
+        ret.init_native_ops();
+        ret.init_promise_callbacks();
+        ret.init_import_callbacks();
+
+        ret
+    }
+
+    fn init_native_ops(&self) {
+        self.do_with_jsapi(|_rt, cx, global| unsafe {
             let function = JS_DefineFunction(
-                context,
+                cx,
                 global.into(),
                 b"__log\0".as_ptr() as *const libc::c_char,
                 Some(log),
@@ -105,7 +115,7 @@ impl SmRuntime {
             );
             assert!(!function.is_null());
             let function = JS_DefineFunction(
-                context,
+                cx,
                 global.into(),
                 b"__invoke_rust_op\0".as_ptr() as *const libc::c_char,
                 Some(invoke_rust_op),
@@ -113,42 +123,27 @@ impl SmRuntime {
                 0,
             );
             assert!(!function.is_null());
-        }
-
-        let ret = SmRuntime {
-            runtime,
-            global_obj,
-            _ac: ac,
-            op_container: HashMap::new(),
-            opt_es_rt_inner: None,
-        };
-
-        ret.init_promise_callbacks();
-        ret.init_import_callbacks();
-
-        ret
+        });
     }
 
     fn init_promise_callbacks(&self) {
-        let rt = &self.runtime;
-        let cx = rt.cx();
         // this tells JSAPI how to schedule jobs for Promises
-        unsafe { SetEnqueuePromiseJobCallback(cx, Some(enqueue_job), ptr::null_mut()) };
+        self.do_with_jsapi(|_rt, cx, _global| unsafe {
+            SetEnqueuePromiseJobCallback(cx, Some(enqueue_job), ptr::null_mut());
+        });
     }
 
     fn init_import_callbacks(&self) {
-        let rt = &self.runtime;
-        let cx = rt.cx();
-        let global = self.global_obj;
-        rooted!(in (cx) let _global_root = global);
+        // this tells the runtime how to resolve modules
+        self.do_with_jsapi(|_rt, cx, _global| {
+            let func: *mut JSFunction =
+                es_utils::functions::new_native_function(cx, "import_module", Some(import_module));
+            rooted!(in (cx) let func_root = func);
 
-        let func: *mut JSFunction =
-            es_utils::functions::new_native_function(cx, "import_module", Some(import_module));
-        rooted!(in (cx) let func_root = func);
-
-        unsafe {
-            SetModuleResolveHook(cx, func_root.handle().into());
-        }
+            unsafe {
+                SetModuleResolveHook(cx, func_root.handle().into());
+            }
+        });
     }
 
     /// call a function by name, the function needs to be defined on the root of the global scope
@@ -158,20 +153,11 @@ impl SmRuntime {
         func_name: &str,
         arguments: Vec<EsValueFacade>,
     ) -> Result<EsValueFacade, EsErrorInfo> {
-        let runtime: &mozjs::rust::Runtime = &self.runtime;
-        let context = runtime.cx();
+        self.do_with_jsapi(|rt, cx, global| {
+            trace!("smrt.call {} in thread {}", func_name, thread_id::get());
 
-        rooted!(in(context) let global_root = self.global_obj);
-
-        trace!("smrt.call {} in thread {}", func_name, thread_id::get());
-
-        self.call_obj_method_name(
-            context,
-            global_root.handle(),
-            obj_names,
-            func_name,
-            arguments,
-        )
+            self.call_obj_method_name(rt, cx, global, global, obj_names, func_name, arguments)
+        })
     }
 
     pub fn load_module(&self, module_src: &str, module_file_name: &str) -> Result<(), EsErrorInfo> {
@@ -181,37 +167,35 @@ impl SmRuntime {
             thread_id::get()
         );
 
-        let rt = &self.runtime;
-        let cx = rt.cx();
+        self.do_with_jsapi(|_rt, cx, _global| {
+            // todo cache modules like promise callbacks
+            //
 
-        // todo cache modules like promise callbacks
-        //
+            let load_res = es_utils::modules::compile_module(cx, module_src, module_file_name);
 
-        let load_res = es_utils::modules::compile_module(cx, module_src, module_file_name);
+            if let Some(err) = load_res.err() {
+                return Err(err);
+            }
 
-        if let Some(err) = load_res.err() {
-            return Err(err);
-        }
-
-        return Ok(());
+            return Ok(());
+        })
     }
 
     /// eval a piece of script and return the result as a EsValueFacade
     pub fn eval(&self, eval_code: &str, file_name: &str) -> Result<EsValueFacade, EsErrorInfo> {
         trace!("smrt.eval {} in thread {}", file_name, thread_id::get());
 
-        let eval_res: Result<JSVal, EsErrorInfo> =
-            es_utils::eval(&self.runtime, self.global_obj, eval_code, file_name);
+        self.do_with_jsapi(|rt, cx, global| {
+            rooted!(in (cx) let mut rval = UndefinedValue());
+            let eval_res: Result<(), EsErrorInfo> =
+                es_utils::eval(rt, global, eval_code, file_name, rval.handle_mut());
 
-        if eval_res.is_ok() {
-            return Ok(EsValueFacade::new_v(
-                self,
-                self.runtime.cx(),
-                eval_res.ok().unwrap(),
-            ));
-        } else {
-            return Err(eval_res.err().unwrap());
-        }
+            if eval_res.is_ok() {
+                return Ok(EsValueFacade::new_v(rt, cx, global, rval.handle()));
+            } else {
+                return Err(eval_res.err().unwrap());
+            }
+        })
     }
 
     /// eval a piece of script and ignore the result
@@ -222,14 +206,17 @@ impl SmRuntime {
             thread_id::get()
         );
 
-        let eval_res: Result<JSVal, EsErrorInfo> =
-            es_utils::eval(&self.runtime, self.global_obj, eval_code, file_name);
+        self.do_with_jsapi(|rt, cx, global| {
+            rooted!(in (cx) let mut rval = UndefinedValue());
+            let eval_res: Result<(), EsErrorInfo> =
+                es_utils::eval(rt, global, eval_code, file_name, rval.handle_mut());
 
-        if eval_res.is_ok() {
-            return Ok(());
-        } else {
-            return Err(eval_res.err().unwrap());
-        }
+            if eval_res.is_ok() {
+                return Ok(());
+            } else {
+                return Err(eval_res.err().unwrap());
+            }
+        })
     }
 
     /// run the cleanup function and run the garbage collector
@@ -242,14 +229,9 @@ impl SmRuntime {
         let cleanup_res = self.call(vec!["esses"], "cleanup", Vec::new());
         assert!(cleanup_res.is_ok());
 
-        let runtime: &mozjs::rust::Runtime = &self.runtime;
-        let context = runtime.cx();
-
-        rooted!(in(context) let global_root = self.global_obj);
-        // not used but important for letting gc run without cleaning up the global object
-        let _global = global_root.handle();
-
-        es_utils::gc(context);
+        self.do_with_jsapi(|_rt, cx, _global| {
+            es_utils::gc(cx);
+        });
     }
     pub fn register_op(&mut self, name: &str, op: OP) {
         let op_map = &mut self.op_container;
@@ -305,7 +287,9 @@ impl SmRuntime {
     #[allow(dead_code)]
     fn call_obj_method_name(
         &self,
+        rt: &Runtime,
         context: *mut JSContext,
+        global: HandleObject,
         scope: HandleObject,
         obj_names: Vec<&str>,
         function_name: &str,
@@ -329,7 +313,7 @@ impl SmRuntime {
         );
 
         if res2.is_ok() {
-            return Ok(EsValueFacade::new(self, context, rval.handle()));
+            return Ok(EsValueFacade::new_v(rt, context, global, rval.handle()));
         } else {
             return Err(res2.err().unwrap());
         }
@@ -339,7 +323,9 @@ impl SmRuntime {
     #[allow(dead_code)]
     fn call_method_name(
         &self,
+        rt: &Runtime,
         context: *mut JSContext,
+        global: HandleObject,
         scope: HandleObject,
         function_name: &str,
         args: Vec<EsValueFacade>,
@@ -361,10 +347,28 @@ impl SmRuntime {
         );
 
         if res2.is_ok() {
-            return Ok(EsValueFacade::new(self, context, rval.handle()));
+            return Ok(EsValueFacade::new_v(rt, context, global, rval.handle()));
         } else {
             return Err(res2.err().unwrap());
         }
+    }
+
+    /// use the jsapi objects in this runtime
+    /// the consumer should be in the form of |rt: &Runtime, cx: *mut JSContext, global_handle: HandleObject| {}
+    /// before calling the consumer the global obj is rooted and its Compartment is entered
+    pub fn do_with_jsapi<C, R>(&self, consumer: C) -> R
+    where
+        C: FnOnce(&Runtime, *mut JSContext, HandleObject) -> R,
+    {
+        let rt = &self.runtime;
+        let cx = rt.cx();
+        let global = self.global_obj;
+
+        rooted!(in (cx) let global_root = global);
+
+        let _ac = JSAutoCompartment::new(cx, global_root.get());
+
+        consumer(rt, cx, global_root.handle())
     }
 }
 
@@ -460,7 +464,6 @@ unsafe extern "C" fn invoke_rust_op(
         return false;
     }
 
-    // todo, runtime_id_arg will now be runtime_id, which we can then get from ESENGINE
     let op_name_arg: HandleValue = mozjs::rust::Handle::from_raw(args.get(0));
     let op_name = es_utils::es_value_to_str(context, &op_name_arg.get());
 
@@ -474,9 +477,18 @@ unsafe extern "C" fn invoke_rust_op(
         let sm_rt_ref = sm_rt_rc.borrow();
         let sm_rt: &SmRuntime = sm_rt_ref.deref();
 
+        let global = sm_rt.global_obj;
+        let rt = &sm_rt.runtime;
+        rooted!(in (context) let global_root = global);
+
         for x in 1..args.argc_ {
             let var_arg: HandleValue = mozjs::rust::Handle::from_raw(args.get(x));
-            args_vec.push(EsValueFacade::new(sm_rt, context, var_arg));
+            args_vec.push(EsValueFacade::new_v(
+                rt,
+                context,
+                global_root.handle(),
+                var_arg,
+            ));
         }
 
         trace!("about to invoke op {} from sm_rt", op_name);
@@ -525,11 +537,21 @@ unsafe extern "C" fn enqueue_job(
 
             let task = move || {
                 SM_RT.with(move |rc| {
+                    trace!("running a job");
+
                     let sm_rt = &*rc.borrow();
-                    let cx = sm_rt.runtime.cx();
-                    let global = sm_rt.global_obj;
-                    rooted!(in(cx) let global_root = global);
-                    cb.call(cx, global_root.handle()).unwrap();
+                    sm_rt.do_with_jsapi(|_rt, cx, global| {
+                        let call_res = cb.call(cx, global);
+                        if call_res.is_err() {
+                            debug!("job failed");
+                            if let Some(err) = es_utils::report_es_ex(cx) {
+                                panic!(
+                                    "job failed {}:{}:{} -> {}",
+                                    err.filename, err.lineno, err.column, err.message
+                                );
+                            }
+                        }
+                    })
                 });
             };
 
@@ -673,6 +695,7 @@ impl PartialEq for CallbackObject {
 
 #[cfg(test)]
 mod tests {
+    use crate::es_utils;
     use crate::es_utils::EsErrorInfo;
     use crate::esvaluefacade::EsValueFacade;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
@@ -687,40 +710,39 @@ mod tests {
             inner.do_in_es_runtime_thread_sync(
 
                 Box::new(|sm_rt: &SmRuntime| {
-                    let runtime: &mozjs::rust::Runtime = &sm_rt.runtime;
-                    let context = runtime.cx();
+                    sm_rt.do_with_jsapi(|rt, cx, global| {
+                        rooted!(in(cx) let mut rval = UndefinedValue());
+                        let _eval_res = es_utils::eval(
+                            rt,
+                            global,
+                            "this.test_func_1 = function test_func_1(a, b, c){return (a + '_' + b + '_' + c);};",
+                            "test_call_method_name.es",
+                            rval.handle_mut(),
+                        );
 
-                    rooted!(in(context) let global_root = sm_rt.global_obj);
-                    let global = global_root.handle();
+                        let res = sm_rt.call_method_name(
+                            rt,
+                            cx,
+                            global,
+                            global,
+                            "test_func_1",
+                            vec![
+                                EsValueFacade::new_str("abc".to_string()),
+                                EsValueFacade::new_bool(true),
+                                EsValueFacade::new_i32(123)
+                            ],
+                        );
 
-                    rooted!(in(context) let mut rval = UndefinedValue());
-                    let _eval_res = runtime.evaluate_script(
-                        global,
-                        "this.test_func_1 = function test_func_1(a, b, c){return (a + '_' + b + '_' + c);};",
-                        "test_call_method_name.es",
-                        0,
-                        rval.handle_mut(),
-                    );
-
-                    let res = sm_rt.call_method_name(
-                        context,
-                        global_root.handle(),
-                        "test_func_1",
-                        vec![
-                            EsValueFacade::new_str("abc".to_string()),
-                            EsValueFacade::new_bool(true),
-                            EsValueFacade::new_i32(123)
-                        ],
-                    );
-
-                    if res.is_ok() {
-                        let esvf = res.ok().unwrap();
-                        return esvf.get_string().to_string();
-                    } else {
-                        let err = res.err().unwrap();
-                        panic!("err {}", err.message);
-                    }
+                        if res.is_ok() {
+                            let esvf = res.ok().unwrap();
+                            return esvf.get_string().to_string();
+                        } else {
+                            let err = res.err().unwrap();
+                            panic!("err {}", err.message);
+                        }
+                    })
                 }
+
                 ))
         });
 
@@ -763,44 +785,42 @@ mod tests {
             inner.do_in_es_runtime_thread_sync(
 
                 Box::new(|sm_rt: &SmRuntime| {
-                    let runtime: &mozjs::rust::Runtime = &sm_rt.runtime;
-                    let context = runtime.cx();
-
-                    rooted!(in(context) let global_root = sm_rt.global_obj);
-                    let global = global_root.handle();
-
-                    rooted!(in(context) let mut rval = UndefinedValue());
-                    let _eval_res = runtime.evaluate_script(
-                        global,
-                        "this.myobj = {sub: {}};myobj.sub.test_func_1 = function test_func_1(a, b, c){return (a + '_' + b + '_' + c);};",
-                        "test_call_method_name.es",
-                        0,
-                        rval.handle_mut(),
-                    );
-
-                    let res = sm_rt.call_obj_method_name(
-                        context,
-                        global_root.handle(),
-                        vec!["myobj", "sub"],
-                        "test_func_1",
-                        vec![
-                            EsValueFacade::new_str("abc".to_string()),
-                            EsValueFacade::new_bool(true),
-                            EsValueFacade::new_i32(123)
-                        ],
-                    );
-
-                    if res.is_ok() {
-                        let esvf = res.ok().unwrap();
-                        return esvf.get_string().to_string();
-                    } else {
-                        let err = res.err().unwrap();
-                        panic!("err {}", err.message);
-                    }
+                    sm_rt.do_with_jsapi(|rt, cx, global| {
 
 
-                }
-                ))
+                        rooted!(in(cx) let mut rval = UndefinedValue());
+                        let _eval_res = es_utils::eval(
+                            rt,
+                            global,
+                            "this.myobj = {sub: {}};myobj.sub.test_func_1 = function test_func_1(a, b, c){return (a + '_' + b + '_' + c);};",
+                            "test_call_method_name.es",
+                            rval.handle_mut(),
+                        );
+
+                        let res = sm_rt.call_obj_method_name(
+                            rt,
+                            cx,
+                            global,
+                            global,
+                            vec!["myobj", "sub"],
+                            "test_func_1",
+                            vec![
+                                EsValueFacade::new_str("abc".to_string()),
+                                EsValueFacade::new_bool(true),
+                                EsValueFacade::new_i32(123)
+                            ],
+                        );
+
+                        if res.is_ok() {
+                            let esvf = res.ok().unwrap();
+                            return esvf.get_string().to_string();
+                        } else {
+                            let err = res.err().unwrap();
+                            panic!("err {}", err.message);
+                        }
+                    })
+                })
+                )
         });
 
         assert_eq!(res, "abc_true_123".to_string());

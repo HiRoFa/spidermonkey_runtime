@@ -78,6 +78,8 @@ this.esses = new (class Esses {
 
     register_waitfor_promise(val, man_obj_id) {
 
+        console.log("register_waitfor_promise: val = %s" + typeof val);
+
         if (val instanceof Promise) {
             val.then((result) => {
                 console.trace('resolving esvf from es to {}', result);
@@ -88,7 +90,8 @@ this.esses = new (class Esses {
                 esses.invoke_rust_op_sync('reject_waiting_esvf_future', man_obj_id, ex);
             });
             val.finally(() => {
-                esses._registered_promises.remove(id);
+                console.trace('finalize promise (remove from map) id: %s', man_obj_id);
+                esses._registered_promises.remove(man_obj_id);
             });
         } else {
             let t = "" + val;

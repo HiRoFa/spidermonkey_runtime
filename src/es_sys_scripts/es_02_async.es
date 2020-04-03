@@ -11,7 +11,7 @@ esses.async = new (class EssesAsync {
 
     immediate(f, ...args) {
         let id = esses.next_id();
-        console.trace("registering immediate with id {} in runtime {}", id, esses._runtime_id);
+        console.trace("registering immediate with id %s in runtime %s", id, esses._runtime_id);
         this.immediates.set(id, {f, args});
         if (this._runningImmediate) {
             this.immediate_todos.push(id);
@@ -32,13 +32,13 @@ esses.async = new (class EssesAsync {
         this._runningImmediate = true;
         try {
             let i = this.immediates.get(id);
-            console.trace("_run_immediate_from_rust with id {} i={}", id, typeof i);
+            console.trace("_run_immediate_from_rust with id %s i=%s", id, i.f.toString());
             this.immediates.delete(id);
             try {
-                console.trace("_run_immediate_from_rust with id {}", id);
+                console.trace("_run_immediate_from_rust with id %s", id);
                 i.f.apply(null, i.args);
             } catch(ex){
-                console.debug("_run_immediate_from_rust {} failed: {}", id, ex);
+                console.error("_run_immediate_from_rust %s failed: %s", id, ex);
                 throw ex;
             }
         } finally {

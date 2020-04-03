@@ -1,7 +1,7 @@
+use crate::es_utils::objects::{get_es_obj_prop_val_as_i32, get_es_obj_prop_val_as_string};
 use log::{debug, trace};
 use mozjs::conversions::jsstr_to_string;
 use mozjs::jsapi::JSContext;
-use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JSString;
 use mozjs::jsapi::JSType;
 use mozjs::jsapi::JS_ClearPendingException;
@@ -11,9 +11,7 @@ use mozjs::jsapi::JS_NewStringCopyN;
 use mozjs::jsapi::JS_TypeOfValue;
 use mozjs::jsapi::JS_GC;
 use mozjs::jsval::{JSVal, StringValue, UndefinedValue};
-use mozjs::rust::Runtime;
-
-use crate::es_utils::objects::{get_es_obj_prop_val_as_i32, get_es_obj_prop_val_as_string};
+use mozjs::rust::{HandleObject, MutableHandleValue, Runtime};
 use std::str;
 
 pub mod arrays;
@@ -26,6 +24,21 @@ pub mod promises;
 pub fn get_type_of(context: *mut JSContext, val: JSVal) -> JSType {
     rooted!(in(context) let val_root = val);
     unsafe { JS_TypeOfValue(context, val_root.handle().into()) }
+}
+
+#[cfg(not(target = "release"))]
+pub fn set_gc_zeal_options(cx: *mut JSContext) {
+    use mozjs::jsapi::JS_SetGCZeal;
+    debug!("setting gc_zeal_options");
+
+    let level = 14;
+    let frequency = 1; //JS_DEFAULT_ZEAL_FREQ;
+    unsafe { JS_SetGCZeal(cx, level, frequency) };
+}
+
+#[cfg(target = "release")]
+pub fn set_gc_zeal_options(_cx: *mut JSContext) {
+    debug!("not setting gc_zeal_options");
 }
 
 /// see if there is a pending exception and return it
@@ -98,23 +111,17 @@ impl Clone for EsErrorInfo {
 /// eval a piece of source code in the engine
 pub fn eval(
     runtime: &Runtime,
-    scope: *mut JSObject,
+    scope: HandleObject,
     code: &str,
     file_name: &str,
-) -> Result<JSVal, EsErrorInfo> {
-    // todo rebuild this so you have to pass a mut handle which you need to root yourself before calling this
-
+    ret_val: MutableHandleValue,
+) -> Result<(), EsErrorInfo> {
     let context = runtime.cx();
 
-    rooted!(in(context) let scope_root = scope);
-    let scope = scope_root.handle();
-
-    rooted!(in(context) let mut rval = UndefinedValue());
-
-    let eval_res = runtime.evaluate_script(scope, code, file_name, 0, rval.handle_mut());
+    let eval_res = runtime.evaluate_script(scope, code, file_name, 0, ret_val);
 
     if eval_res.is_ok() {
-        Ok(*rval)
+        Ok(())
     } else {
         let ex_opt = report_es_ex(context);
         if let Some(ex) = ex_opt {
@@ -165,10 +172,12 @@ pub fn gc(context: *mut JSContext) {
 
 #[cfg(test)]
 mod tests {
-    use crate::es_utils::{es_value_to_str, eval, report_es_ex, EsErrorInfo};
+    use crate::es_utils::{es_value_to_str, report_es_ex, EsErrorInfo};
 
+    use crate::es_utils;
+    use crate::esvaluefacade::EsValueFacade;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
-    use mozjs::jsval::{JSVal, UndefinedValue};
+    use mozjs::jsval::UndefinedValue;
 
     pub fn test_with_sm_rt<F, R: Send + 'static>(test_fn: F) -> R
     where
@@ -185,24 +194,20 @@ mod tests {
 
         let test_string: String = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
-                let runtime: &mozjs::rust::Runtime = &sm_rt.runtime;
-                let context = runtime.cx();
+                sm_rt.do_with_jsapi(|rt, cx, global| {
+                    rooted!(in(cx) let mut rval = UndefinedValue());
+                    let _eval_res = rt.evaluate_script(
+                        global,
+                        "('this is a string')",
+                        "test_es_value_to_string.es",
+                        0,
+                        rval.handle_mut(),
+                    );
+                    let e_opt = report_es_ex(cx);
+                    assert!(e_opt.is_none());
 
-                rooted!(in(context) let global_root = sm_rt.global_obj);
-                let global = global_root.handle();
-
-                rooted!(in(context) let mut rval = UndefinedValue());
-                let _eval_res = runtime.evaluate_script(
-                    global,
-                    "('this is a string')",
-                    "test_es_value_to_string.es",
-                    0,
-                    rval.handle_mut(),
-                );
-                let e_opt = report_es_ex(context);
-                assert!(e_opt.is_none());
-
-                es_value_to_str(context, &rval).to_string()
+                    es_value_to_str(cx, &rval).to_string()
+                })
             }))
         });
 
@@ -221,52 +226,49 @@ mod tests {
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let res: String = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
-                let runtime: &mozjs::rust::Runtime = &sm_rt.runtime;
-
-                let res: Result<JSVal, EsErrorInfo> = eval(
-                    runtime,
-                    sm_rt.global_obj,
-                    "let a = 'i am eval'; a",
-                    "test_eval.es",
-                );
-                let str = es_value_to_str(runtime.cx(), &res.ok().unwrap());
+                let res: Result<EsValueFacade, EsErrorInfo> =
+                    sm_rt.eval("let a = 'i am eval'; a", "test_eval.es");
+                let str = res.ok().unwrap().get_string().clone();
                 str
             }))
         });
 
-        assert_eq!(res, "i am eval".to_string());
+        assert_eq!(res.as_str(), "i am eval");
     }
 
     #[test]
     fn test_report_exception() {
+        use log::trace;
         //simple_logger::init().unwrap();
 
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let res = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
-                let runtime: &mozjs::rust::Runtime = &sm_rt.runtime;
-                let context = runtime.cx();
+                sm_rt.do_with_jsapi(|rt, cx, global| {
+                    trace!("test_report_exception 2");
 
-                rooted!(in(context) let global_root = sm_rt.global_obj);
-                let global = global_root.handle();
+                    rooted!(in(cx) let mut rval = UndefinedValue());
 
-                report_es_ex(context);
+                    trace!("test_report_exception 3");
+                    let eval_res = es_utils::eval(
+                        rt,
+                        global,
+                        "let b = quibus * 12;",
+                        "test_ex.es",
+                        rval.handle_mut(),
+                    );
+                    trace!("test_report_exception 4");
 
-                rooted!(in(context) let mut rval = UndefinedValue());
-                let _ = runtime.evaluate_script(
-                    global,
-                    "let b = quibus * 12;",
-                    "test_ex.es",
-                    0,
-                    rval.handle_mut(),
-                );
+                    if eval_res.is_err() {
+                        let ex = eval_res.err().unwrap();
 
-                let ex_opt = report_es_ex(context);
-                if let Some(ex) = ex_opt {
-                    return ex.message;
-                }
+                        trace!("test_report_exception 6");
+                        return ex.message;
+                    }
+                    trace!("test_report_exception 7");
 
-                "".to_string()
+                    "".to_string()
+                })
             }))
         });
 

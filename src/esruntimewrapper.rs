@@ -177,6 +177,7 @@ impl EsRuntimeWrapper {
 
 #[cfg(test)]
 pub mod tests {
+
     use crate::es_utils::EsErrorInfo;
     use crate::esruntimewrapper::EsRuntimeWrapper;
     use crate::esvaluefacade::EsValueFacade;
@@ -198,6 +199,14 @@ pub mod tests {
             format!("export default () => 123; export const other = Math.sqrt(8); console.log('running imported test module'); \n\nconsole.log('parsing a module from code loader for filename: {}');", file_name)
         };
         let rt = EsRuntimeWrapper::new_with_module_code_loader(module_code_loader);
+
+        rt.do_in_es_runtime_thread_sync(Box::new(|sm_rt| {
+            sm_rt.do_with_jsapi(|_rt, cx, _global| {
+                // uncomment this to test with gc in sadistic mode
+                //crate::es_utils::set_gc_zeal_options(cx);
+            })
+        }));
+
         rt.start_gc_deamon(Duration::from_secs(2));
 
         Arc::new(rt)

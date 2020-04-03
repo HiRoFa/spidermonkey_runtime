@@ -6,13 +6,12 @@ use mozjs::conversions::ToJSValConvertible;
 use mozjs::glue::int_to_jsid;
 use mozjs::jsapi::IsArray;
 use mozjs::jsapi::JSContext;
-use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JS_GetArrayLength;
 use mozjs::jsapi::JS_GetPropertyById;
 use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_SetElement;
 use mozjs::jsapi::JS::HandleValueArray;
-use mozjs::jsval::JSVal;
+use mozjs::jsval::{JSVal, ObjectValue};
 use mozjs::rust::{HandleObject, HandleValue, MutableHandleValue};
 
 /// check whether or not an Object is an Array
@@ -103,11 +102,12 @@ pub fn get_array_element(
     Ok(())
 }
 
-pub fn new_array(context: *mut JSContext, items: Vec<JSVal>) -> *mut JSObject {
+/// create a new array obj
+pub fn new_array(context: *mut JSContext, items: Vec<JSVal>, ret_val: &mut MutableHandleValue) {
     let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*items) };
     let res = unsafe { JS_NewArrayObject(context, &arguments_value_array) };
 
-    res
+    ret_val.set(ObjectValue(res));
 }
 
 /// convert an Array to a Vec<i32>
@@ -143,59 +143,48 @@ mod tests {
     fn test_is_array() {
         let res = test_with_sm_rt(|sm_rt| {
             println!("running arrays test");
-            let global = sm_rt.global_obj;
-            let runtime = &sm_rt.runtime;
-            let context = runtime.cx();
-
-            rooted!(in (context) let global_root = global);
-            println!("create array");
-            let res = sm_rt.eval(
-                "this.test_is_array = [4, 2, 3, 1]; this.test_is_array2 = {}; 123;",
-                "test_is_array.es",
-            );
-            println!("created array");
-            if res.is_err() {
-                let err_res = report_es_ex(context);
-                if let Some(err) = err_res {
-                    println!("err {}", err.message);
+            sm_rt.do_with_jsapi(|_rt, cx, global| {
+                println!("create array");
+                let res = sm_rt.eval(
+                    "this.test_is_array = [4, 2, 3, 1]; this.test_is_array2 = {}; 123;",
+                    "test_is_array.es",
+                );
+                println!("created array");
+                if res.is_err() {
+                    let err_res = report_es_ex(cx);
+                    if let Some(err) = err_res {
+                        println!("err {}", err.message);
+                    }
                 }
-            }
 
-            rooted!(in (context) let mut arr_val_root = UndefinedValue());
-            rooted!(in (context) let mut arr_val2_root = UndefinedValue());
+                rooted!(in (cx) let mut arr_val_root = UndefinedValue());
+                rooted!(in (cx) let mut arr_val2_root = UndefinedValue());
 
-            let _res = get_es_obj_prop_val(
-                context,
-                global_root.handle(),
-                "test_is_array",
-                arr_val_root.handle_mut(),
-            );
-            let _res2 = get_es_obj_prop_val(
-                context,
-                global_root.handle(),
-                "test_is_array2",
-                arr_val2_root.handle_mut(),
-            );
+                let _res =
+                    get_es_obj_prop_val(cx, global, "test_is_array", arr_val_root.handle_mut());
+                let _res2 =
+                    get_es_obj_prop_val(cx, global, "test_is_array2", arr_val2_root.handle_mut());
 
-            rooted!(in (context) let arr_val_obj = arr_val_root.to_object());
-            rooted!(in (context) let arr_val2_obj = arr_val2_root.to_object());
+                rooted!(in (cx) let arr_val_obj = arr_val_root.to_object());
+                rooted!(in (cx) let arr_val2_obj = arr_val2_root.to_object());
 
-            assert_eq!(true, object_is_array(context, arr_val_obj.handle()));
+                assert_eq!(true, object_is_array(cx, arr_val_obj.handle()));
 
-            let length_res = get_array_length(context, arr_val_obj.handle());
-            assert_eq!(4, length_res.ok().unwrap());
+                let length_res = get_array_length(cx, arr_val_obj.handle());
+                assert_eq!(4, length_res.ok().unwrap());
 
-            assert_eq!(false, object_is_array(context, arr_val2_obj.handle()));
+                assert_eq!(false, object_is_array(cx, arr_val2_obj.handle()));
 
-            rooted!(in (context) let mut rval = UndefinedValue());
-            let res = get_array_element(context, arr_val_obj.handle(), 2, rval.handle_mut());
-            if res.is_err() {
-                panic!(res.err().unwrap().message);
-            }
-            let val_3: JSVal = *rval;
-            assert_eq!(val_3.to_int32(), 3);
+                rooted!(in (cx) let mut rval = UndefinedValue());
+                let res = get_array_element(cx, arr_val_obj.handle(), 2, rval.handle_mut());
+                if res.is_err() {
+                    panic!(res.err().unwrap().message);
+                }
+                let val_3: JSVal = *rval;
+                assert_eq!(val_3.to_int32(), 3);
 
-            true
+                true
+            })
         });
 
         assert_eq!(res, true);
@@ -205,54 +194,54 @@ mod tests {
     fn test_create_array() {
         let res = test_with_sm_rt(|sm_rt| {
             println!("running arrays test");
-            let global = sm_rt.global_obj;
-            let runtime = &sm_rt.runtime;
-            let context = runtime.cx();
 
-            rooted!(in (context) let global_root = global);
+            sm_rt.do_with_jsapi(|_rt, context, global| {
+                rooted!(in (context) let v1_root = Int32Value(12));
+                rooted!(in (context) let v2_root = Int32Value(15));
 
-            rooted!(in (context) let v1_root = Int32Value(12));
-            rooted!(in (context) let v2_root = Int32Value(15));
+                let items: Vec<JSVal> = vec![*v1_root.handle(), *v2_root.handle()];
 
-            let items: Vec<JSVal> = vec![*v1_root.handle(), *v2_root.handle()];
+                rooted!(in (context) let mut array_rval = UndefinedValue());
+                new_array(context, items, &mut array_rval.handle_mut());
+                let arr_val: JSVal = *array_rval;
+                let arr_obj: *mut JSObject = arr_val.to_object();
+                rooted!(in (context) let test_create_array_root = arr_obj);
 
-            let arr_obj: *mut JSObject = new_array(context, items);
-            rooted!(in (context) let mut test_create_array_root = arr_obj);
+                rooted!(in (context) let v3_root = Int32Value(7));
+                let _set_res = set_array_element(
+                    context,
+                    test_create_array_root.handle(),
+                    2,
+                    v3_root.handle(),
+                );
 
-            rooted!(in (context) let v3_root = Int32Value(7));
-            let _set_res = set_array_element(
-                context,
-                test_create_array_root.handle(),
-                2,
-                v3_root.handle(),
-            );
+                let length_res = get_array_length(context, test_create_array_root.handle());
+                assert_eq!(3, length_res.ok().unwrap());
 
-            let length_res = get_array_length(context, test_create_array_root.handle());
-            assert_eq!(3, length_res.ok().unwrap());
+                rooted!(in (context) let v4_root = Int32Value(21));
+                push_array_element(context, test_create_array_root.handle(), v4_root.handle())
+                    .ok()
+                    .unwrap();
 
-            rooted!(in (context) let v4_root = Int32Value(21));
-            push_array_element(context, test_create_array_root.handle(), v4_root.handle())
+                rooted!(in (context) let mut stringify_res_root = UndefinedValue());
+
+                let test_create_array_val: JSVal = ObjectValue(arr_obj);
+
+                call_obj_method_name(
+                    context,
+                    global,
+                    vec!["JSON"],
+                    "stringify",
+                    vec![test_create_array_val],
+                    &mut stringify_res_root.handle_mut(),
+                )
                 .ok()
                 .unwrap();
+                let stringify_res_str = es_value_to_str(context, &*stringify_res_root.handle());
+                assert_eq!(stringify_res_str.as_str(), "[12,15,7,21]");
 
-            rooted!(in (context) let mut stringify_res_root = UndefinedValue());
-
-            let test_create_array_val: JSVal = ObjectValue(arr_obj);
-
-            call_obj_method_name(
-                context,
-                global_root.handle(),
-                vec!["JSON"],
-                "stringify",
-                vec![test_create_array_val],
-                &mut stringify_res_root.handle_mut(),
-            )
-            .ok()
-            .unwrap();
-            let stringify_res_str = es_value_to_str(context, &*stringify_res_root.handle());
-            assert_eq!(stringify_res_str.as_str(), "[12,15,7,21]");
-
-            true
+                true
+            })
         });
 
         assert_eq!(res, true);

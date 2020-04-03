@@ -36,6 +36,7 @@ Currently i'm working towards creating a 0.1 version which has a couple of goals
 * [x] import/export statement support
   * [ ] cache modules
 * [ ] No more memory leaks
+* [ ] No more segfaults in unit test with gc_zeal_options
 
 # 0.2 goals
 
@@ -63,7 +64,7 @@ Cargo.toml
 
 ```toml
 [dependencies]
-es_runtime = "0.0.5"
+es_runtime = "0.0.6"
 ```
 
 my_app.rs

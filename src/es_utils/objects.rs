@@ -168,13 +168,14 @@ pub fn get_constructor(
 
 /// get all the propertynames of an object
 #[allow(dead_code)]
-pub fn get_js_obj_prop_names(context: *mut JSContext, obj: *mut JSObject) -> Vec<String> {
-    rooted!(in(context) let obj_root = obj);
-    let obj_handle = obj_root.handle();
+pub fn get_js_obj_prop_names(context: *mut JSContext, obj: HandleObject) -> Vec<String> {
+    use log::trace;
+
+    trace!("get_js_obj_prop_names");
 
     let ids = unsafe { IdVector::new(context) };
 
-    assert!(unsafe { GetPropertyKeys(context, obj_handle.into(), JSITER_OWNONLY, ids.get()) });
+    assert!(unsafe { GetPropertyKeys(context, obj.into(), JSITER_OWNONLY, ids.get()) });
 
     let mut ret: Vec<String> = vec![];
 
@@ -182,9 +183,9 @@ pub fn get_js_obj_prop_names(context: *mut JSContext, obj: *mut JSObject) -> Vec
         rooted!(in(context) let id = ids[x]);
 
         assert!(unsafe { RUST_JSID_IS_STRING(id.handle().into()) });
-        rooted!(in(context) let id = unsafe{RUST_JSID_TO_STRING(id.handle().into())});
+        rooted!(in(context) let id_str = unsafe{RUST_JSID_TO_STRING(id.handle().into())});
 
-        let prop_name = es_jsstring_to_string(context, *id);
+        let prop_name = es_jsstring_to_string(context, *id_str);
 
         ret.push(prop_name);
     }
@@ -213,57 +214,72 @@ pub fn set_es_obj_prop_val(
 
 #[cfg(test)]
 mod tests {
+    use crate::es_utils;
     use crate::es_utils::objects::{get_es_obj_prop_val, get_js_obj_prop_names};
     use crate::es_utils::{es_value_to_str, report_es_ex};
     use crate::esvaluefacade::EsValueFacade;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
-    use mozjs::jsval::UndefinedValue;
+    use mozjs::jsval::{JSVal, UndefinedValue};
     use std::collections::HashMap;
 
     #[test]
     fn test_get_js_obj_prop_values() {
+        use log::trace;
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
 
         let test_vec = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
-                let runtime: &mozjs::rust::Runtime = &sm_rt.runtime;
-                let context = runtime.cx();
+                sm_rt.do_with_jsapi(|rt, cx, global| {
+                    trace!("1");
 
-                rooted!(in(context) let global_root = sm_rt.global_obj);
-                let global = global_root.handle();
-
-                rooted!(in(context) let mut rval = UndefinedValue());
-                let _eval_res = runtime.evaluate_script(
-                    global,
-                    "({a: '1', b: '2', c: '3'})",
-                    "test_get_js_obj_prop_values.es",
-                    0,
-                    rval.handle_mut(),
-                );
-                let e_opt = report_es_ex(context);
-                assert!(e_opt.is_none());
-
-                let jso = rval.to_object();
-
-                let prop_vec: Vec<String> = get_js_obj_prop_names(context, jso);
-
-                let mut test_vec = vec![];
-                rooted!(in(context) let jso_root = jso);
-
-                for prop_name in prop_vec {
-                    rooted!(in (context) let mut rval = UndefinedValue());
-
-                    let _prop_val_res = get_es_obj_prop_val(
-                        context,
-                        jso_root.handle(),
-                        prop_name.as_str(),
+                    rooted!(in(cx) let mut rval = UndefinedValue());
+                    let _eval_res = es_utils::eval(
+                        rt,
+                        global,
+                        "({a: '1', b: '2', c: '3'})",
+                        "test_get_js_obj_prop_values.es",
                         rval.handle_mut(),
                     );
 
-                    test_vec.push(es_value_to_str(context, &*rval).to_string());
-                }
+                    trace!("4");
 
-                test_vec
+                    let e_opt = report_es_ex(cx);
+                    assert!(e_opt.is_none());
+
+                    trace!("5");
+
+                    let jso = rval.to_object();
+                    rooted!(in(cx) let jso_root = jso);
+
+                    trace!("6");
+
+                    let prop_vec: Vec<String> = get_js_obj_prop_names(cx, jso_root.handle());
+
+                    trace!("7");
+
+                    let mut test_vec = vec![];
+
+                    trace!("8");
+
+                    for prop_name in prop_vec {
+                        rooted!(in (cx) let mut rval = UndefinedValue());
+
+                        let _prop_val_res = get_es_obj_prop_val(
+                            cx,
+                            jso_root.handle(),
+                            prop_name.as_str(),
+                            rval.handle_mut(),
+                        );
+
+                        test_vec.push(es_value_to_str(cx, &*rval));
+
+                        trace!("9 {}", prop_name);
+                    }
+
+                    trace!("10");
+
+                    test_vec
+                })
             }))
         });
 
@@ -274,31 +290,46 @@ mod tests {
     }
 
     #[test]
+    fn test_get_js_obj_prop_names_x() {
+        for _x in 0..10 {
+            test_get_js_obj_prop_names();
+        }
+    }
+
+    #[test]
     fn test_get_js_obj_prop_names() {
+        use log::trace;
+        use mozjs::jsapi::JSObject;
+
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
 
         let test_vec = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
-                let runtime: &mozjs::rust::Runtime = &sm_rt.runtime;
-                let context = runtime.cx();
+                sm_rt.do_with_jsapi(|rt, cx, global| {
+                    rooted!(in(cx) let mut rval = UndefinedValue());
+                    trace!("1");
+                    let eval_res = es_utils::eval(
+                        rt,
+                        global,
+                        "({a: 1, b: 2, c: 3})",
+                        "test_get_js_obj_prop_names.es",
+                        rval.handle_mut(),
+                    );
+                    trace!("2");
 
-                rooted!(in(context) let global_root = sm_rt.global_obj);
-                let global = global_root.handle();
+                    if eval_res.is_err() {
+                        let e_opt = report_es_ex(cx);
+                        assert!(e_opt.is_none());
+                        trace!("2.1");
+                    }
 
-                rooted!(in(context) let mut rval = UndefinedValue());
-                let _eval_res = runtime.evaluate_script(
-                    global,
-                    "({a: 1, b: 2, c: 3})",
-                    "test_get_js_obj_prop_names.es",
-                    0,
-                    rval.handle_mut(),
-                );
-                let e_opt = report_es_ex(context);
-                assert!(e_opt.is_none());
+                    let val: JSVal = *rval;
+                    let jso: *mut JSObject = val.to_object();
+                    rooted!(in (cx) let jso_root = jso);
 
-                let jso = rval.to_object();
-
-                get_js_obj_prop_names(context, jso)
+                    trace!("3");
+                    get_js_obj_prop_names(cx, jso_root.handle())
+                })
             }))
         });
 

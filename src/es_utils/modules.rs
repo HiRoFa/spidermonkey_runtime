@@ -61,16 +61,12 @@ mod tests {
     #[test]
     fn test_module() {
         let res = test_with_sm_rt(|sm_rt| {
-            let global = sm_rt.global_obj;
-            let runtime = &sm_rt.runtime;
-            let context = runtime.cx();
-
-            rooted!(in(context) let _global_root = global);
+            sm_rt.do_with_jsapi(|_rt, cx, _global| {
 
             let mod_script =
                 "export default () => 123; let myPrivate = 12; \n\nconsole.log('running a module %i', myPrivate);";
 
-            let compile_res = compile_module(context, mod_script, "test_mod.es");
+            let compile_res = compile_module(cx, mod_script, "test_mod.es");
             if compile_res.is_err() {
                 let err = compile_res.err().unwrap();
                 panic!(
@@ -82,7 +78,7 @@ mod tests {
             let mod_script2 =
                 "import {other} from 'test_mod.es';\n\nconsole.log('started mod imp mod, other = ' + other);";
 
-            let compile_res2 = compile_module(context, mod_script2, "test_mod2.es");
+            let compile_res2 = compile_module(cx, mod_script2, "test_mod2.es");
             if compile_res2.is_err() {
                 let err = compile_res2.err().unwrap();
                 panic!(
@@ -92,6 +88,7 @@ mod tests {
             }
 
             true
+            })
         });
         assert_eq!(res, true);
     }

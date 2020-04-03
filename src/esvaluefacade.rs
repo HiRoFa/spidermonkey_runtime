@@ -3,11 +3,10 @@ use log::trace;
 use crate::es_utils;
 use crate::es_utils::arrays::{get_array_element, get_array_length, new_array};
 use crate::es_utils::EsErrorInfo;
-use crate::spidermonkeyruntimewrapper::SmRuntime;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
-use mozjs::jsval::{BooleanValue, DoubleValue, Int32Value, ObjectValue, UndefinedValue};
-use mozjs::rust::HandleValue;
+use mozjs::jsval::{BooleanValue, DoubleValue, Int32Value, JSVal, ObjectValue, UndefinedValue};
+use mozjs::rust::{HandleObject, HandleValue, Runtime};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
@@ -136,11 +135,12 @@ impl EsValueFacade {
         }
     }
 
-    pub fn new(sm_rt: &SmRuntime, context: *mut JSContext, rval: HandleValue) -> Self {
-        Self::new_v(sm_rt, context, *rval)
-    }
-
-    pub fn new_v(sm_rt: &SmRuntime, context: *mut JSContext, rval: mozjs::jsapi::Value) -> Self {
+    pub fn new_v(
+        rt: &Runtime,
+        context: *mut JSContext,
+        global: HandleObject,
+        rval_handle: HandleValue,
+    ) -> Self {
         let mut val_string = None;
         let mut val_i32 = None;
         let mut val_f64 = None;
@@ -148,6 +148,8 @@ impl EsValueFacade {
         let mut val_managed_var = None;
         let mut val_object = None;
         let mut val_array = None;
+
+        let rval: JSVal = *rval_handle;
 
         if rval.is_boolean() {
             val_boolean = Some(rval.to_boolean());
@@ -165,10 +167,6 @@ impl EsValueFacade {
             let mut map = HashMap::new();
             let obj: *mut JSObject = rval.to_object();
             rooted!(in(context) let obj_root = obj);
-
-            let rt = &sm_rt.runtime;
-            let cx = rt.cx();
-            rooted!(in (cx) let global_root = sm_rt.global_obj);
 
             if es_utils::arrays::object_is_array(context, obj_root.handle()) {
                 let mut vals = vec![];
@@ -189,28 +187,25 @@ impl EsValueFacade {
                             get_res.err().unwrap().message
                         );
                     }
-                    vals.push(EsValueFacade::new(
-                        sm_rt,
+                    vals.push(EsValueFacade::new_v(
+                        rt,
                         context,
+                        global,
                         arr_element_root.handle(),
                     ));
                 }
 
                 val_array = Some(vals);
-            } else if es_utils::promises::object_is_promise(
-                context,
-                global_root.handle(),
-                obj_root.handle(),
-            ) {
+            } else if es_utils::promises::object_is_promise(context, obj_root.handle()) {
                 // call esses.registerPromiseForResolutionInRust(prom);
 
-                rooted!(in (cx) let mut id_val = UndefinedValue());
+                rooted!(in (context) let mut id_val = UndefinedValue());
 
                 // ok it's a promise, now we're gonna call a method which will add then and catch to
                 // the promise so the result is reported to rust under an id
                 let reg_res: Result<(), EsErrorInfo> = es_utils::functions::call_obj_method_name(
-                    cx,
-                    global_root.handle(),
+                    context,
+                    global,
                     vec!["esses"],
                     "registerPromiseForResolutionInRust",
                     vec![rval],
@@ -243,7 +238,7 @@ impl EsValueFacade {
                 }
             } else {
                 let prop_names: Vec<String> =
-                    crate::es_utils::objects::get_js_obj_prop_names(context, obj);
+                    crate::es_utils::objects::get_js_obj_prop_names(context, obj_root.handle());
                 for prop_name in prop_names {
                     rooted!(in (context) let mut prop_val_root = UndefinedValue());
                     let prop_val_res = crate::es_utils::objects::get_es_obj_prop_val(
@@ -261,7 +256,8 @@ impl EsValueFacade {
                         );
                     }
 
-                    let prop_esvf = EsValueFacade::new(sm_rt, context, prop_val_root.handle());
+                    let prop_esvf =
+                        EsValueFacade::new_v(rt, context, global, prop_val_root.handle());
                     map.insert(prop_name, prop_esvf);
                 }
             }
@@ -411,9 +407,11 @@ impl EsValueFacade {
                 items.push(item.to_es_value(context));
             }
 
-            let arr: *mut JSObject = new_array(context, items);
+            rooted!(in (context) let mut arr_root = UndefinedValue());
 
-            ObjectValue(arr)
+            new_array(context, items, &mut arr_root.handle_mut());
+            let val: JSVal = *arr_root;
+            val
         } else if self.is_object() {
             trace!("to_es_value.6");
             let obj: *mut JSObject = es_utils::objects::new_object(context);
@@ -584,25 +582,38 @@ mod tests {
         assert_eq!(esvf_prom_resolved.get_i32().clone(), 123 as i32);
     }
 
+    fn slow_trace(log: &str) {
+        log::trace!("slow: {}", log);
+        std::thread::sleep(Duration::from_millis(250));
+    }
+
     #[test]
     fn test_wait_for_prom2() {
         println!("test_wait_for_prom_2");
 
+        slow_trace("test_wait_for_prom_2 - 1");
+
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+
+        slow_trace("test_wait_for_prom_2 - 2");
         let esvf_prom_res: Result<EsValueFacade, EsErrorInfo> = rt
             .eval_sync(
-                "let test_wait_for_prom2_prom = new Promise((resolve, reject) => {reject(\"foo\");}); test_wait_for_prom2_prom;",
-                "wait_for_prom.es",
+                "let test_wait_for_prom2_prom = new Promise((resolve, reject) => {console.log('rejecting promise with foo');reject(\"foo\");}); test_wait_for_prom2_prom;",
+                "wait_for_prom2.es",
             );
+        slow_trace("test_wait_for_prom_2 - 3");
         if esvf_prom_res.is_err() {
+            slow_trace("test_wait_for_prom_2 - 4");
             panic!(
-                "error evaling wait_for_prom.es : {}",
+                "error evaling wait_for_prom2.es : {}",
                 esvf_prom_res.err().unwrap().message
             );
         } else {
+            slow_trace("test_wait_for_prom_2 - 5");
             let esvf_prom = esvf_prom_res
                 .ok()
                 .expect("wait_for_prom.es did not eval ok");
+            slow_trace("test_wait_for_prom_2 - 6");
             assert!(esvf_prom.is_promise());
             let esvf_prom_resolved = esvf_prom
                 .get_promise_result_blocking(Duration::from_secs(60))
@@ -610,10 +621,15 @@ mod tests {
                 .unwrap()
                 .err()
                 .unwrap();
+            slow_trace("test_wait_for_prom_2 - 7");
 
             assert!(esvf_prom_resolved.is_string());
 
+            slow_trace("test_wait_for_prom_2 - 8");
+
             assert_eq!(esvf_prom_resolved.get_string(), "foo");
+
+            slow_trace("test_wait_for_prom_2 - 9");
         }
     }
 

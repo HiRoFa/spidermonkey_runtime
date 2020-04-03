@@ -15,96 +15,93 @@ pub(crate) fn init(rt: &EsRuntimeWrapper) {
         // that should return a periststenrooted
         // then also create a add_property method
 
-        let rt = &sm_rt.runtime;
-        let context = rt.cx();
+        sm_rt.do_with_jsapi(|_rt, context, global| {
+            // todo write a define_function method which uses JS_DefineFunction which will effectively do the same as create and set prop
+            let console_obj: *mut JSObject = crate::es_utils::objects::new_object(context);
+            let console_obj_val: JSVal = ObjectValue(console_obj);
 
-        // todo write a define_function method which uses JS_DefineFunction which will effectively do the same as create and set prop
-        let console_obj: *mut JSObject = crate::es_utils::objects::new_object(context);
-        let console_obj_val: JSVal = ObjectValue(console_obj);
+            rooted!(in(context) let console_obj_val_root = console_obj_val);
+            rooted!(in(context) let console_obj_root = console_obj);
 
-        let global_obj = sm_rt.global_obj;
-        rooted!(in(context) let global_root = global_obj);
-        rooted!(in(context) let console_obj_val_root = console_obj_val);
-        rooted!(in(context) let console_obj_root = console_obj);
-
-        crate::es_utils::objects::set_es_obj_prop_val(
-            context,
-            global_root.handle(),
-            "console",
-            console_obj_val_root.handle(),
-        );
-
-        let function = unsafe {
-            JS_DefineFunction(
+            crate::es_utils::objects::set_es_obj_prop_val(
                 context,
-                console_obj_root.handle().into(),
-                b"log\0".as_ptr() as *const libc::c_char,
-                Some(console_log),
-                1,
-                0,
-            )
-        };
-        assert!(!function.is_null());
+                global,
+                "console",
+                console_obj_val_root.handle(),
+            );
 
-        let function = unsafe {
-            JS_DefineFunction(
-                context,
-                console_obj_root.handle().into(),
-                b"debug\0".as_ptr() as *const libc::c_char,
-                Some(console_debug),
-                1,
-                0,
-            )
-        };
-        assert!(!function.is_null());
+            let function = unsafe {
+                JS_DefineFunction(
+                    context,
+                    console_obj_root.handle().into(),
+                    b"log\0".as_ptr() as *const libc::c_char,
+                    Some(console_log),
+                    1,
+                    0,
+                )
+            };
+            assert!(!function.is_null());
 
-        let function = unsafe {
-            JS_DefineFunction(
-                context,
-                console_obj_root.handle().into(),
-                b"warn\0".as_ptr() as *const libc::c_char,
-                Some(console_warn),
-                1,
-                0,
-            )
-        };
-        assert!(!function.is_null());
+            let function = unsafe {
+                JS_DefineFunction(
+                    context,
+                    console_obj_root.handle().into(),
+                    b"debug\0".as_ptr() as *const libc::c_char,
+                    Some(console_debug),
+                    1,
+                    0,
+                )
+            };
+            assert!(!function.is_null());
 
-        let function = unsafe {
-            JS_DefineFunction(
-                context,
-                console_obj_root.handle().into(),
-                b"info\0".as_ptr() as *const libc::c_char,
-                Some(console_info),
-                1,
-                0,
-            )
-        };
-        assert!(!function.is_null());
+            let function = unsafe {
+                JS_DefineFunction(
+                    context,
+                    console_obj_root.handle().into(),
+                    b"warn\0".as_ptr() as *const libc::c_char,
+                    Some(console_warn),
+                    1,
+                    0,
+                )
+            };
+            assert!(!function.is_null());
 
-        let function = unsafe {
-            JS_DefineFunction(
-                context,
-                console_obj_root.handle().into(),
-                b"trace\0".as_ptr() as *const libc::c_char,
-                Some(console_trace),
-                1,
-                0,
-            )
-        };
-        assert!(!function.is_null());
+            let function = unsafe {
+                JS_DefineFunction(
+                    context,
+                    console_obj_root.handle().into(),
+                    b"info\0".as_ptr() as *const libc::c_char,
+                    Some(console_info),
+                    1,
+                    0,
+                )
+            };
+            assert!(!function.is_null());
 
-        let function = unsafe {
-            JS_DefineFunction(
-                context,
-                console_obj_root.handle().into(),
-                b"error\0".as_ptr() as *const libc::c_char,
-                Some(console_error),
-                1,
-                0,
-            )
-        };
-        assert!(!function.is_null());
+            let function = unsafe {
+                JS_DefineFunction(
+                    context,
+                    console_obj_root.handle().into(),
+                    b"trace\0".as_ptr() as *const libc::c_char,
+                    Some(console_trace),
+                    1,
+                    0,
+                )
+            };
+            assert!(!function.is_null());
+
+            let function = unsafe {
+                JS_DefineFunction(
+                    context,
+                    console_obj_root.handle().into(),
+                    b"error\0".as_ptr() as *const libc::c_char,
+                    Some(console_error),
+                    1,
+                    0,
+                )
+            };
+            assert!(!function.is_null());
+        });
     }));
 }
 
@@ -361,10 +358,7 @@ mod tests {
     #[test]
     fn test_console() {
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
-        let console: EsValueFacade = rt
-            .eval_sync("(console);", "test_console.es")
-            .ok()
-            .unwrap();
+        let console: EsValueFacade = rt.eval_sync("(console);", "test_console.es").ok().unwrap();
 
         assert!(console.is_object());
 
