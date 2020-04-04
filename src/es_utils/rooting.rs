@@ -6,30 +6,36 @@ use mozjs::jsval::{JSVal, ObjectValue};
 use mozjs::rust::Runtime;
 use std::ffi::CString;
 
-pub fn new_persistent_rooted(context: *mut JSContext, obj: *mut JSObject) -> MyPersistentRooted {
-    let mut ret = MyPersistentRooted::new();
+pub fn new_persistent_rooted(context: *mut JSContext, obj: *mut JSObject) -> EsPersistentRooted {
+    let mut ret = EsPersistentRooted::new();
     unsafe { ret.init(context, obj) };
     ret
 }
 
-pub struct MyPersistentRooted {
+pub struct EsPersistentRooted {
     /// The underlying `JSObject`.
     heap_obj: Heap<*mut JSObject>,
     permanent_js_root: Heap<JSVal>,
 }
 
-impl Default for MyPersistentRooted {
-    fn default() -> MyPersistentRooted {
-        MyPersistentRooted::new()
+impl Default for EsPersistentRooted {
+    fn default() -> EsPersistentRooted {
+        EsPersistentRooted::new()
     }
 }
 
-impl MyPersistentRooted {
-    fn new() -> MyPersistentRooted {
-        MyPersistentRooted {
+impl EsPersistentRooted {
+    pub fn new() -> EsPersistentRooted {
+        EsPersistentRooted {
             heap_obj: Heap::default(),
             permanent_js_root: Heap::default(),
         }
+    }
+
+    pub fn new_from_obj(cx: *mut JSContext, obj: *mut JSObject) -> Self {
+        let mut ret = Self::new();
+        unsafe { ret.init(cx, obj) };
+        ret
     }
 
     pub fn get(&self) -> *mut JSObject {
@@ -37,7 +43,7 @@ impl MyPersistentRooted {
     }
 
     #[allow(unsafe_code)]
-    unsafe fn init(&mut self, cx: *mut JSContext, js_obj: *mut JSObject) {
+    pub unsafe fn init(&mut self, cx: *mut JSContext, js_obj: *mut JSObject) {
         self.heap_obj.set(js_obj);
         self.permanent_js_root.set(ObjectValue(js_obj));
         let c_str = CString::new("MyPersistentRooted::root").unwrap();
@@ -49,12 +55,18 @@ impl MyPersistentRooted {
     }
 }
 
-impl Drop for MyPersistentRooted {
+impl Drop for EsPersistentRooted {
     #[allow(unsafe_code)]
     fn drop(&mut self) {
         unsafe {
             let cx = Runtime::get();
             RemoveRawValueRoot(cx, self.permanent_js_root.get_unsafe());
         }
+    }
+}
+
+impl PartialEq for EsPersistentRooted {
+    fn eq(&self, other: &EsPersistentRooted) -> bool {
+        self.heap_obj.get() == other.heap_obj.get()
     }
 }

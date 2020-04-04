@@ -5,11 +5,11 @@ use crate::esruntimewrapper::EsRuntimeWrapper;
 use crate::esvaluefacade::EsValueFacade;
 use log::{debug, trace};
 
-use crate::es_utils::rooting::MyPersistentRooted;
+use crate::es_utils::rooting::EsPersistentRooted;
 use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
+use lru::LruCache;
 use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::CompartmentOptions;
-use mozjs::jsapi::Heap;
 use mozjs::jsapi::JSAutoCompartment;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSFunction;
@@ -21,7 +21,6 @@ use mozjs::jsapi::OnNewGlobalHookOption;
 use mozjs::jsapi::SetEnqueuePromiseJobCallback;
 use mozjs::jsapi::SetModuleResolveHook;
 use mozjs::jsapi::JS::HandleValueArray;
-use mozjs::jsapi::{AddRawValueRoot, RemoveRawValueRoot};
 use mozjs::jsval::{JSVal, ObjectValue, UndefinedValue};
 use mozjs::panic::wrap_panic;
 use mozjs::rust::wrappers::JS_CallFunctionValue;
@@ -29,7 +28,6 @@ use mozjs::rust::{HandleObject, HandleValue, JSEngine};
 use mozjs::rust::{Runtime, SIMPLE_GLOBAL_CLASS};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ffi::CString;
 use std::ops::Deref;
 use std::panic::AssertUnwindSafe;
 use std::ptr;
@@ -390,6 +388,10 @@ impl SmRuntime {
     }
 }
 
+thread_local! {
+    pub static MODULE_CACHE: RefCell<LruCache<String, EsPersistentRooted>> = RefCell::new(LruCache::new(50));
+}
+
 /// native function used a import function for module loading
 unsafe extern "C" fn import_module(
     context: *mut JSContext,
@@ -410,6 +412,21 @@ unsafe extern "C" fn import_module(
     let arg_specifier = mozjs::rust::Handle::from_raw(args.get(1));
 
     let file_name = es_utils::es_value_to_str(context, &*arg_specifier);
+
+    // see if we have that module
+    let cached: bool = MODULE_CACHE.with(|cache_rc| {
+        let cache = &mut *cache_rc.borrow_mut();
+        if let Some(mpr) = cache.get(&file_name) {
+            trace!("found a cached module for {}", &file_name);
+            // set rval here
+            args.rval().set(ObjectValue(mpr.get()));
+            return true;
+        }
+        false
+    });
+    if cached {
+        return true;
+    }
 
     // see if we got a module code loader
     let module_src = SM_RT.with(|sm_rt_rc| {
@@ -437,8 +454,16 @@ unsafe extern "C" fn import_module(
         return false;
     }
 
-    args.rval()
-        .set(ObjectValue(compiled_mod_obj_res.ok().unwrap()));
+    let compiled_module: *mut JSObject = compiled_mod_obj_res.ok().unwrap();
+
+    MODULE_CACHE.with(|cache_rc| {
+        trace!("caching module for {}", &file_name);
+        let cache = &mut *cache_rc.borrow_mut();
+        let mpr = EsPersistentRooted::new_from_obj(context, compiled_module);
+        cache.put(file_name, mpr);
+    });
+
+    args.rval().set(ObjectValue(compiled_module));
     return true;
 }
 
@@ -612,7 +637,7 @@ impl PromiseJobCallback {
     unsafe fn call(&self, cx: *mut JSContext, a_this_obj: HandleObject) -> Result<(), ()> {
         rooted!(in(cx) let mut rval = UndefinedValue());
 
-        rooted!(in(cx) let callable = ObjectValue(self.parent.callback_holder().callback.get()));
+        rooted!(in(cx) let callable = ObjectValue(self.parent.callback_holder().get()));
         rooted!(in(cx) let rooted_this = a_this_obj.get());
         let ok = JS_CallFunctionValue(
             cx,
@@ -634,7 +659,7 @@ impl PromiseJobCallback {
 }
 
 struct CallbackFunction {
-    object: CallbackObject,
+    object: EsPersistentRooted,
 }
 
 impl CallbackFunction {
@@ -642,12 +667,12 @@ impl CallbackFunction {
 
     pub fn new() -> CallbackFunction {
         CallbackFunction {
-            object: CallbackObject::new(),
+            object: EsPersistentRooted::new(),
         }
     }
 
     /// Returns the underlying `CallbackObject`.
-    pub fn callback_holder(&self) -> &CallbackObject {
+    pub fn callback_holder(&self) -> &EsPersistentRooted {
         &self.object
     }
 
@@ -655,59 +680,6 @@ impl CallbackFunction {
     /// Should be called once this object is done moving.
     pub unsafe fn init(&mut self, cx: *mut JSContext, callback: *mut JSObject) {
         self.object.init(cx, callback);
-    }
-}
-
-pub struct CallbackObject {
-    /// The underlying `JSObject`.
-    callback: Heap<*mut JSObject>,
-    permanent_js_root: Heap<JSVal>,
-}
-
-impl Default for CallbackObject {
-    fn default() -> CallbackObject {
-        CallbackObject::new()
-    }
-}
-
-impl CallbackObject {
-    fn new() -> CallbackObject {
-        CallbackObject {
-            callback: Heap::default(),
-            permanent_js_root: Heap::default(),
-        }
-    }
-
-    pub fn get(&self) -> *mut JSObject {
-        self.callback.get()
-    }
-
-    #[allow(unsafe_code)]
-    unsafe fn init(&mut self, cx: *mut JSContext, callback: *mut JSObject) {
-        self.callback.set(callback);
-        self.permanent_js_root.set(ObjectValue(callback));
-        let c_str = CString::new("CallbackObject::root").unwrap();
-        assert!(AddRawValueRoot(
-            cx,
-            self.permanent_js_root.get_unsafe(),
-            c_str.as_ptr() as *const i8
-        ));
-    }
-}
-
-impl Drop for CallbackObject {
-    #[allow(unsafe_code)]
-    fn drop(&mut self) {
-        unsafe {
-            let cx = Runtime::get();
-            RemoveRawValueRoot(cx, self.permanent_js_root.get_unsafe());
-        }
-    }
-}
-
-impl PartialEq for CallbackObject {
-    fn eq(&self, other: &CallbackObject) -> bool {
-        self.callback.get() == other.callback.get()
     }
 }
 

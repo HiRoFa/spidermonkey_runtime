@@ -1,8 +1,8 @@
 # es_runtime
 
-es_runtime is a crate aimed at making it possible for rust developers to integrate an ECMA-Script engine in their rust projects
+es_runtime is a crate aimed at making it possible for rust developers to integrate an ECMA-Script engine in their rust projects without having specialized knowledge about ECMA-Script engines.
 
-The engine used is the Mozilla SpiderMonkey engine (https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey)
+The engine used is the Mozilla SpiderMonkey engine (https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey).
 
 This project was started as a hobby project for me to learn rust. I hope some of you find it useful to learn about using spidermonkey from rust.
 
@@ -34,7 +34,7 @@ Currently i'm working towards creating a 0.1 version which has a couple of goals
 * [x] Working Promises in Script
 * [x] Waiting for Promises from rust
 * [x] import/export statement support
-  * [ ] cache modules
+  * [x] cache modules
 * [ ] No more memory leaks
 * [ ] No more segfaults in unit test with gc_zeal_options
 
