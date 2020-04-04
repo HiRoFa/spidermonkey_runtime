@@ -24,9 +24,9 @@ Modules are a technique to load pieces of script
 
 See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Modules
 
-Dynamic loading is currently not supported
+Dynamic loading is currently not supported.
 
-Please note that if you load your main project files as a module you will not have access to the global scope, obejcts added to the global scope before will be accessible hwoever.
+Please note that if you load your main project files as a module you will not have access to the global scope, objects added to the global scope before will be accessible however.
 
 e.g.
 
@@ -142,7 +142,7 @@ fn test_esvf(rt: &EsRuntimeWrapper){
 ### Waiting for a Promise to resolve
 
 When a script returns a Promise you can wait for the Promise to resolve by 
-calling **get_promise_result_blocking** on the EsValueFacade
+calling ```get_promise_result_blocking()``` on the EsValueFacade.
 
 ```rust
 let code = "\
