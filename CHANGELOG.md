@@ -1,3 +1,8 @@
+# 0.0.6
+
+* major refactor of how to use the JSAPI, this is now always done by ```sm_rt.do_with_jsapi()``` so we can more predictably root the global and enter the compartment.
+* caching of modules, so they realy only run once 
+
 # 0.0.5
 
 * added support and utils for modules (see [RUST#modules](docs/RUST.md#loading-files-while-using-modules))
