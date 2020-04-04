@@ -12,7 +12,7 @@ fn call_jsapi_stuff(rt: &EsRuntimeWrapper) {
         // do_with_jsapi does a couple of things
         // 1.  root the global obj
         // 2.   enter the correct Comparment using AutoCompartment        
-        sm_rt.do_with_jsapi(|runtime, context, global_handle| {
+        sm_rt.do_with_jsapi(|runtime: &Runtime, context: *mut JSContext, global_handle: HandleObject| {
 
             // work with JSAPI methods here
             // there are utils in es_utils.rs with examples of working with JSAPI objects and functions.
