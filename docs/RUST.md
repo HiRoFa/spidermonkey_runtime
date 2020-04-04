@@ -31,12 +31,12 @@ Please note that if you load your main project files as a module you will not ha
 e.g.
 
 first eval:
-```ecmascript
+```javascript
 this.my_global = {};
 ```
 
 then load module:
-```ecmascript
+```javascript
 import {mod_stuff} from "mymod.mes";
 
 my_global.something = (a) => {return a * 2};
@@ -80,7 +80,7 @@ let rt = EsRuntimeWrapper::new_with_module_code_loader(module_code_loader);
 
 calling a script function from rust is done by using the call or call_sync methods
 
-```ecmascript
+```javascript
 this.myObj = {childObj: {myMethod: function(a, b){return a*b;}}};
 ```
 
