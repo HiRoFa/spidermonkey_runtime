@@ -9,7 +9,7 @@ There are two ways to run async code from javascript:
 
 * use setImmediate()
 
-```ecmascript
+```javascript
 let myAsyncMethod = function(a, b){
     console.log("multiplying %i and %i", a, b);
     return a * b;
@@ -18,7 +18,7 @@ setImmediate(myAsyncMethod, 12, 14);
 ```
 
 * create a Promise
-```ecmascript
+```javascript
 new Promise((resolve, reject) => {
     try {
         resolve(myAsyncMethod(2, 3));
@@ -43,7 +43,7 @@ in the future they will run async a a multithreaded pool.
 
 Returns a Promise which will resolve with the resulting value of the rust op.
 
-```ecmascript
+```javascript
 esses.invoke_rust_op("my_rusty_op", 3, 6).then((answer) => {
     console.info("your rusty answer was %s", answer);
 });
@@ -53,7 +53,7 @@ esses.invoke_rust_op("my_rusty_op", 3, 6).then((answer) => {
 
 Returns the resulting value of the rust op synchronously.
 
-```ecmascript
+```javascript
 let answer = esses.invoke_rust_op_sync("my_rusty_op", 3, 6);
 console.info("your rusty answer was %s", answer);
 ```
@@ -62,7 +62,7 @@ console.info("your rusty answer was %s", answer);
 
 Will run the rust op asynchronously but never return a value to the script engine.
 
-```ecmascript
+```javascript
 esses.invoke_rust_op_void("my_rusty_op", 3, 6);
 console.info("no one knows when your rust op will run");
 ```
@@ -73,7 +73,7 @@ in the console.rs a console object is added to the global scope.
 
 The log, debug, info, trace, error and warn methods are implemented with the option to pass a string and substitutions.
 
-```ecmascript
+```javascript
 console.info("my name is %s and i <s>am</s> feel %i years old", "Andries", 25);
 ```
 
