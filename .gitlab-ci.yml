@@ -21,6 +21,7 @@ before_script:
     - apt-get install -yqq --no-install-recommends autoconf2.13
     - apt-get install -yqq --no-install-recommends automake
     - apt-get install -yqq --no-install-recommends clang
+    - apt-get install -yqq --no-install-recommends llvm
     # this is here as a reminder to never ever install ldd, wil lcause endless loops while comp;iling mozjs
     # - apt-get install -yqq --no-install-recommends lld
     - apt-get install -yqq --no-install-recommends python
