@@ -10,6 +10,7 @@ extern crate lazy_static;
 mod es_sys_scripts;
 pub mod es_utils;
 pub mod esruntimewrapper;
+pub mod esruntimewrapperbuilder;
 pub mod esruntimewrapperinner;
 pub mod esvaluefacade;
 mod features;

@@ -11,39 +11,31 @@ use crate::es_utils::EsErrorInfo;
 use crate::esruntimewrapperinner::{EsRuntimeWrapperInner, ImmutableJob, MutableJob};
 use crate::esvaluefacade::EsValueFacade;
 
+use crate::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
 use crate::taskmanager::TaskManager;
 use std::cell::RefCell;
 use std::time::Duration;
 
 lazy_static! {
-    /// a static Multithread taskmanager used to run rust ops async and multithreaded
+    /// a static Multithreaded taskmanager used to run rust ops async and multithreaded
     static ref HELPER_TASKS: Arc<TaskManager> = Arc::new(TaskManager::new(num_cpus::get()));
 }
 
-/// the EsRuntimeWrapper is a facade that adds all script todos to the SmRuntimeWrapper's MicroTaskManager so they are invoked in a single worker thread
+/// the EsRuntimeWrapper is a facade that adds all script todo's to the SmRuntimeWrapper's MicroTaskManager so they are invoked in a single worker thread
 /// you can wait for those tasks to complete by calling the _sync variants of the public methods here
 pub struct EsRuntimeWrapper {
     inner: Arc<EsRuntimeWrapperInner>,
 }
 
+pub type ModuleCodeLoader = dyn Fn(&str) -> String + Send + Sync + 'static;
+
 impl EsRuntimeWrapper {
-    #[allow(dead_code)]
-    pub fn new() -> Self {
-        let inner = EsRuntimeWrapperInner::new();
-        EsRuntimeWrapper::new_inner(inner)
+    pub fn builder() -> EsRuntimeWrapperBuilder {
+        EsRuntimeWrapperBuilder::new()
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn new_with_module_code_loader<C>(loader: C) -> Self
-    where
-        C: Fn(&str) -> String + Send + Sync + 'static,
-    {
-        let inner = EsRuntimeWrapperInner::new_with_module_code_loader(loader);
-        EsRuntimeWrapper::new_inner(inner)
-    }
-
-    fn new_inner(inner: EsRuntimeWrapperInner) -> Self {
+    pub(crate) fn new_inner(inner: EsRuntimeWrapperInner) -> Self {
         let arc_inner = Arc::new(inner);
         let sm_ref_inner: Weak<EsRuntimeWrapperInner> = Arc::downgrade(&arc_inner);
         let rt = EsRuntimeWrapper { inner: arc_inner };
@@ -198,7 +190,10 @@ pub mod tests {
         let module_code_loader = |file_name: &str| {
             format!("export default () => 123; export const other = Math.sqrt(8); console.log('running imported test module'); \n\nconsole.log('parsing a module from code loader for filename: {}');", file_name)
         };
-        let rt = EsRuntimeWrapper::new_with_module_code_loader(module_code_loader);
+        let rt = EsRuntimeWrapper::builder()
+            .gc_interval(Duration::from_secs(5))
+            .module_code_loader(Box::new(module_code_loader))
+            .build();
 
         rt.do_in_es_runtime_thread_sync(Box::new(|sm_rt| {
             sm_rt.do_with_jsapi(|_rt, _cx, _global| {
@@ -206,8 +201,6 @@ pub mod tests {
                 // crate::es_utils::set_gc_zeal_options(cx);
             })
         }));
-
-        rt.start_gc_deamon(Duration::from_secs(5));
 
         Arc::new(rt)
     }

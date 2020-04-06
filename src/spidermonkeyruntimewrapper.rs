@@ -389,7 +389,16 @@ impl SmRuntime {
 }
 
 thread_local! {
-    pub static MODULE_CACHE: RefCell<LruCache<String, EsPersistentRooted>> = RefCell::new(LruCache::new(50));
+    pub static MODULE_CACHE: RefCell<LruCache<String, EsPersistentRooted>> = RefCell::new(init_cache());
+}
+
+fn init_cache() -> LruCache<String, EsPersistentRooted> {
+    let ct = SM_RT.with(|sm_rt_rc| {
+        let sm_rt = &*sm_rt_rc.borrow();
+        sm_rt.clone_rtw_inner().module_cache_size.clone()
+    });
+
+    LruCache::new(ct)
 }
 
 /// native function used a import function for module loading

@@ -5,6 +5,7 @@ use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JS_DefineFunction;
+use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsval::{JSVal, ObjectValue, UndefinedValue};
 use mozjs::rust::HandleValue;
 use std::str::FromStr;
@@ -97,6 +98,18 @@ pub(crate) fn init(rt: &EsRuntimeWrapper) {
                     b"error\0".as_ptr() as *const libc::c_char,
                     Some(console_error),
                     1,
+                    0,
+                )
+            };
+            assert!(!function.is_null());
+
+            let function = unsafe {
+                JS_DefineFunction(
+                    context,
+                    console_obj_root.handle().into(),
+                    b"assert\0".as_ptr() as *const libc::c_char,
+                    Some(console_assert),
+                    2,
                     0,
                 )
             };
@@ -204,21 +217,25 @@ fn parse_field_value(field: String, value: String) -> String {
 fn parse_line(context: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi::Value) -> String {
     let args = unsafe { CallArgs::from_vp(vp, argc) };
 
-    args.rval().set(UndefinedValue());
-
-    if args.argc_ == 0 {
-        return "".to_string();
-    }
-
-    let arg1 = unsafe { mozjs::rust::Handle::from_raw(args.get(0)) };
-    let message = es_utils::es_value_to_str(context, &arg1.get());
-
     let mut values: Vec<JSVal> = vec![];
-    for x in 1..args.argc_ {
+    for x in 0..args.argc_ {
         let argx: HandleValue = unsafe { mozjs::rust::Handle::from_raw(args.get(x)) };
         let argx_val: mozjs::jsapi::Value = *argx;
         values.push(argx_val);
     }
+
+    args.rval().set(UndefinedValue());
+
+    parse_line2(context, values)
+}
+
+fn parse_line2(context: *mut JSContext, args: Vec<JSVal>) -> String {
+    if args.len() == 0 {
+        return "".to_string();
+    }
+    let mut args = args;
+    let arg1: JSVal = args.remove(0);
+    let message = es_utils::es_value_to_str(context, &arg1);
 
     let mut output = String::new();
     let mut field_code = String::new();
@@ -229,8 +246,8 @@ fn parse_line(context: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi::Value) 
             field_code.push(chr);
             if chr.eq(&'s') || chr.eq(&'d') || chr.eq(&'f') || chr.eq(&'o') || chr.eq(&'i') {
                 // end field
-                if !values.is_empty() {
-                    output.push_str(parse_field(context, field_code, values.remove(0)).as_str());
+                if !args.is_empty() {
+                    output.push_str(parse_field(context, field_code, args.remove(0)).as_str());
                 }
 
                 in_field = false;
@@ -303,6 +320,48 @@ unsafe extern "C" fn console_error(
 ) -> bool {
     //
     log::error!("console: {}", parse_line(context, argc, vp));
+    true
+}
+
+unsafe extern "C" fn console_assert(
+    context: *mut JSContext,
+    argc: u32,
+    vp: *mut mozjs::jsapi::Value,
+) -> bool {
+    let args = CallArgs::from_vp(vp, argc);
+
+    if argc < 2 {
+        JS_ReportErrorASCII(
+            context,
+            b"console.assert requires at least 2 arguments\0".as_ptr() as *const libc::c_char,
+        );
+        return false;
+    }
+
+    let mut values: Vec<JSVal> = vec![];
+    for x in 0..args.argc_ {
+        let argx: HandleValue = mozjs::rust::Handle::from_raw(args.get(x));
+        let argx_val: mozjs::jsapi::Value = *argx;
+        values.push(argx_val);
+    }
+
+    let assertion_val = values.remove(0);
+    if !assertion_val.is_boolean() {
+        JS_ReportErrorASCII(
+            context,
+            b"first argument to console.assert should be a boolean value\0".as_ptr()
+                as *const libc::c_char,
+        );
+        return false;
+    }
+    let assertion: bool = assertion_val.to_boolean();
+
+    args.rval().set(UndefinedValue());
+
+    if assertion {
+        log::info!("console: {}", parse_line2(context, values));
+    }
+
     true
 }
 

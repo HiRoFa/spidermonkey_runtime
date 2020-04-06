@@ -63,7 +63,7 @@ Using the import or export keywords in code passed to eval will not work.
 
 Because your module might use an import statement like `import {stuff} from "my_module.mes";` you need to tell the runtime how to load code from files.
 
-This is done by passing a module_source_loader closure to the EsRuntimeWrapper::new_with_module_code_loader().
+This is done by passing a module_source_loader closure to the ```EsRuntimeWrapper::builder().module_code_loader(module_source_loader).build();```
 
 e.g.
 
@@ -71,7 +71,7 @@ e.g.
 let module_code_loader = |file_name: &str| {
     format!("export default () => 123; export const stuff = Math.sqrt(8);; \n\nconsole.log('parsing a module from code loader for filename: {}');", file_name)
 };
-let rt = EsRuntimeWrapper::new_with_module_code_loader(module_code_loader);
+let rt = EsRuntimeWrapper::builder().module_code_loader(module_source_loader).build();
 ```
   
 ### example

@@ -1,4 +1,5 @@
 use crate::es_utils::EsErrorInfo;
+use crate::esruntimewrapper::ModuleCodeLoader;
 use crate::esvaluefacade::EsValueFacade;
 use crate::microtaskmanager::MicroTaskManager;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
@@ -12,25 +13,19 @@ pub struct EsRuntimeWrapperInner {
     pub(crate) task_manager: Arc<MicroTaskManager>,
     pub(crate) _pre_cleanup_tasks: Vec<Box<dyn Fn(&EsRuntimeWrapperInner) -> () + Send + Sync>>,
     pub(crate) module_source_loader: Option<Box<dyn Fn(&str) -> String + Send + Sync>>,
+    pub(crate) module_cache_size: usize,
 }
 
 impl EsRuntimeWrapperInner {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn build(
+        module_source_loader: Option<Box<ModuleCodeLoader>>,
+        module_cache_size: usize,
+    ) -> Self {
         EsRuntimeWrapperInner {
             task_manager: MicroTaskManager::new(),
             _pre_cleanup_tasks: vec![],
-            module_source_loader: None,
-        }
-    }
-
-    pub(crate) fn new_with_module_code_loader<C>(loader: C) -> Self
-    where
-        C: Fn(&str) -> String + Send + Sync + 'static,
-    {
-        EsRuntimeWrapperInner {
-            task_manager: MicroTaskManager::new(),
-            _pre_cleanup_tasks: vec![],
-            module_source_loader: Some(Box::new(loader)),
+            module_source_loader,
+            module_cache_size,
         }
     }
 

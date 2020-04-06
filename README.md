@@ -8,13 +8,17 @@ This project was started as a hobby project for me to learn rust. I hope some of
 
 # status
 
-Nowhere near production ready, it is untested and i'm pretty sure i created some memory leaks in the unsafe sections...
+Nowhere near production ready, it is untested...
 
 It works with the mozjs crate version 0.10.1 which is already pretty old but there are no newer releases, when i get more comfortable with spidermonkey and mozjs i'll see about using a git pull of a newer version.
 
 Please see the [CHANGELOG](CHANGELOG.md) for what's new.
 
-Currently i'm working towards creating a 0.1 version which has a couple of goals
+0.1 works with mozjs 0.10.1 and meets the goals i've set
+
+For 0.2 the goals is mostly the same but with a much newer mozjs 
+
+# 0.1 goals
 
 * [x] Get a grip on when to use rooted values (Handle) and when to use Values (JSVal) 
 * [x] Easy loading script files
@@ -35,19 +39,31 @@ Currently i'm working towards creating a 0.1 version which has a couple of goals
 * [x] Waiting for Promises from rust
 * [x] import/export statement support
   * [x] cache modules
-* [ ] No more memory leaks
-* [ ] No more segfaults in unit test with gc_zeal_options
+* [x] No more memory leaks
 
 # 0.2 goals
 
-* [ ] Use PersistentRooted instead of deprecated Add\*Root and Remove\*Root
+* [ ] use newer mozjs
+
+# 0.2.1 goals
+
+* [ ] run rust-ops multithreaded
 * [ ] typedArrays from and to Vecs
+* [ ] complete set of from/to primitives in EsValueFacade
 
-# future goals / todo's
+# 0.2.2 goals
 
+* [ ] Use PersistentRooted instead of deprecated Add\*Root and Remove\*Root
+
+# 1.0 goals
+
+* [ ] No more segfaults in unit test with gc_zeal_options
+
+# 2.0 goals
+
+* [ ] TypeScript support
 * [ ] Interactive Debugging
 * [ ] Profiling
-* [ ] TypeScript support
 * [ ] much more
 
 # Other plans
@@ -64,7 +80,7 @@ Cargo.toml
 
 ```toml
 [dependencies]
-es_runtime = "0.0.6"
+es_runtime = "0.1"
 ```
 
 my_app.rs
@@ -75,11 +91,11 @@ my_app.rs
     fn example() {
         // start a runtime
 
-        let rt = EsRuntimeWrapper::new();
+        let rt = EsRuntimeWrapper::builder()
+                    // run the garbage collector every 5 secs
+                    .gc_interval(Duration::from_secs(5))
+                    .build();
     
-        // run the garbage collector every 5 secs
-        rt.start_gc_deamon(Duration::from_secs(5));
-
         // create an example object
 
         rt.eval_sync("this.myObj = {a: 1, b: 2};", "test1.es")
