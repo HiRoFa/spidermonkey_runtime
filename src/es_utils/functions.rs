@@ -140,7 +140,7 @@ pub fn value_is_function(context: *mut JSContext, val: JSVal) -> bool {
 
 /// check whether an object is a function
 pub fn object_is_function(cx: *mut JSContext, obj: *mut JSObject) -> bool {
-    unsafe { JS_ObjectIsFunction(cx, obj) }
+    unsafe { JS_ObjectIsFunction(obj) }
 }
 
 /// define a new native function on an object

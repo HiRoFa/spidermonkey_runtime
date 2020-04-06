@@ -167,7 +167,7 @@ pub fn es_jsstring_to_string(
 /// call the garbage collector
 pub fn gc(context: *mut JSContext) {
     unsafe {
-        JS_GC(context);
+        JS_GC(context, mozjs::jsapi::GCReason::API);
     }
 }
 
@@ -197,6 +197,7 @@ mod tests {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
                 sm_rt.do_with_jsapi(|rt, cx, global| {
                     rooted!(in(cx) let mut rval = UndefinedValue());
+
                     let _eval_res = rt.evaluate_script(
                         global,
                         "('this is a string')",

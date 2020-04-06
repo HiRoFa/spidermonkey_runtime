@@ -25,16 +25,14 @@ pub fn object_is_promise(context: *mut JSContext, obj: HandleObject) -> bool {
 /// create a new Promise, this will be used later by invoke_rust_op
 pub fn new_promise(context: *mut JSContext) -> *mut JSObject {
     // second is executor
-    // third is proto
+
     rooted!(in(context) let null = NullValue().to_object());
     let null_handle: HandleObject = null.handle();
-    unsafe { NewPromiseObject(context, null_handle, null_handle) }
+    unsafe { NewPromiseObject(context, null_handle) }
 }
 
 pub fn new_promise_with_exe(context: *mut JSContext, executor: HandleObject) -> *mut JSObject {
-    rooted!(in(context) let null = NullValue().to_object());
-    let null_handle: HandleObject = null.handle();
-    unsafe { NewPromiseObject(context, executor, null_handle) }
+    unsafe { NewPromiseObject(context, executor) }
 }
 
 #[cfg(test)]

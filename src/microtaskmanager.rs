@@ -94,6 +94,15 @@ impl MicroTaskManager {
         self.empty_cond.notify_all();
     }
 
+    pub fn is_empty(&self) -> bool {
+        return !self.has_local_jobs() && !self.has_jobs();
+    }
+
+    fn has_jobs(&self) -> bool {
+        let mut jobs_lck = self.jobs.lock().unwrap();
+        !jobs_lck.is_empty()
+    }
+
     fn has_local_jobs(&self) -> bool {
         LOCAL_JOBS.with(|rc| {
             let local_jobs = &*rc.borrow();

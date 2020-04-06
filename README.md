@@ -149,11 +149,14 @@ Currently I have only compiled this on and for a 64 bit linux machine (I use ope
 
 Besides rust you'll need to install the following packages to compile the mozjs crate
 
-* gcc-7
-* autoconf2.13
-* automake
-* clang
-* python
+* from 0.0.1
+    * gcc-7
+    * autoconf2.13
+    * automake
+    * clang
+    * python
+* // from 0.2.0
+    * llvm (mozjs_sys needs llvm-objdump)
 
 for more detailed info please visit https://github.com/servo/mozjs#building 
 

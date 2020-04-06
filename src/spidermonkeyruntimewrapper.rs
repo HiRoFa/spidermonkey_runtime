@@ -1,34 +1,42 @@
 use crate::es_utils;
+use crate::es_utils::rooting::EsPersistentRooted;
 use crate::es_utils::EsErrorInfo;
 use crate::esruntimewrapper::EsRuntimeWrapper;
-
-use crate::esvaluefacade::EsValueFacade;
-use log::{debug, trace};
-
-use crate::es_utils::rooting::EsPersistentRooted;
 use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
+use crate::esvaluefacade::EsValueFacade;
+
+use log::{debug, trace};
 use lru::LruCache;
+
+use mozjs::glue::{CreateJobQueue, JobQueueTraps};
 use mozjs::jsapi::CallArgs;
-use mozjs::jsapi::CompartmentOptions;
-use mozjs::jsapi::JSAutoCompartment;
+use mozjs::jsapi::Handle as RawHandle;
+use mozjs::jsapi::HandleValue;
+use mozjs::jsapi::HandleValue as RawHandleValue;
+use mozjs::jsapi::JSAutoRealm;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSFunction;
 use mozjs::jsapi::JSObject;
+use mozjs::jsapi::JSString;
 use mozjs::jsapi::JS_DefineFunction;
 use mozjs::jsapi::JS_NewGlobalObject;
 use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::OnNewGlobalHookOption;
-use mozjs::jsapi::SetEnqueuePromiseJobCallback;
+use mozjs::jsapi::SetJobQueue;
 use mozjs::jsapi::SetModuleResolveHook;
 use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsval::{JSVal, ObjectValue, UndefinedValue};
 use mozjs::panic::wrap_panic;
 use mozjs::rust::wrappers::JS_CallFunctionValue;
-use mozjs::rust::{HandleObject, HandleValue, JSEngine};
-use mozjs::rust::{Runtime, SIMPLE_GLOBAL_CLASS};
+use mozjs::rust::HandleObject;
+use mozjs::rust::Runtime;
+use mozjs::rust::SIMPLE_GLOBAL_CLASS;
+use mozjs::rust::{JSEngine, RealmOptions};
+
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Deref;
+use std::os::raw::c_void;
 use std::panic::AssertUnwindSafe;
 use std::ptr;
 use std::rc::Rc;
@@ -52,9 +60,12 @@ thread_local! {
     pub(crate) static SM_RT: RefCell<SmRuntime> = RefCell::new(SmRuntime::new());
 }
 
-lazy_static! {
-/// the reusable ENGINE object which is required to construct a new Runtime
-    static ref ENGINE: Arc<JSEngine> = { JSEngine::init().unwrap() };
+//lazy_static! {
+//    /// the reusable ENGINE object which is required to construct a new Runtime
+//    static ref ENGINE: Arc<JSEngine> = { Arc::new(JSEngine::init().unwrap()) };
+//}
+thread_local! {
+    pub static ENGINE: RefCell<JSEngine> = RefCell::new(JSEngine::init().unwrap());
 }
 
 impl SmRuntime {
@@ -69,12 +80,15 @@ impl SmRuntime {
     /// here we actualy construct a new Runtime
     fn new() -> Self {
         debug!("init SmRuntime {}", thread_id::get());
-        let engine: Arc<JSEngine> = ENGINE.clone();
 
-        let runtime = mozjs::rust::Runtime::new(engine);
+        let mut runtime = ENGINE.with(|engine_rc| {
+            let engine: &JSEngine = &*engine_rc.borrow();
+            mozjs::rust::Runtime::new(engine.handle())
+        });
+
         let context = runtime.cx();
         let h_option = OnNewGlobalHookOption::FireOnNewGlobalHook;
-        let c_option = CompartmentOptions::default();
+        let c_option = RealmOptions::default();
 
         let global_obj;
 
@@ -84,11 +98,11 @@ impl SmRuntime {
                 &SIMPLE_GLOBAL_CLASS,
                 ptr::null_mut(),
                 h_option,
-                &c_option,
+                &*c_option,
             );
         }
 
-        let ret = SmRuntime {
+        let mut ret = SmRuntime {
             runtime,
             global_obj,
             op_container: HashMap::new(),
@@ -127,25 +141,23 @@ impl SmRuntime {
 
     fn init_promise_callbacks(&self) {
         // this tells JSAPI how to schedule jobs for Promises
+
+        let job_queue = unsafe { CreateJobQueue(&JOB_QUEUE_TRAPS, ptr::null_mut()) };
+
         self.do_with_jsapi(|_rt, cx, _global| unsafe {
-            SetEnqueuePromiseJobCallback(cx, Some(enqueue_job), ptr::null_mut());
+            SetJobQueue(cx, job_queue);
         });
     }
 
-    fn init_import_callbacks(&self) {
+    fn init_import_callbacks(&mut self) {
         // this tells the runtime how to resolve modules
-        self.do_with_jsapi(|_rt, cx, _global| {
-            let func: *mut JSFunction =
-                es_utils::functions::new_native_function(cx, "import_module", Some(import_module));
-            rooted!(in (cx) let func_root = func);
-
-            unsafe {
-                SetModuleResolveHook(cx, func_root.handle().into());
-            }
+        let mut js_runtime = &mut self.runtime.rt();
+        self.do_with_jsapi(|_rt, _cx, _global| {
+            unsafe { SetModuleResolveHook(*js_runtime, Some(import_module)) };
         });
     }
 
-    /// call a function by name, the function needs to be defined on the root of the global scope
+    /// call a function by name
     pub fn call(
         &self,
         obj_names: Vec<&str>,
@@ -380,7 +392,7 @@ impl SmRuntime {
         let ret;
         {
             trace!("do_with_jsapi _ac");
-            let _ac = JSAutoCompartment::new(cx, global);
+            let _ac = JSAutoRealm::new(cx, global);
             trace!("do_with_jsapi consume");
             ret = consumer(rt, cx, global_root.handle());
         }
@@ -403,38 +415,24 @@ fn init_cache() -> LruCache<String, EsPersistentRooted> {
 
 /// native function used a import function for module loading
 unsafe extern "C" fn import_module(
-    context: *mut JSContext,
-    argc: u32,
-    vp: *mut mozjs::jsapi::Value,
-) -> bool {
-    let args = CallArgs::from_vp(vp, argc);
-
-    if args.argc_ != 2 {
-        JS_ReportErrorASCII(
-            context,
-            b"import_module() requires exactly 2 arguments\0".as_ptr() as *const libc::c_char,
-        );
-        return false;
-    }
-
-    let arg_module = mozjs::rust::Handle::from_raw(args.get(0));
-    let arg_specifier = mozjs::rust::Handle::from_raw(args.get(1));
-
-    let file_name = es_utils::es_value_to_str(context, &*arg_specifier);
+    cx: *mut JSContext,
+    reference_private: RawHandleValue,
+    specifier: RawHandle<*mut JSString>,
+) -> *mut JSObject {
+    let file_name = es_utils::es_jsstring_to_string(cx, *specifier);
 
     // see if we have that module
-    let cached: bool = MODULE_CACHE.with(|cache_rc| {
+    let cached: Option<*mut JSObject> = MODULE_CACHE.with(|cache_rc| {
         let cache = &mut *cache_rc.borrow_mut();
         if let Some(mpr) = cache.get(&file_name) {
             trace!("found a cached module for {}", &file_name);
             // set rval here
-            args.rval().set(ObjectValue(mpr.get()));
-            return true;
+            return Some(mpr.get());
         }
-        false
+        None
     });
-    if cached {
-        return true;
+    if cached.is_some() {
+        return cached.unwrap();
     }
 
     // see if we got a module code loader
@@ -447,11 +445,8 @@ unsafe extern "C" fn import_module(
         return format!("");
     });
 
-    // is this my outer module or something?
-    let _js_module_obj: *mut JSObject = arg_module.to_object();
-
     let compiled_mod_obj_res =
-        es_utils::modules::compile_module(context, module_src.as_str(), file_name.as_str());
+        es_utils::modules::compile_module(cx, module_src.as_str(), file_name.as_str());
 
     if compiled_mod_obj_res.is_err() {
         let err = compiled_mod_obj_res.err().unwrap();
@@ -459,8 +454,8 @@ unsafe extern "C" fn import_module(
             "error loading module: at {}:{}:{} > {}\n",
             err.filename, err.lineno, err.column, err.message
         );
-        JS_ReportErrorASCII(context, err_str.as_ptr() as *const libc::c_char);
-        return false;
+        JS_ReportErrorASCII(cx, err_str.as_ptr() as *const libc::c_char);
+        return *ptr::null_mut::<*mut JSObject>();
     }
 
     let compiled_module: *mut JSObject = compiled_mod_obj_res.ok().unwrap();
@@ -468,12 +463,11 @@ unsafe extern "C" fn import_module(
     MODULE_CACHE.with(|cache_rc| {
         trace!("caching module for {}", &file_name);
         let cache = &mut *cache_rc.borrow_mut();
-        let mpr = EsPersistentRooted::new_from_obj(context, compiled_module);
+        let mpr = EsPersistentRooted::new_from_obj(cx, compiled_module);
         cache.put(file_name, mpr);
     });
 
-    args.rval().set(ObjectValue(compiled_module));
-    return true;
+    return compiled_module;
 }
 
 /// deprecated log function used for debugging, should be removed now that the native console obj is working
@@ -499,7 +493,6 @@ unsafe extern "C" fn log(context: *mut JSContext, argc: u32, vp: *mut mozjs::jsa
 
 /// this function is called from script when the script invokes esses.invoke_rust_op
 /// it is used to invoke native rust functions from script
-/// based on the value fo the second param it may return synchronously, or return a new Promise object, or just run asynchronously
 unsafe extern "C" fn invoke_rust_op(
     context: *mut JSContext,
     argc: u32,
@@ -516,7 +509,7 @@ unsafe extern "C" fn invoke_rust_op(
         return false;
     }
 
-    let op_name_arg: HandleValue = mozjs::rust::Handle::from_raw(args.get(0));
+    let op_name_arg: mozjs::rust::HandleValue = mozjs::rust::Handle::from_raw(args.get(0));
     let op_name = es_utils::es_value_to_str(context, &op_name_arg.get());
 
     trace!("running rust-op {} with and {} args", op_name, args.argc_);
@@ -534,7 +527,7 @@ unsafe extern "C" fn invoke_rust_op(
         rooted!(in (context) let global_root = global);
 
         for x in 1..args.argc_ {
-            let var_arg: HandleValue = mozjs::rust::Handle::from_raw(args.get(x));
+            let var_arg: mozjs::rust::HandleValue = mozjs::rust::Handle::from_raw(args.get(x));
             args_vec.push(EsValueFacade::new_v(
                 rt,
                 context,
@@ -574,12 +567,13 @@ impl Drop for SmRuntime {
 /// asynchronously because a Promise was constructed
 /// the callback obj is rooted and unrooted when dropped
 /// the async job is fed to the microtaskmanager and invoked later
-unsafe extern "C" fn enqueue_job(
-    cx: *mut mozjs::jsapi::JSContext,
-    job: mozjs::jsapi::Handle<*mut mozjs::jsapi::JSObject>,
-    _allocation_site: mozjs::jsapi::Handle<*mut mozjs::jsapi::JSObject>,
-    _obj3: mozjs::jsapi::Handle<*mut mozjs::jsapi::JSObject>,
-    _data: *mut std::ffi::c_void,
+unsafe extern "C" fn enqueue_promise_job(
+    extra: *const c_void,
+    cx: *mut JSContext,
+    promise: mozjs::jsapi::HandleObject,
+    job: mozjs::jsapi::HandleObject,
+    _allocation_site: mozjs::jsapi::HandleObject,
+    incumbent_global: mozjs::jsapi::HandleObject,
 ) -> bool {
     wrap_panic(
         AssertUnwindSafe(move || {
@@ -625,6 +619,36 @@ unsafe extern "C" fn enqueue_job(
 /// https://github.com/servo/servo
 /// so it falls under this LICENSE https://raw.githubusercontent.com/servo/servo/master/LICENSE
 ///
+///
+#[allow(unsafe_code)]
+unsafe extern "C" fn get_incumbent_global(_: *const c_void, _: *mut JSContext) -> *mut JSObject {
+    wrap_panic(
+        AssertUnwindSafe(|| {
+            // todo what to do here
+            ptr::null_mut()
+        }),
+        ptr::null_mut(),
+    )
+}
+
+#[allow(unsafe_code)]
+unsafe extern "C" fn empty(extra: *const c_void) -> bool {
+    wrap_panic(
+        AssertUnwindSafe(|| {
+            SM_RT.with(|sm_rt_rc| {
+                let sm_rt = &*sm_rt_rc.borrow();
+                sm_rt.clone_rtw_inner().task_manager.is_empty()
+            })
+        }),
+        false,
+    )
+}
+
+static JOB_QUEUE_TRAPS: JobQueueTraps = JobQueueTraps {
+    getIncumbentGlobal: Some(get_incumbent_global),
+    enqueuePromiseJob: Some(enqueue_promise_job),
+    empty: Some(empty),
+};
 
 struct PromiseJobCallback {
     pub parent: CallbackFunction,

@@ -2,6 +2,7 @@ use crate::es_utils::{report_es_ex, EsErrorInfo};
 
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
+use mozjs::rust::transform_u16_to_source_text;
 use std::ffi::CString;
 use std::ptr;
 
@@ -13,31 +14,16 @@ pub fn compile_module(
     // use mozjs::jsapi::CompileModule; todo, how are the wrapped once different?
     // https://doc.servo.org/mozjs/jsapi/fn.CompileModule.html
 
-    rooted!(in(context) let mut module_script_root = ptr::null_mut::<mozjs::jsapi::JSObject>());
-
     let src_vec: Vec<u16> = src.encode_utf16().collect();
     let file_name_cstr = CString::new(file_name).unwrap();
-    let options = mozjs::rust::CompileOptionsWrapper::new(context, file_name_cstr.as_ptr(), 1);
-    let mut source = mozjs::jsapi::SourceBufferHolder {
-        data_: src_vec.as_ptr(),
-        length_: src_vec.len() as libc::size_t,
-        ownsChars_: false,
-    };
+    let options =
+        unsafe { mozjs::rust::CompileOptionsWrapper::new(context, file_name_cstr.as_ptr(), 1) };
+    let mut source = transform_u16_to_source_text(&src_vec);
 
-    let res = unsafe {
-        mozjs::rust::wrappers::CompileModule(
-            context,
-            options.ptr,
-            &mut source,
-            module_script_root.handle_mut(),
-        )
-    };
+    let compiled_module: *mut JSObject =
+        unsafe { mozjs::jsapi::CompileModule(context, options.ptr, &mut source) };
 
-    if !res {
-        if let Some(err) = report_es_ex(context) {
-            return Err(err);
-        }
-    }
+    rooted!(in(context) let mut module_script_root = compiled_module);
 
     let res =
         unsafe { mozjs::rust::wrappers::ModuleInstantiate(context, module_script_root.handle()) };
@@ -55,7 +41,7 @@ pub fn compile_module(
         }
     }
 
-    Ok(*module_script_root)
+    Ok(compiled_module)
 }
 
 #[cfg(test)]

@@ -6,16 +6,18 @@ use mozjs::jsapi::JSClassOps;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JS_GetConstructor;
-use mozjs::jsapi::JS_GetObjectPrototype;
 use mozjs::jsapi::JS_GetProperty;
+use mozjs::jsapi::JS_GetPrototype;
 use mozjs::jsapi::JS_NewObjectWithGivenProto;
 use mozjs::jsapi::JS_NewPlainObject;
+use mozjs::jsapi::MutableHandleObject;
 use mozjs::jsapi::JSCLASS_FOREGROUND_FINALIZE;
 use mozjs::jsapi::JSITER_OWNONLY;
 use mozjs::jsval::{JSVal, UndefinedValue};
 use mozjs::rust::jsapi_wrapped::GetPropertyKeys;
 use mozjs::rust::wrappers::JS_DefineProperty;
 use mozjs::rust::{HandleObject, HandleValue, IdVector, IntoHandle, MutableHandleValue};
+use std::ptr;
 
 /// get a single member of a JSObject
 #[allow(dead_code)]
@@ -116,10 +118,12 @@ static CLASS_OPS: JSClassOps = JSClassOps {
 };
 
 static CLASS: JSClass = JSClass {
-    name: b"SimpleClass\0" as *const u8 as *const libc::c_char,
-    flags: JSCLASS_FOREGROUND_FINALIZE,
-    cOps: &CLASS_OPS as *const JSClassOps,
-    reserved: [0 as *mut _; 3],
+    name: b"EventTargetPrototype\0" as *const u8 as *const libc::c_char,
+    flags: 0,
+    cOps: 0 as *const _,
+    spec: ptr::null(),
+    ext: ptr::null(),
+    oOps: ptr::null(),
 };
 
 /// get the prototype of an object
@@ -127,20 +131,21 @@ static CLASS: JSClass = JSClass {
 pub fn get_prototype(
     context: *mut JSContext,
     obj: HandleObject,
-) -> Result<*mut JSObject, EsErrorInfo> {
-    let ret: *mut JSObject = unsafe { JS_GetObjectPrototype(context, obj.into_handle()) };
+    ret_val: MutableHandleObject,
+) -> Result<(), EsErrorInfo> {
+    let ok = unsafe { JS_GetPrototype(context, obj.into_handle(), ret_val) };
 
     // todo rebuild with ret_val: MutableHandle instead of returning Value
 
-    if ret.is_null() {
+    if !ok {
         let err_opt = report_es_ex(context);
         if err_opt.is_some() {
             Err(err_opt.unwrap())
         } else {
-            Ok(ret)
+            Ok(())
         }
     } else {
-        Ok(ret)
+        Ok(())
     }
 }
 
@@ -169,9 +174,9 @@ pub fn get_constructor(
 /// get all the propertynames of an object
 #[allow(dead_code)]
 pub fn get_js_obj_prop_names(context: *mut JSContext, obj: HandleObject) -> Vec<String> {
-    let ids = unsafe { IdVector::new(context) };
+    let mut ids = unsafe { IdVector::new(context) };
 
-    assert!(unsafe { GetPropertyKeys(context, obj.into(), JSITER_OWNONLY, ids.get()) });
+    assert!(unsafe { GetPropertyKeys(context, obj.into(), JSITER_OWNONLY, ids.handle_mut()) });
 
     let mut ret: Vec<String> = vec![];
 
