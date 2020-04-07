@@ -11,7 +11,7 @@ use mozjs::jsapi::JS_GetPropertyById;
 use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_SetElement;
 use mozjs::jsapi::JS::HandleValueArray;
-use mozjs::jsval::{JSVal, ObjectValue, UndefinedValue};
+use mozjs::jsval::{JSVal, ObjectValue};
 use mozjs::rust::{HandleObject, HandleValue, MutableHandleValue};
 
 /// check whether or not an Object is an Array
@@ -82,7 +82,7 @@ pub fn get_array_element(
     // but the glue is here so thats easier
 
     rooted!(in (context) let mut mutable_handle_id = mozjs::jsapi::PropertyKey::default());
-    let id = unsafe { int_to_jsid(idx as i32, mutable_handle_id.handle_mut().into()) };
+    unsafe { int_to_jsid(idx as i32, mutable_handle_id.handle_mut().into()) };
 
     let ok = unsafe {
         JS_GetPropertyById(

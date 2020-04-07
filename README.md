@@ -10,13 +10,10 @@ This project was started as a hobby project for me to learn rust. I hope some of
 
 Nowhere near production ready, it is untested...
 
-It works with the mozjs crate version 0.10.1 which is already pretty old but there are no newer releases, when i get more comfortable with spidermonkey and mozjs i'll see about using a git pull of a newer version.
+From 0.2.0 it works with the latest mozjs crate version 0.13.0.  
+0.1.0 and older worked with the mozjs 0.10.1 release. (mozjs does not publish new release anymore because of a [bug](https://github.com/rust-lang/cargo/issues/6917) in cargo)
 
 Please see the [CHANGELOG](CHANGELOG.md) for what's new.
-
-0.1 works with mozjs 0.10.1 and meets the goals i've set
-
-For 0.2 the goals is mostly the same but with a much newer mozjs 
 
 # 0.1 goals
 
@@ -43,15 +40,17 @@ For 0.2 the goals is mostly the same but with a much newer mozjs
 
 # 0.2 goals
 
-* [ ] use newer mozjs
+* [x] use newer mozjs
 
-# 0.2.1 goals
+# 0.2.x goals
 
-* [ ] run rust-ops multithreaded
+* [ ] more tests for e.g. error handling in module loading, error handling in promises
+* [ ] dynamic imports
+* [ ] run rust-ops multithreaded, and return Promises from rust
 * [ ] typedArrays from and to Vecs
 * [ ] complete set of from/to primitives in EsValueFacade
 
-# 0.2.2 goals
+# 0.3 goals
 
 * [ ] Use PersistentRooted instead of deprecated Add\*Root and Remove\*Root
 
@@ -80,7 +79,7 @@ Cargo.toml
 
 ```toml
 [dependencies]
-es_runtime = "0.1"
+es_runtime = "0.2"
 ```
 
 my_app.rs

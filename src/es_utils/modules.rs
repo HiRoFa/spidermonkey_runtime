@@ -4,7 +4,6 @@ use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::rust::transform_u16_to_source_text;
 use std::ffi::CString;
-use std::ptr;
 
 pub fn compile_module(
     context: *mut JSContext,

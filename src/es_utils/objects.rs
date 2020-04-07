@@ -2,7 +2,6 @@ use crate::es_utils::{es_jsstring_to_string, es_value_to_str, report_es_ex, EsEr
 use mozjs::glue::RUST_JSID_IS_STRING;
 use mozjs::glue::RUST_JSID_TO_STRING;
 use mozjs::jsapi::JSClass;
-use mozjs::jsapi::JSClassOps;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JS_GetConstructor;
@@ -11,7 +10,6 @@ use mozjs::jsapi::JS_GetPrototype;
 use mozjs::jsapi::JS_NewObjectWithGivenProto;
 use mozjs::jsapi::JS_NewPlainObject;
 use mozjs::jsapi::MutableHandleObject;
-use mozjs::jsapi::JSCLASS_FOREGROUND_FINALIZE;
 use mozjs::jsapi::JSITER_OWNONLY;
 use mozjs::jsval::{JSVal, UndefinedValue};
 use mozjs::rust::jsapi_wrapped::GetPropertyKeys;
@@ -102,20 +100,6 @@ pub fn new_object_from_prototype(
         Ok(ret)
     }
 }
-
-static CLASS_OPS: JSClassOps = JSClassOps {
-    addProperty: None,
-    delProperty: None,
-    enumerate: None,
-    newEnumerate: None,
-    resolve: None,
-    mayResolve: None,
-    finalize: None,
-    call: None,
-    hasInstance: None,
-    construct: None,
-    trace: None,
-};
 
 static CLASS: JSClass = JSClass {
     name: b"EventTargetPrototype\0" as *const u8 as *const libc::c_char,

@@ -1,3 +1,7 @@
+# 0.2.0
+
+* use latest mozjs from github
+
 # 0.1.0
 
 * Builder for EsRuntimeWrapper
@@ -6,7 +10,7 @@
 # 0.0.6
 
 * major refactor of how to use the JSAPI, this is now always done by ```sm_rt.do_with_jsapi()``` so we can more predictably root the global and enter the compartment.
-* caching of modules, so they realy only run once 
+* caching of modules, so they really only run once 
 
 # 0.0.5
 
@@ -16,7 +20,7 @@
 
 # 0.0.4
 
-* added utils for arrays and objects (arrays.rs and obejcts.rs)
+* added utils for arrays and objects (arrays.rs and objects.rs)
 * refactoring of getting obj props (root first)
 * created eval_void methods to eval without copying result to EsValueFacade
 * EsValueFacade can now be used to convert Vecs to Arrays and vice versa

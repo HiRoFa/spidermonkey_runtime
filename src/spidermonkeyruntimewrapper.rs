@@ -11,11 +11,9 @@ use lru::LruCache;
 use mozjs::glue::{CreateJobQueue, JobQueueTraps};
 use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::Handle as RawHandle;
-use mozjs::jsapi::HandleValue;
 use mozjs::jsapi::HandleValue as RawHandleValue;
 use mozjs::jsapi::JSAutoRealm;
 use mozjs::jsapi::JSContext;
-use mozjs::jsapi::JSFunction;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JSString;
 use mozjs::jsapi::JS_DefineFunction;
@@ -81,7 +79,7 @@ impl SmRuntime {
     fn new() -> Self {
         debug!("init SmRuntime {}", thread_id::get());
 
-        let mut runtime = ENGINE.with(|engine_rc| {
+        let runtime = ENGINE.with(|engine_rc| {
             let engine: &JSEngine = &*engine_rc.borrow();
             mozjs::rust::Runtime::new(engine.handle())
         });
@@ -121,15 +119,6 @@ impl SmRuntime {
             let function = JS_DefineFunction(
                 cx,
                 global.into(),
-                b"__log\0".as_ptr() as *const libc::c_char,
-                Some(log),
-                1,
-                0,
-            );
-            assert!(!function.is_null());
-            let function = JS_DefineFunction(
-                cx,
-                global.into(),
                 b"__invoke_rust_op\0".as_ptr() as *const libc::c_char,
                 Some(invoke_rust_op),
                 1,
@@ -151,7 +140,7 @@ impl SmRuntime {
 
     fn init_import_callbacks(&mut self) {
         // this tells the runtime how to resolve modules
-        let mut js_runtime = &mut self.runtime.rt();
+        let js_runtime = &mut self.runtime.rt();
         self.do_with_jsapi(|_rt, _cx, _global| {
             unsafe { SetModuleResolveHook(*js_runtime, Some(import_module)) };
         });
@@ -416,7 +405,7 @@ fn init_cache() -> LruCache<String, EsPersistentRooted> {
 /// native function used a import function for module loading
 unsafe extern "C" fn import_module(
     cx: *mut JSContext,
-    reference_private: RawHandleValue,
+    _reference_private: RawHandleValue,
     specifier: RawHandle<*mut JSString>,
 ) -> *mut JSObject {
     let file_name = es_utils::es_jsstring_to_string(cx, *specifier);
@@ -468,27 +457,6 @@ unsafe extern "C" fn import_module(
     });
 
     return compiled_module;
-}
-
-/// deprecated log function used for debugging, should be removed now that the native console obj is working
-unsafe extern "C" fn log(context: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi::Value) -> bool {
-    let args = CallArgs::from_vp(vp, argc);
-
-    if args.argc_ != 1 {
-        JS_ReportErrorASCII(
-            context,
-            b"log() requires exactly 1 argument\0".as_ptr() as *const libc::c_char,
-        );
-        return false;
-    }
-
-    let arg1 = mozjs::rust::Handle::from_raw(args.get(0));
-    let message = es_utils::es_value_to_str(context, &arg1.get());
-
-    println!("__log: {} from thread {}", message, thread_id::get());
-
-    args.rval().set(UndefinedValue());
-    return true;
 }
 
 /// this function is called from script when the script invokes esses.invoke_rust_op
@@ -568,12 +536,12 @@ impl Drop for SmRuntime {
 /// the callback obj is rooted and unrooted when dropped
 /// the async job is fed to the microtaskmanager and invoked later
 unsafe extern "C" fn enqueue_promise_job(
-    extra: *const c_void,
+    _extra: *const c_void,
     cx: *mut JSContext,
-    promise: mozjs::jsapi::HandleObject,
+    _promise: mozjs::jsapi::HandleObject,
     job: mozjs::jsapi::HandleObject,
     _allocation_site: mozjs::jsapi::HandleObject,
-    incumbent_global: mozjs::jsapi::HandleObject,
+    _incumbent_global: mozjs::jsapi::HandleObject,
 ) -> bool {
     wrap_panic(
         AssertUnwindSafe(move || {
@@ -632,7 +600,7 @@ unsafe extern "C" fn get_incumbent_global(_: *const c_void, _: *mut JSContext) -
 }
 
 #[allow(unsafe_code)]
-unsafe extern "C" fn empty(extra: *const c_void) -> bool {
+unsafe extern "C" fn empty(_extra: *const c_void) -> bool {
     wrap_panic(
         AssertUnwindSafe(|| {
             SM_RT.with(|sm_rt_rc| {

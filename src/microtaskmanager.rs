@@ -99,7 +99,7 @@ impl MicroTaskManager {
     }
 
     fn has_jobs(&self) -> bool {
-        let mut jobs_lck = self.jobs.lock().unwrap();
+        let jobs_lck = self.jobs.lock().unwrap();
         !jobs_lck.is_empty()
     }
 
