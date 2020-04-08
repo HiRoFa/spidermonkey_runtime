@@ -8,15 +8,14 @@ This project was started as a hobby project for me to learn rust. I hope some of
 
 # status
 
-Nowhere near production ready, it is untested...
+for the current status and versions please see https://gitlab.com/drfos/es_runtime
 
-It works with the mozjs crate version 0.10.1 which is already pretty old but there are no newer releases, when i get more comfortable with spidermonkey and mozjs i'll see about using a git pull of a newer version.
+The version published on crates.io is base son mozjs 0.10.1 which is the latest published verion of mozjs.
+
+The more current version depends on the github repo of mozjs but because of that it cannot be published to crates.io
 
 Please see the [CHANGELOG](CHANGELOG.md) for what's new.
 
-0.1 works with mozjs 0.10.1 and meets the goals i've set
-
-For 0.2 the goals is mostly the same but with a much newer mozjs 
 
 # 0.1 goals
 
@@ -41,36 +40,15 @@ For 0.2 the goals is mostly the same but with a much newer mozjs
   * [x] cache modules
 * [x] No more memory leaks
 
-# 0.2 goals
+# 0.2 and beyond goals
 
-* [ ] use newer mozjs
-
-# 0.2.1 goals
-
-* [ ] run rust-ops multithreaded
-* [ ] typedArrays from and to Vecs
-* [ ] complete set of from/to primitives in EsValueFacade
-
-# 0.2.2 goals
-
-* [ ] Use PersistentRooted instead of deprecated Add\*Root and Remove\*Root
-
-# 1.0 goals
-
-* [ ] No more segfaults in unit test with gc_zeal_options
-
-# 2.0 goals
-
-* [ ] TypeScript support
-* [ ] Interactive Debugging
-* [ ] Profiling
-* [ ] much more
+please see https://gitlab.com/drfos/es_runtime
 
 # Other plans
 
 I'm also working on a more feature rich runtime with a commandline tool and also an application server based on this runtime
 
-These are in a very early testing stage and may become available later as a separate project.
+for updates on the status of thos please see https://gitlab.com/drfos
 
 I'dd like to hear what you would want to see in this project and or what you'd like to use it for, please drop me a line @ incoming+drfos-es-runtime-17727229-issue-@incoming.gitlab.com
 
