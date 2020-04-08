@@ -43,6 +43,8 @@ impl EsRuntimeWrapper {
         // pass arc around inner to sm_rt thread
 
         rt.inner.task_manager.exe_task(move || {
+            // todo this should also be in init_info
+
             crate::spidermonkeyruntimewrapper::SM_RT.with(move |sm_rc: &RefCell<SmRuntime>| {
                 let sm_rt = &mut *sm_rc.borrow_mut();
                 sm_rt.opt_es_rt_inner = Some(sm_ref_inner);

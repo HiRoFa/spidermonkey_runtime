@@ -27,9 +27,9 @@ use mozjs::jsval::{JSVal, ObjectValue, UndefinedValue};
 use mozjs::panic::wrap_panic;
 use mozjs::rust::wrappers::JS_CallFunctionValue;
 use mozjs::rust::HandleObject;
+use mozjs::rust::RealmOptions;
 use mozjs::rust::Runtime;
 use mozjs::rust::SIMPLE_GLOBAL_CLASS;
-use mozjs::rust::{JSEngine, RealmOptions};
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -58,14 +58,6 @@ thread_local! {
     pub(crate) static SM_RT: RefCell<SmRuntime> = RefCell::new(SmRuntime::new());
 }
 
-//lazy_static! {
-//    /// the reusable ENGINE object which is required to construct a new Runtime
-//    static ref ENGINE: Arc<JSEngine> = { Arc::new(JSEngine::init().unwrap()) };
-//}
-thread_local! {
-    pub static ENGINE: RefCell<JSEngine> = RefCell::new(JSEngine::init().unwrap());
-}
-
 impl SmRuntime {
     pub fn clone_rtw_inner(&self) -> Arc<EsRuntimeWrapperInner> {
         self.opt_es_rt_inner
@@ -74,15 +66,13 @@ impl SmRuntime {
             .upgrade()
             .expect("parent EsRuntimeWrapperInner was dropped")
     }
+
     /// construct a new SmRuntime, this should only be called from the workerthread of the MicroTaskManager
     /// here we actualy construct a new Runtime
     fn new() -> Self {
         debug!("init SmRuntime {}", thread_id::get());
 
-        let runtime = ENGINE.with(|engine_rc| {
-            let engine: &JSEngine = &*engine_rc.borrow();
-            mozjs::rust::Runtime::new(engine.handle())
-        });
+        let runtime = mozjs::rust::Runtime::new(crate::enginehandleproducer::produce());
 
         let context = runtime.cx();
         let h_option = OnNewGlobalHookOption::FireOnNewGlobalHook;

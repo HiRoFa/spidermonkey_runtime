@@ -44,6 +44,7 @@ Please see the [CHANGELOG](CHANGELOG.md) for what's new.
 
 # 0.2.x goals
 
+* [x] re-enable posibility to create multiple runtimes
 * [ ] more tests for e.g. error handling in module loading, error handling in promises
 * [ ] dynamic imports
 * [ ] run rust-ops multithreaded, and return Promises from rust
@@ -79,7 +80,7 @@ Cargo.toml
 
 ```toml
 [dependencies]
-es_runtime = "0.2"
+es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git", tag = "0.2.0"}
 ```
 
 my_app.rs
