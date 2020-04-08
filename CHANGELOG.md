@@ -1,3 +1,7 @@
+# 0.2.1
+
+* init code revamp, now supports creating, dropping and recreating multiple runtimes
+
 # 0.2.0
 
 * use latest mozjs from github
