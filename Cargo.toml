@@ -1,6 +1,6 @@
 [package]
 name = "es_runtime"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Andries Hiemstra"]
 edition = "2018"
 description = "An API and Utils around the spidermonkey script engine"
@@ -13,7 +13,7 @@ readme = "README.md"
 categories = ["development-tools"]
 
 [dependencies]
-libc = "0.2.68"
+libc = "0.2"
 lazy_static = "1.4.0"
 log = "0.4.8"
 simple-logging = "2.0.2"
