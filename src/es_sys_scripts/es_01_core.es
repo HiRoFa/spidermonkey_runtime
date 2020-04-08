@@ -56,7 +56,7 @@ this.esses = new (class Esses {
     invoke_rust_op_void(name, ...args) {
 
         setImmediate(() => {
-            this.invoke_rust_op_sync(name, args);
+            this.invoke_rust_op_sync(name, ...args);
         });
 
     }
