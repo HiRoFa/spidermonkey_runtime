@@ -10,7 +10,7 @@ This project was started as a hobby project for me to learn rust. I hope some of
 
 for the current status and versions please see https://gitlab.com/drfos/es_runtime
 
-The version published on crates.io is base son mozjs 0.10.1 which is the latest published verion of mozjs.
+The version published on crates.io is based on mozjs 0.10.1 which is the latest published verion of mozjs.
 
 The more current version depends on the github repo of mozjs but because of that it cannot be published to crates.io
 
@@ -48,9 +48,9 @@ please see https://gitlab.com/drfos/es_runtime
 
 I'm also working on a more feature rich runtime with a commandline tool and also an application server based on this runtime
 
-for updates on the status of thos please see https://gitlab.com/drfos
+for updates on the status of those please see https://gitlab.com/drfos
 
-I'dd like to hear what you would want to see in this project and or what you'd like to use it for, please drop me a line @ incoming+drfos-es-runtime-17727229-issue-@incoming.gitlab.com
+I'd like to hear what you would want to see in this project and or what you'd like to use it for, please drop me a line @ incoming+drfos-es-runtime-17727229-issue-@incoming.gitlab.com
 
 # examples
 
