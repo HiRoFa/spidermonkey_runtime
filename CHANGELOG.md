@@ -1,3 +1,11 @@
+# 0.1.2
+
+* fix for invoke_rust_op_void
+
+# 0.1.1
+
+* README update for crates.io
+
 # 0.1.0
 
 * Builder for EsRuntimeWrapper
