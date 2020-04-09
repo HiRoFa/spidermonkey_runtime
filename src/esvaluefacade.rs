@@ -2,6 +2,7 @@ use log::trace;
 
 use crate::es_utils;
 use crate::es_utils::arrays::{get_array_element, get_array_length, new_array};
+use crate::es_utils::rooting::EsPersistentRooted;
 use crate::es_utils::EsErrorInfo;
 use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
@@ -233,11 +234,12 @@ impl EsValueFacade {
                 if map.contains_key(&id) {
                     let val = map.get(&id).unwrap();
                     if val.is_none() {
-                        trace!("PROMISE_ANSWERS had none for {} setting to val", id);
+                        trace!("PROMISE_ANSWERS had Sone for {} setting to val", id);
                         // set result in left
                         let new_val = Some(Either::Left(res));
                         map.insert(id, new_val);
                     } else {
+                        trace!("PROMISE_ANSWERS had Some resolve promise in right");
                         // resolve promise in right
                         // we are in a different thread here
                         // we need a weakref to the runtime here, os we can run in the es thread
@@ -247,6 +249,7 @@ impl EsValueFacade {
                         if eith.is_right() {
                             // in our right we have a rooted promise and a weakref to our runtimeinner
                             let (prom_regged_id, weak_rt_ref) = eith.right().unwrap();
+                            trace!("found promise with id {} in right", prom_regged_id);
 
                             let rt_opt = weak_rt_ref.upgrade();
                             if !rt_opt.is_none() {
@@ -254,25 +257,16 @@ impl EsValueFacade {
 
                                 rti.do_in_es_runtime_thread_sync(Box::new(move |sm_rt: &SmRuntime| {
                                     // resolve or reject promise
-                                    sm_rt.do_with_jsapi(|_rt, cx, global| {
+                                    sm_rt.do_with_jsapi(|_rt, cx, _global| {
 
-                                        rooted!(in (cx) let mut prom_val_root = UndefinedValue());
-                                        let get_prom_res = es_utils::functions::call_obj_method_name(
-                                            cx,
-                                            global,
-                                            vec!["esses"],
-                                            "consumeRegisteredObject",
-                                            vec![Int32Value(prom_regged_id)],
-                                            &mut prom_val_root.handle_mut()
-                                        );
-                                        if get_prom_res.is_err() {
-                                            panic!("could not find prom by id {}: {}", prom_regged_id, get_prom_res.err().unwrap().err_msg());
-                                        }
-                                        let prom_obj: *mut JSObject = prom_val_root.to_object();
-                                        rooted!(in (cx) let mut prom_obj_root = prom_obj);
-
+                                        let prom_epr: EsPersistentRooted = crate::spidermonkeyruntimewrapper::consume_cached_object(prom_regged_id);
+                                        trace!("getting epr, and rooting it... could be bad");
+                                        rooted!(in (cx) let mut prom_obj_root = prom_epr.get());
+                                        trace!("rooted epr");
                                         if res.is_ok() {
+                                            trace!("rooting result");
                                             rooted!(in (cx) let res_root = res.ok().unwrap().to_es_value(cx));
+                                            trace!("resolving prom");
                                             let resolve_prom_res = es_utils::promises::resolve_promise(
                                                 cx,
                                                 prom_obj_root.handle(),
@@ -282,7 +276,9 @@ impl EsValueFacade {
                                                 panic!("could not resolve promise {} because of error: {}", prom_regged_id, resolve_prom_res.err().unwrap().err_msg());
                                             }
                                         } else {
+                                            trace!("rooting err result");
                                             rooted!(in (cx) let res_root = res.err().unwrap().to_es_value(cx));
+                                            trace!("rejecting prom");
                                             let reject_prom_res = es_utils::promises::reject_promise(
                                                 cx,
                                                 prom_obj_root.handle(),
@@ -657,23 +653,9 @@ impl EsValueFacade {
                             let sm_rt: &SmRuntime = &*sm_rt_rc.borrow();
 
                             let pid: i32 = sm_rt.do_with_jsapi(|_rt, cx, global| {
-                                rooted!(in (cx) let mut rval = UndefinedValue());
-                                let func_res = es_utils::functions::call_obj_method_name(
-                                    cx,
-                                    global,
-                                    vec!["esses"],
-                                    "registerObject",
-                                    vec![ObjectValue(prom)],
-                                    &mut rval.handle_mut(),
-                                );
-                                if func_res.is_err() {
-                                    panic!(
-                                        "could not call func registerObject: {}",
-                                        func_res.err().unwrap().err_msg()
-                                    );
-                                }
-                                let id_val: JSVal = *rval;
-                                id_val.to_int32()
+                                crate::spidermonkeyruntimewrapper::register_cached_object(
+                                    context, prom,
+                                )
                             });
 
                             let weakref = sm_rt.opt_es_rt_inner.as_ref().unwrap().clone();

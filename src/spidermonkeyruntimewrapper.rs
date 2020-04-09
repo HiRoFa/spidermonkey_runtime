@@ -31,6 +31,8 @@ use mozjs::rust::RealmOptions;
 use mozjs::rust::Runtime;
 use mozjs::rust::SIMPLE_GLOBAL_CLASS;
 
+use rand::Rng;
+
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -380,7 +382,38 @@ impl SmRuntime {
 }
 
 thread_local! {
-    pub static MODULE_CACHE: RefCell<LruCache<String, EsPersistentRooted>> = RefCell::new(init_cache());
+    static OBJECT_CACHE: RefCell<HashMap<i32, EsPersistentRooted>> = RefCell::new(HashMap::new());
+}
+
+pub fn register_cached_object(context: *mut JSContext, obj: *mut JSObject) -> i32 {
+    let epr = EsPersistentRooted::new_from_obj(context, obj);
+    OBJECT_CACHE.with(|object_cache_rc| {
+        let map = &mut *object_cache_rc.borrow_mut();
+        let mut rng = rand::thread_rng();
+        let mut id: i32 = rng.gen();
+        while map.contains_key(&id) {
+            id = rng.gen();
+        }
+
+        map.insert(id.clone(), epr);
+
+        trace!("cache obj with id {}", id);
+
+        id
+    })
+}
+
+pub fn consume_cached_object(id: i32) -> EsPersistentRooted {
+    trace!("consume cached obj with id {}", id);
+    OBJECT_CACHE.with(|object_cache_rc| {
+        let map = &mut *object_cache_rc.borrow_mut();
+        let epr = map.remove(&id).expect("no such id");
+        epr
+    })
+}
+
+thread_local! {
+    static MODULE_CACHE: RefCell<LruCache<String, EsPersistentRooted>> = RefCell::new(init_cache());
 }
 
 fn init_cache() -> LruCache<String, EsPersistentRooted> {

@@ -193,7 +193,7 @@ pub mod tests {
             format!("export default () => 123; export const other = Math.sqrt(8); console.log('running imported test module'); \n\nconsole.log('parsing a module from code loader for filename: {}');", file_name)
         };
         let rt = EsRuntimeWrapper::builder()
-            .gc_interval(Duration::from_secs(5))
+            .gc_interval(Duration::from_secs(10))
             .module_code_loader(Box::new(module_code_loader))
             .build();
 

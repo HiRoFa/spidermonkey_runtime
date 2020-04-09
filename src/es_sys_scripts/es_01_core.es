@@ -7,31 +7,7 @@ this.esses = new (class Esses {
         this._next_id = 0;
         this._cleanup_jobs = [];
         this._registered_promises = new Map();
-        this._registered_objects = new Map();
 
-    }
-
-    // todo move registerObject stuff to SM_RT
-    // should reg a EsPersistentRooted in a thread_local map so you can pass the id over threads
-
-    registerObject(obj) {
-        let id = this.next_id();
-        this._registered_objects.set(id, obj);
-        return id;
-    }
-
-    getRegisteredObject(id) {
-        return this._registered_objects.get(id);
-    }
-
-    consumeRegisteredObject(id) {
-        let obj = this._registered_objects.get(id);
-        this.removeRegisteredObject(id);
-        return obj
-    }
-
-    removeRegisteredObject(id) {
-        this._registered_objects.delete(id);
     }
 
     /**
