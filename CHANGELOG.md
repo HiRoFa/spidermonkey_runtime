@@ -1,6 +1,8 @@
-# 0.2.1
+# 0.2.1 (work in progress)
 
 * init code revamp, now supports creating, dropping and recreating multiple runtimes
+* EsValueFacade::new_promise, create a facade with a closure which will be run async, results in a Promise being passed to the script runtime
+* promise instantiation, resolution and rejection in es_utils::promises 
 
 # 0.2.0
 

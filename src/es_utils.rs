@@ -98,6 +98,16 @@ pub struct EsErrorInfo {
     pub column: i32,
 }
 
+impl EsErrorInfo {
+    /// get eror as String in the form of [message] at [filename]:[lineno]:[column]
+    pub fn err_msg(&self) -> String {
+        format!(
+            "{} at {}:{}:{}",
+            self.message, self.filename, self.lineno, self.column
+        )
+    }
+}
+
 impl Clone for EsErrorInfo {
     fn clone(&self) -> Self {
         EsErrorInfo {

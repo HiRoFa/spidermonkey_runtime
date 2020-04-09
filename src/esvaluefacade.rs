@@ -3,13 +3,18 @@ use log::trace;
 use crate::es_utils;
 use crate::es_utils::arrays::{get_array_element, get_array_length, new_array};
 use crate::es_utils::EsErrorInfo;
+use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
+use crate::spidermonkeyruntimewrapper::SmRuntime;
+use either::Either;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsval::{BooleanValue, DoubleValue, Int32Value, JSVal, ObjectValue, UndefinedValue};
 use mozjs::rust::{HandleObject, HandleValue, Runtime};
+use rand::Rng;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 /// the EsValueFacade is a converter between rust variables and script objects
@@ -30,11 +35,28 @@ pub struct EsValueFacade {
 
     val_object: Option<HashMap<String, EsValueFacade>>,
     val_array: Option<Vec<EsValueFacade>>,
+    val_promise: Option<usize>,
 }
 
 thread_local! {
     static PROMISE_RESOLUTION_TRANSMITTERS: RefCell<HashMap<i32, Sender<Result<EsValueFacade, EsValueFacade>>>> =
         { RefCell::new(HashMap::new()) };
+}
+
+lazy_static! {
+    static ref PROMISE_ANSWERS: Arc<
+        Mutex<
+            HashMap<
+                usize,
+                Option<
+                    Either<
+                        Result<EsValueFacade, EsValueFacade>,
+                        (i32, Weak<EsRuntimeWrapperInner>),
+                    >,
+                >,
+            >,
+        >,
+    > = Arc::new(Mutex::new(HashMap::new()));
 }
 
 impl EsValueFacade {
@@ -60,6 +82,7 @@ impl EsValueFacade {
             val_managed_var: None,
             val_object: None,
             val_array: None,
+            val_promise: None,
         }
     }
 
@@ -72,6 +95,7 @@ impl EsValueFacade {
             val_managed_var: None,
             val_object: None,
             val_array: None,
+            val_promise: None,
         }
     }
 
@@ -84,6 +108,7 @@ impl EsValueFacade {
             val_managed_var: None,
             val_object: Some(props),
             val_array: None,
+            val_promise: None,
         }
     }
 
@@ -96,6 +121,7 @@ impl EsValueFacade {
             val_managed_var: None,
             val_object: None,
             val_array: None,
+            val_promise: None,
         }
     }
 
@@ -108,6 +134,7 @@ impl EsValueFacade {
             val_managed_var: None,
             val_object: None,
             val_array: None,
+            val_promise: None,
         }
     }
 
@@ -120,6 +147,7 @@ impl EsValueFacade {
             val_managed_var: None,
             val_object: None,
             val_array: None,
+            val_promise: None,
         }
     }
 
@@ -132,10 +160,175 @@ impl EsValueFacade {
             val_managed_var: None,
             val_object: None,
             val_array: Some(vals),
+            val_promise: None,
         }
     }
 
-    pub fn new_v(
+    pub fn new_promise<C>(resolver: C) -> EsValueFacade
+    where
+        C: FnOnce() -> Result<EsValueFacade, EsValueFacade> + Send + 'static,
+    {
+        // todo, instead of EsPersistentRooted, we need to use a ManagedObj (store id here and obj in js)
+        // because espersistentobj can not be sent between threads..
+
+        // create a lazy_static map in a Mutex
+        // the mutex contains a Map<usize, Either<Result<EsValueFacade, EsErrorInfo>, EsPersistentRooted>>
+        // the usize is stored as an id in self.val_promise_id
+
+        //
+
+        // the task is fed to a thread_pool here
+        // in the task, when complete
+        // see if we have a epr, if so resolve that, if not put answer in left
+
+        // on get_es_val
+
+        // get lock, see if we have an answer already
+        // if so create promise and resolve it
+        // if not create promise and put in map as EsPersistentRooted
+
+        // on drop of EsValueFacade
+        // if map val for key is None, remove from map
+
+        let id = {
+            // locked scope
+            let map: &mut HashMap<
+                usize,
+                Option<
+                    Either<
+                        Result<EsValueFacade, EsValueFacade>,
+                        (i32, Weak<EsRuntimeWrapperInner>),
+                    >,
+                >,
+            > = &mut PROMISE_ANSWERS.lock().unwrap();
+
+            let mut rng = rand::thread_rng();
+            let mut id = rng.gen();
+            while map.contains_key(&id) {
+                id = rng.gen();
+            }
+
+            map.insert(id, None);
+            id
+        }; // end locked scope
+
+        trace!("prepping promise {}", id);
+
+        let task = move || {
+            trace!("running prom reso task for {}", id);
+            let res = resolver();
+            trace!("got prom result for {}, ok={}", id, res.is_ok());
+            {
+                // locked scope
+                let map: &mut HashMap<
+                    usize,
+                    Option<
+                        Either<
+                            Result<EsValueFacade, EsValueFacade>,
+                            (i32, Weak<EsRuntimeWrapperInner>),
+                        >,
+                    >,
+                > = &mut PROMISE_ANSWERS.lock().unwrap();
+
+                if map.contains_key(&id) {
+                    let val = map.get(&id).unwrap();
+                    if val.is_none() {
+                        trace!("PROMISE_ANSWERS had none for {} setting to val", id);
+                        // set result in left
+                        let new_val = Some(Either::Left(res));
+                        map.insert(id, new_val);
+                    } else {
+                        // resolve promise in right
+                        // we are in a different thread here
+                        // we need a weakref to the runtime here, os we can run in the es thread
+                        // will be stored in a tuple with the EsPersisistentRooted
+
+                        let eith = map.remove(&id).unwrap().unwrap();
+                        if eith.is_right() {
+                            // in our right we have a rooted promise and a weakref to our runtimeinner
+                            let (prom_regged_id, weak_rt_ref) = eith.right().unwrap();
+
+                            let rt_opt = weak_rt_ref.upgrade();
+                            if !rt_opt.is_none() {
+                                let rti = rt_opt.unwrap().clone();
+
+                                rti.do_in_es_runtime_thread_sync(Box::new(move |sm_rt: &SmRuntime| {
+                                    // resolve or reject promise
+                                    sm_rt.do_with_jsapi(|_rt, cx, global| {
+
+                                        rooted!(in (cx) let mut prom_val_root = UndefinedValue());
+                                        let get_prom_res = es_utils::functions::call_obj_method_name(
+                                            cx,
+                                            global,
+                                            vec!["esses"],
+                                            "consumeRegisteredObject",
+                                            vec![Int32Value(prom_regged_id)],
+                                            &mut prom_val_root.handle_mut()
+                                        );
+                                        if get_prom_res.is_err() {
+                                            panic!("could not find prom by id {}: {}", prom_regged_id, get_prom_res.err().unwrap().err_msg());
+                                        }
+                                        let prom_obj: *mut JSObject = prom_val_root.to_object();
+                                        rooted!(in (cx) let mut prom_obj_root = prom_obj);
+
+                                        if res.is_ok() {
+                                            rooted!(in (cx) let res_root = res.ok().unwrap().to_es_value(cx));
+                                            let resolve_prom_res = es_utils::promises::resolve_promise(
+                                                cx,
+                                                prom_obj_root.handle(),
+                                                res_root.handle(),
+                                            );
+                                            if resolve_prom_res.is_err() {
+                                                panic!("could not resolve promise {} because of error: {}", prom_regged_id, resolve_prom_res.err().unwrap().err_msg());
+                                            }
+                                        } else {
+                                            rooted!(in (cx) let res_root = res.err().unwrap().to_es_value(cx));
+                                            let reject_prom_res = es_utils::promises::reject_promise(
+                                                cx,
+                                                prom_obj_root.handle(),
+                                                res_root.handle(),
+                                            );
+                                            if reject_prom_res.is_err() {
+                                                panic!("could not reject promise {} because of error: {}", prom_regged_id, reject_prom_res.err().unwrap().err_msg());
+                                            }
+                                        }
+                                    });
+                                }));
+                            } else {
+                                trace!("rt was dropped before getting val for {}", id);
+                            }
+                        } else {
+                            // wtf
+                            panic!("eith had unexpected left");
+                        }
+                        // eith and thus EsPersistentRooted is dropped here
+                    }
+                } else {
+                    // EsValueFacade was dropped before instantiating a promise obj
+                    // do nothing
+                    trace!("PROMISE_ANSWERS had no val for {}", id);
+                }
+            } // end of locked scope
+        };
+
+        trace!("spawning prom reso task for {}", id);
+
+        // run task
+        crate::esruntimewrapper::EsRuntimeWrapper::add_helper_task(task);
+
+        EsValueFacade {
+            val_string: None,
+            val_i32: None,
+            val_f64: None,
+            val_boolean: None,
+            val_managed_var: None,
+            val_object: None,
+            val_array: None,
+            val_promise: Some(id),
+        }
+    }
+
+    pub(crate) fn new_v(
         rt: &Runtime,
         context: *mut JSContext,
         global: HandleObject,
@@ -184,7 +377,7 @@ impl EsValueFacade {
                     if get_res.is_err() {
                         panic!(
                             "could not get element of array: {}",
-                            get_res.err().unwrap().message
+                            get_res.err().unwrap().err_msg()
                         );
                     }
                     vals.push(EsValueFacade::new_v(
@@ -215,7 +408,7 @@ impl EsValueFacade {
                 if reg_res.is_err() {
                     panic!(
                         "could not reg promise due to error {}",
-                        reg_res.err().unwrap().message
+                        reg_res.err().unwrap().err_msg()
                     );
                 } else {
                     let obj_id = id_val.to_int32();
@@ -252,7 +445,7 @@ impl EsValueFacade {
                         panic!(
                             "error getting prop {}: {}",
                             prop_name,
-                            prop_val_res.err().unwrap().message
+                            prop_val_res.err().unwrap().err_msg()
                         );
                     }
 
@@ -273,6 +466,7 @@ impl EsValueFacade {
             val_managed_var,
             val_object,
             val_array,
+            val_promise: None,
         };
 
         ret
@@ -297,6 +491,10 @@ impl EsValueFacade {
 
     pub fn is_promise(&self) -> bool {
         self.is_managed_object()
+    }
+
+    pub fn is_prepped_promise(&self) -> bool {
+        self.val_promise.is_some()
     }
 
     pub fn get_promise_result_blocking(
@@ -431,6 +629,103 @@ impl EsValueFacade {
             }
 
             return ObjectValue(obj);
+        } else if self.is_prepped_promise() {
+            trace!("to_es_value.7 prepped_promise");
+            let map: &mut HashMap<
+                usize,
+                Option<
+                    Either<
+                        Result<EsValueFacade, EsValueFacade>,
+                        (i32, Weak<EsRuntimeWrapperInner>),
+                    >,
+                >,
+            > = &mut PROMISE_ANSWERS.lock().unwrap();
+            let id = self.val_promise.as_ref().unwrap();
+            if let Some(opt) = map.get(id) {
+                trace!("create promise");
+                // create promise
+                let prom = es_utils::promises::new_promise(context);
+                trace!("rooting promise");
+                rooted!(in (context) let prom_root = prom);
+
+                if opt.is_none() {
+                    trace!("set rooted Promise obj and weakref in right");
+                    // set rooted Promise obj and weakref in right
+
+                    let (pid, rti_ref) =
+                        crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
+                            let sm_rt: &SmRuntime = &*sm_rt_rc.borrow();
+
+                            let pid: i32 = sm_rt.do_with_jsapi(|_rt, cx, global| {
+                                rooted!(in (cx) let mut rval = UndefinedValue());
+                                let func_res = es_utils::functions::call_obj_method_name(
+                                    cx,
+                                    global,
+                                    vec!["esses"],
+                                    "registerObject",
+                                    vec![ObjectValue(prom)],
+                                    &mut rval.handle_mut(),
+                                );
+                                if func_res.is_err() {
+                                    panic!(
+                                        "could not call func registerObject: {}",
+                                        func_res.err().unwrap().err_msg()
+                                    );
+                                }
+                                let id_val: JSVal = *rval;
+                                id_val.to_int32()
+                            });
+
+                            let weakref = sm_rt.opt_es_rt_inner.as_ref().unwrap().clone();
+
+                            (pid, weakref)
+                        });
+                    map.insert(id.clone(), Some(Either::Right((pid, rti_ref))));
+                } else {
+                    trace!("remove eith from map and resolve promise with left");
+                    // remove eith from map and resolve promise with left
+                    let eith = map.remove(id).unwrap().unwrap();
+
+                    if eith.is_left() {
+                        let res = eith.left().unwrap();
+                        if res.is_ok() {
+                            rooted!(in (context) let res_root = res.ok().unwrap().to_es_value(context));
+                            let prom_reso_res = es_utils::promises::resolve_promise(
+                                context,
+                                prom_root.handle(),
+                                res_root.handle(),
+                            );
+                            if prom_reso_res.is_err() {
+                                panic!(
+                                    "could not resolve promise: {}",
+                                    prom_reso_res.err().unwrap().err_msg()
+                                );
+                            }
+                        } else {
+                            // reject prom
+                            rooted!(in (context) let res_root = res.err().unwrap().to_es_value(context));
+                            let prom_reje_res = es_utils::promises::reject_promise(
+                                context,
+                                prom_root.handle(),
+                                res_root.handle(),
+                            );
+                            if prom_reje_res.is_err() {
+                                panic!(
+                                    "could not reject promise: {}",
+                                    prom_reje_res.err().unwrap().err_msg()
+                                );
+                            }
+                        }
+                    } else {
+                        panic!("eith had unexpected right for id {}", id);
+                    }
+                }
+                return ObjectValue(prom);
+            } else {
+                panic!("PROMISE_ANSWERS had no val for id {}", id);
+            }
+
+        // todo
         } else {
             // todo, other val types
             trace!("to_es_value.7");
@@ -439,10 +734,34 @@ impl EsValueFacade {
     }
 }
 
+impl Drop for EsValueFacade {
+    fn drop(&mut self) {
+        if self.is_prepped_promise() {
+            // drop from map if val is None, task has not run yet and to_es_val was not called
+            let map: &mut HashMap<
+                usize,
+                Option<
+                    Either<
+                        Result<EsValueFacade, EsValueFacade>,
+                        (i32, Weak<EsRuntimeWrapperInner>),
+                    >,
+                >,
+            > = &mut PROMISE_ANSWERS.lock().unwrap();
+            let id = self.val_promise.as_ref().unwrap();
+            if let Some(opt) = map.get(id) {
+                if opt.is_none() {
+                    map.remove(id);
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
     use crate::es_utils::EsErrorInfo;
+    use crate::esruntimewrapper::EsRuntimeWrapper;
     use crate::esvaluefacade::EsValueFacade;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use log::trace;
@@ -597,7 +916,7 @@ mod tests {
         if esvf_prom_res.is_err() {
             panic!(
                 "error evaling wait_for_prom2.es : {}",
-                esvf_prom_res.err().unwrap().message
+                esvf_prom_res.err().unwrap().err_msg()
             );
         } else {
             let esvf_prom = esvf_prom_res
@@ -666,7 +985,7 @@ mod tests {
         let res: Result<EsValueFacade, EsErrorInfo> = rt.call_sync(vec!["JSON"], "stringify", args);
 
         if res.is_err() {
-            panic!(res.err().unwrap().message);
+            panic!("could not call stringify: {}", res.err().unwrap().err_msg());
         }
 
         let res_esvf = res.ok().unwrap();
@@ -701,5 +1020,54 @@ mod tests {
         let res_esvf = res_esvf_res.ok().unwrap();
         assert!(res_esvf.is_string());
         assert_eq!(res_esvf.get_string(), "hello");
+    }
+
+    #[test]
+    fn test_prepped_prom() {
+        let rt: &EsRuntimeWrapper = &*crate::esruntimewrapper::tests::TEST_RT.clone();
+
+        let my_prep_func = || {
+            std::thread::sleep(Duration::from_secs(5));
+            return Ok(EsValueFacade::new_i32(123));
+        };
+
+        let my_bad_prep_func = || {
+            std::thread::sleep(Duration::from_secs(5));
+            return Err(EsValueFacade::new_i32(456));
+        };
+
+        let prom_esvf = EsValueFacade::new_promise(my_prep_func);
+        let prom_esvf_rej = EsValueFacade::new_promise(my_bad_prep_func);
+
+        rt.eval_sync("this.test_prepped_prom_func = (prom) => {return prom.then((p_res) => {return p_res + 'foo';}).catch((p_err) => {return p_err + 'bar';});};", "test_prepped_prom.es").ok().unwrap();
+
+        let p2_esvf = rt.call_sync(vec![], "test_prepped_prom_func", vec![prom_esvf]);
+        let p2_esvf_rej = rt.call_sync(vec![], "test_prepped_prom_func", vec![prom_esvf_rej]);
+
+        let res = p2_esvf
+            .ok()
+            .unwrap()
+            .get_promise_result_blocking(Duration::from_secs(10))
+            .ok()
+            .unwrap();
+
+        let res_str_esvf = res.ok().unwrap();
+
+        let res_str = res_str_esvf.get_string();
+
+        assert_eq!(&"123foo", res_str);
+
+        let res2 = p2_esvf_rej
+            .ok()
+            .unwrap()
+            .get_promise_result_blocking(Duration::from_secs(10))
+            .ok()
+            .unwrap();
+
+        let res_str_esvf_rej = res2.ok().unwrap(); // yes its the ok because we catch the rejection in test_prepped_prom.es, val should be bar thou
+
+        let res_str_rej = res_str_esvf_rej.get_string();
+
+        assert_eq!(&"456bar", res_str_rej);
     }
 }

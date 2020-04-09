@@ -169,6 +169,44 @@ let esvf_res = prom_res.ok().unwrap();
 assert_eq!(&123, esvf_res.get_i32());
 ```
 
+### Passing a promise to the script engine
+
+You can use EsValueFacade::new_promise() to create a facade that will pass a Promise to the engine, the closure is run async in a multithreaded ThreadPool
+
+e.g.: 
+
+```rust
+fn test_prom(rt: &EsRuntimeWrapper) {
+        let my_prep_func = || {
+            // this functions runs async
+            std::thread::sleep(Duration::from_secs(5));
+            return Ok(EsValueFacade::new_i32(123));
+        };
+
+        let prom_esvf = EsValueFacade::new_promise(my_prep_func);
+    
+        // example of a function which accepts a promise and returns a promise
+        rt.eval_sync("this.test_prepped_prom_func = (prom) => {return prom.then((p_res) => {return p_res + 'foo';});};", "test_prepped_prom.es").ok().unwrap();
+
+        let p2_esvf = rt.call_sync(vec![], "test_prepped_prom_func", vec![prom_esvf]);
+        
+        let res = p2_esvf
+            .ok()
+            .unwrap()
+            // wait 10 secs for promise to resolve
+            .get_promise_result_blocking(Duration::from_secs(10))
+            .ok()
+            .unwrap();
+    
+        // get the result esvf
+        let res_str_esvf: EsValueFacade = res.ok().unwrap();
+        // get the string
+        let res_str = res_str_esvf.get_string();
+        
+        assert_eq!(&"123foo", res_str);
+}
+```
+
 ## Adding rust_ops to script
 
 In order to call a rust function from script you need to add the rust function to the EsRuntimeWrapper first.
