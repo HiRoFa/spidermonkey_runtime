@@ -42,10 +42,13 @@ Please see the [CHANGELOG](CHANGELOG.md) for what's new.
 
 * [x] use newer mozjs
 
-# 0.2.x goals
+# 0.2.1 goals
 
 * [x] re-enable posibility to create multiple runtimes
-* [ ] init a EsValueFacade as a promise from rust, #19
+
+# 0.2.x 
+
+* [x] init a EsValueFacade as a promise from rust, #19
 * [ ] more tests for e.g. error handling in module loading, error handling in promises
 * [ ] dynamic imports #20
 * [ ] run rust-ops multithreaded, and return Promises from rust #8
