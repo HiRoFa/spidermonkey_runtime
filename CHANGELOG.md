@@ -1,3 +1,7 @@
+# 0.1.3
+
+fix for GC issues while having cached modules
+
 # 0.1.2
 
 * fix for invoke_rust_op_void
