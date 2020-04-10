@@ -389,10 +389,10 @@ impl SmRuntime {
 }
 
 thread_local! {
-    pub static MODULE_CACHE: RefCell<LruCache<String, EsPersistentRooted>> = RefCell::new(init_cache());
+    pub static MODULE_CACHE: RefCell<LruCache<String, Box<EsPersistentRooted>>> = RefCell::new(init_cache());
 }
 
-fn init_cache() -> LruCache<String, EsPersistentRooted> {
+fn init_cache() -> LruCache<String, Box<EsPersistentRooted>> {
     let ct = SM_RT.with(|sm_rt_rc| {
         let sm_rt = &*sm_rt_rc.borrow();
         sm_rt.clone_rtw_inner().module_cache_size.clone()
@@ -468,7 +468,9 @@ unsafe extern "C" fn import_module(
     MODULE_CACHE.with(|cache_rc| {
         trace!("caching module for {}", &file_name);
         let cache = &mut *cache_rc.borrow_mut();
-        let mpr = EsPersistentRooted::new_from_obj(context, compiled_module);
+        let mut mpr = Box::new(EsPersistentRooted::default());
+        mpr.init(context, compiled_module);
+
         cache.put(file_name, mpr);
     });
 
