@@ -1,3 +1,4 @@
+use log::trace;
 use mozjs::jsapi::Heap;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
@@ -46,7 +47,8 @@ impl EsPersistentRooted {
     pub unsafe fn init(&mut self, cx: *mut JSContext, js_obj: *mut JSObject) {
         self.heap_obj.set(js_obj);
         self.permanent_js_root.set(ObjectValue(js_obj));
-        let c_str = CString::new("MyPersistentRooted::root").unwrap();
+        let c_str = CString::new("EsPersistentRooted::root").unwrap();
+        trace!("EsPersistentRooted -> AddRawValueRoot");
         assert!(AddRawValueRoot(
             cx,
             self.permanent_js_root.get_unsafe(),
@@ -60,6 +62,7 @@ impl Drop for EsPersistentRooted {
     fn drop(&mut self) {
         unsafe {
             let cx = Runtime::get();
+            trace!("EsPersistentRooted -> RemoveRawValueRoot");
             RemoveRawValueRoot(cx, self.permanent_js_root.get_unsafe());
         }
     }

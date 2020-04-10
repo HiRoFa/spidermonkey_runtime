@@ -193,7 +193,7 @@ pub mod tests {
             format!("export default () => 123; export const other = Math.sqrt(8); console.log('running imported test module'); \n\nconsole.log('parsing a module from code loader for filename: {}');", file_name)
         };
         let rt = EsRuntimeWrapper::builder()
-            .gc_interval(Duration::from_secs(10))
+            .gc_interval(Duration::from_secs(2))
             .module_code_loader(Box::new(module_code_loader))
             .build();
 
@@ -205,6 +205,54 @@ pub mod tests {
         }));
 
         Arc::new(rt)
+    }
+
+    #[test]
+    fn test_gc() {
+        simple_logging::log_to_file("esruntimewrapper.log", LevelFilter::Trace)
+            .ok()
+            .unwrap();
+
+        let rt = EsRuntimeWrapper::builder()
+            .gc_interval(Duration::from_secs(1))
+            .build();
+
+        rt.do_in_es_runtime_thread_sync(Box::new(|sm_rt| {
+            sm_rt
+                .eval("this.f = () => {return 123;};", " test.es")
+                .ok()
+                .unwrap();
+
+            let id = sm_rt.do_with_jsapi(|_rt, cx: *mut mozjs::jsapi::JSContext, _global| {
+                let new_obj = crate::es_utils::promises::new_promise(cx);
+
+                crate::spidermonkeyruntimewrapper::register_cached_object(cx, new_obj)
+            });
+
+            sm_rt.cleanup();
+
+            sm_rt.do_with_jsapi(|_rt, cx: *mut mozjs::jsapi::JSContext, _global| {
+                let p = crate::spidermonkeyruntimewrapper::consume_cached_object(id);
+                let p_obj = p.get();
+                rooted!(in (cx) let p_root = p_obj);
+                rooted!(in (cx) let mut rval = mozjs::jsval::UndefinedValue());
+                crate::es_utils::objects::get_es_obj_prop_val(
+                    cx,
+                    p_root.handle(),
+                    "then",
+                    rval.handle_mut(),
+                )
+                .ok()
+                .unwrap();
+            });
+
+            let ret = sm_rt.call(vec![], "f", vec![]).ok().unwrap();
+            println!("got {}", ret.get_i32());
+
+            sm_rt.eval("1+1;", " test.es").ok().unwrap();
+            sm_rt.cleanup();
+        }));
+        std::thread::sleep(Duration::from_secs(3));
     }
 
     #[test]

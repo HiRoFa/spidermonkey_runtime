@@ -23,7 +23,7 @@ use mozjs::jsapi::OnNewGlobalHookOption;
 use mozjs::jsapi::SetJobQueue;
 use mozjs::jsapi::SetModuleResolveHook;
 use mozjs::jsapi::JS::HandleValueArray;
-use mozjs::jsval::{JSVal, ObjectValue, UndefinedValue};
+use mozjs::jsval::{JSVal, NullValue, ObjectValue, UndefinedValue};
 use mozjs::panic::wrap_panic;
 use mozjs::rust::wrappers::JS_CallFunctionValue;
 use mozjs::rust::HandleObject;
@@ -233,8 +233,14 @@ impl SmRuntime {
                     );
                 }
             }
-            es_utils::gc(cx);
+            trace!("running gc cleanup / 2");
         });
+        self.do_with_jsapi(|_rt, cx, _global| {
+            trace!("running gc");
+            es_utils::gc(cx);
+            trace!("running gc / 2");
+        });
+
         trace!("cleaning up sm_rt / 5");
     }
     pub fn register_op(&mut self, name: &str, op: OP) {
@@ -382,11 +388,13 @@ impl SmRuntime {
 }
 
 thread_local! {
-    static OBJECT_CACHE: RefCell<HashMap<i32, EsPersistentRooted>> = RefCell::new(HashMap::new());
+// store epr in Box because https://doc.servo.org/mozjs_sys/jsgc/struct.Heap.html#method.boxed
+    static OBJECT_CACHE: RefCell<HashMap<i32, Box<EsPersistentRooted>>> = RefCell::new(HashMap::new());
 }
 
 pub fn register_cached_object(context: *mut JSContext, obj: *mut JSObject) -> i32 {
-    let epr = EsPersistentRooted::new_from_obj(context, obj);
+    let mut epr = Box::new(EsPersistentRooted::default());
+    unsafe { epr.init(context, obj) };
     OBJECT_CACHE.with(|object_cache_rc| {
         let map = &mut *object_cache_rc.borrow_mut();
         let mut rng = rand::thread_rng();
@@ -403,7 +411,7 @@ pub fn register_cached_object(context: *mut JSContext, obj: *mut JSObject) -> i3
     })
 }
 
-pub fn consume_cached_object(id: i32) -> EsPersistentRooted {
+pub fn consume_cached_object(id: i32) -> Box<EsPersistentRooted> {
     trace!("consume cached obj with id {}", id);
     OBJECT_CACHE.with(|object_cache_rc| {
         let map = &mut *object_cache_rc.borrow_mut();
@@ -413,10 +421,11 @@ pub fn consume_cached_object(id: i32) -> EsPersistentRooted {
 }
 
 thread_local! {
-    static MODULE_CACHE: RefCell<LruCache<String, EsPersistentRooted>> = RefCell::new(init_cache());
+// store epr in Box because https://doc.servo.org/mozjs_sys/jsgc/struct.Heap.html#method.boxed
+    static MODULE_CACHE: RefCell<LruCache<String, Box<EsPersistentRooted>>> = RefCell::new(init_cache());
 }
 
-fn init_cache() -> LruCache<String, EsPersistentRooted> {
+fn init_cache() -> LruCache<String, Box<EsPersistentRooted>> {
     let ct = SM_RT.with(|sm_rt_rc| {
         let sm_rt = &*sm_rt_rc.borrow();
         sm_rt.clone_rtw_inner().module_cache_size.clone()
@@ -475,7 +484,8 @@ unsafe extern "C" fn import_module(
     MODULE_CACHE.with(|cache_rc| {
         trace!("caching module for {}", &file_name);
         let cache = &mut *cache_rc.borrow_mut();
-        let mpr = EsPersistentRooted::new_from_obj(cx, compiled_module);
+        let mut mpr = Box::new(EsPersistentRooted::default());
+        mpr.init(cx, compiled_module);
         cache.put(file_name, mpr);
     });
 
@@ -577,8 +587,15 @@ unsafe extern "C" fn enqueue_promise_job(
                     trace!("running a job");
 
                     let sm_rt = &*rc.borrow();
-                    sm_rt.do_with_jsapi(|_rt, cx, global| {
-                        let call_res = cb.call(cx, global);
+
+                    sm_rt.do_with_jsapi(|_rt, cx, _global| {
+                        trace!("rooting null");
+                        let null_obj: *mut JSObject = NullValue().to_object_or_null();
+                        rooted!(in (cx) let null_root = null_obj);
+
+                        trace!("calling cb.call");
+                        let call_res = cb.call(cx, null_root.handle());
+                        trace!("checking cb.call res");
                         if call_res.is_err() {
                             debug!("job failed");
                             if let Some(err) = es_utils::report_es_ex(cx) {
@@ -588,7 +605,8 @@ unsafe extern "C" fn enqueue_promise_job(
                                 );
                             }
                         }
-                    })
+                    });
+                    trace!("job ran ok");
                 });
             };
 
@@ -613,10 +631,15 @@ unsafe extern "C" fn enqueue_promise_job(
 ///
 #[allow(unsafe_code)]
 unsafe extern "C" fn get_incumbent_global(_: *const c_void, _: *mut JSContext) -> *mut JSObject {
+    trace!("get_incumbent_global called");
     wrap_panic(
         AssertUnwindSafe(|| {
             // todo what to do here
-            ptr::null_mut()
+
+            SM_RT.with(|sm_rt_rc| {
+                let sm_rt = &*sm_rt_rc.borrow();
+                sm_rt.global_obj
+            })
         }),
         ptr::null_mut(),
     )
@@ -624,6 +647,7 @@ unsafe extern "C" fn get_incumbent_global(_: *const c_void, _: *mut JSContext) -
 
 #[allow(unsafe_code)]
 unsafe extern "C" fn empty(_extra: *const c_void) -> bool {
+    trace!("empty called");
     wrap_panic(
         AssertUnwindSafe(|| {
             SM_RT.with(|sm_rt_rc| {
@@ -659,13 +683,15 @@ impl PromiseJobCallback {
     }
 
     unsafe fn call(&self, cx: *mut JSContext, a_this_obj: HandleObject) -> Result<(), ()> {
+        trace!("PromiseJobCallback.call / 1");
         rooted!(in(cx) let mut rval = UndefinedValue());
-
+        trace!("PromiseJobCallback.call / 2");
         rooted!(in(cx) let callable = ObjectValue(self.parent.callback_holder().get()));
-        rooted!(in(cx) let rooted_this = a_this_obj.get());
+        trace!("PromiseJobCallback.call / 3");
+        //rooted!(in(cx) let rooted_this = a_this_obj.get());
         let ok = JS_CallFunctionValue(
             cx,
-            rooted_this.handle(),
+            a_this_obj,
             callable.handle(),
             &HandleValueArray {
                 length_: 0 as ::libc::size_t,
@@ -673,6 +699,7 @@ impl PromiseJobCallback {
             },
             rval.handle_mut(),
         );
+        trace!("PromiseJobCallback.call / 4");
         //maybe_resume_unwind();
         if !ok {
             return Err(());

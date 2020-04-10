@@ -83,4 +83,46 @@ mod tests {
         });
         assert_eq!(res, true);
     }
+
+    #[test]
+    fn test_module_gc() {
+        let res = test_with_sm_rt(|sm_rt| {
+            sm_rt.do_with_jsapi(|_rt, cx, _global| {
+
+                let mod_script2 =
+                    "import {other} from 'test_mod.es';\n\nconsole.log('started mod imp mod, other = ' + other);";
+
+                let compile_res2 = compile_module(cx, mod_script2, "test_mod2.es");
+                if compile_res2.is_err() {
+                    let err = compile_res2.err().unwrap();
+                    panic!(
+                        "error compiling module: {}:{}:{} err:{}",
+                        err.filename, err.lineno, err.column, err.message
+                    );
+                }
+
+
+            });
+            sm_rt.cleanup();
+            sm_rt.do_with_jsapi(|_rt, cx, _global| {
+
+                let mod_script2 =
+                    "import {other} from 'test_mod.es';\n\nconsole.log('started mod imp mod, other = ' + other);";
+
+                let compile_res2 = compile_module(cx, mod_script2, "test_mod2.es");
+                if compile_res2.is_err() {
+                    let err = compile_res2.err().unwrap();
+                    panic!(
+                        "error compiling module: {}:{}:{} err:{}",
+                        err.filename, err.lineno, err.column, err.message
+                    );
+                }
+
+
+            });
+
+            true
+        });
+        assert_eq!(res, true);
+    }
 }

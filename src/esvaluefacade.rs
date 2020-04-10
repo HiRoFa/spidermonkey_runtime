@@ -169,7 +169,7 @@ impl EsValueFacade {
     where
         C: FnOnce() -> Result<EsValueFacade, EsValueFacade> + Send + 'static,
     {
-        // todo, instead of EsPersistentRooted, we need to use a ManagedObj (store id here and obj in js)
+        // todo, instead of EsRootedValue, we need to use a ManagedObj (store id here and obj in js)
         // because espersistentobj can not be sent between threads..
 
         // create a lazy_static map in a Mutex
@@ -259,10 +259,14 @@ impl EsValueFacade {
                                     // resolve or reject promise
                                     sm_rt.do_with_jsapi(|_rt, cx, _global| {
 
-                                        let prom_epr: EsPersistentRooted = crate::spidermonkeyruntimewrapper::consume_cached_object(prom_regged_id);
-                                        trace!("getting epr, and rooting it... could be bad");
-                                        rooted!(in (cx) let mut prom_obj_root = prom_epr.get());
-                                        trace!("rooted epr");
+                                        let prom_obj: *mut JSObject = {
+                                            let prom_epr: Box<EsPersistentRooted> = crate::spidermonkeyruntimewrapper::consume_cached_object(prom_regged_id);
+                                            trace!("epr should drop here");
+                                            prom_epr.get()
+                                        };
+                                        trace!("epr should be dropped here");
+                                        rooted!(in (cx) let mut prom_obj_root = prom_obj);
+                                        trace!("rooted promise");
                                         if res.is_ok() {
                                             trace!("rooting result");
                                             rooted!(in (cx) let res_root = res.ok().unwrap().to_es_value(cx));
@@ -652,11 +656,9 @@ impl EsValueFacade {
                         crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
                             let sm_rt: &SmRuntime = &*sm_rt_rc.borrow();
 
-                            let pid: i32 = sm_rt.do_with_jsapi(|_rt, cx, global| {
-                                crate::spidermonkeyruntimewrapper::register_cached_object(
-                                    context, prom,
-                                )
-                            });
+                            let pid = crate::spidermonkeyruntimewrapper::register_cached_object(
+                                context, prom,
+                            );
 
                             let weakref = sm_rt.opt_es_rt_inner.as_ref().unwrap().clone();
 
@@ -1051,5 +1053,34 @@ mod tests {
         let res_str_rej = res_str_esvf_rej.get_string();
 
         assert_eq!(&"456bar", res_str_rej);
+    }
+
+    #[test]
+    fn test_prepped_prom_resolve() {
+        let rt: &EsRuntimeWrapper = &*crate::esruntimewrapper::tests::TEST_RT.clone();
+
+        let my_prep_func = || {
+            std::thread::sleep(Duration::from_secs(5));
+            return Ok(EsValueFacade::new_i32(123));
+        };
+
+        let prom_esvf = EsValueFacade::new_promise(my_prep_func);
+
+        rt.eval_sync("this.test_prepped_prom_func = (prom) => {return prom.then((p_res) => {return p_res + 'foo';}).catch((p_err) => {return p_err + 'bar';});};", "test_prepped_prom.es").ok().unwrap();
+
+        let p2_esvf = rt.call_sync(vec![], "test_prepped_prom_func", vec![prom_esvf]);
+
+        let res = p2_esvf
+            .ok()
+            .unwrap()
+            .get_promise_result_blocking(Duration::from_secs(10))
+            .ok()
+            .unwrap();
+
+        let res_str_esvf = res.ok().unwrap();
+
+        let res_str = res_str_esvf.get_string();
+
+        assert_eq!(&"123foo", res_str);
     }
 }
