@@ -1,4 +1,6 @@
-# 0.2.2 (work in progress)
+# 0.2.3 (work in progress)
+
+# 0.2.2
 
 * EsValueFacade::new_promise, create a facade with a closure which will be run async, results in a Promise being passed to the script runtime
 * promise instantiation, resolution and rejection in es_utils::promises 

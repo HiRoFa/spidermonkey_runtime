@@ -46,12 +46,15 @@ Please see the [CHANGELOG](CHANGELOG.md) for what's new.
 
 * [x] re-enable posibility to create multiple runtimes
 
-# 0.2.x 
+# 0.2.2 goals
 
 * [x] init a EsValueFacade as a promise from rust, #19
-* [ ] more tests for e.g. error handling in module loading, error handling in promises
-* [ ] dynamic imports #20
+* [x] more tests for e.g. error handling in module loading, error handling in promises
+
+# 0.2.x 
+
 * [ ] run rust-ops multithreaded, and return Promises from rust #8
+* [ ] dynamic imports #20
 * [ ] typedArrays from and to Vecs
 * [ ] complete set of from/to primitives in EsValueFacade
 

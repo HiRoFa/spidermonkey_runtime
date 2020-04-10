@@ -1,6 +1,6 @@
 [package]
 name = "es_runtime"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Andries Hiemstra"]
 edition = "2018"
 description = "An API and Utils around the spidermonkey script engine"
