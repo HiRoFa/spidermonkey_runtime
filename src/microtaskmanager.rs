@@ -3,7 +3,7 @@ use log::trace;
 use std::cell::RefCell;
 use std::mem::replace;
 use std::sync::mpsc::channel;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar};
 use std::thread;
 use std::time::Duration;
 use uuid::Uuid;

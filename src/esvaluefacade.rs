@@ -221,7 +221,10 @@ impl EsValueFacade {
             trace!("running prom reso task for {}", id);
             let res = resolver();
             trace!("got prom result for {}, ok={}", id, res.is_ok());
-            {
+            let eith_opt: Option<(
+                Either<Result<EsValueFacade, EsValueFacade>, (i32, Weak<EsRuntimeWrapperInner>)>,
+                Result<EsValueFacade, EsValueFacade>,
+            )> = {
                 // locked scope
                 let map: &mut HashMap<
                     usize,
@@ -240,6 +243,7 @@ impl EsValueFacade {
                         // set result in left
                         let new_val = Some(Either::Left(res));
                         map.insert(id, new_val);
+                        None
                     } else {
                         trace!("PROMISE_ANSWERS had Some resolve promise in right");
                         // resolve promise in right
@@ -248,69 +252,77 @@ impl EsValueFacade {
                         // will be stored in a tuple with the EsPersisistentRooted
 
                         let eith = map.remove(&id).unwrap().unwrap();
-                        if eith.is_right() {
-                            // in our right we have a rooted promise and a weakref to our runtimeinner
-                            let (prom_regged_id, weak_rt_ref) = eith.right().unwrap();
-                            trace!("found promise with id {} in right", prom_regged_id);
 
-                            let rt_opt = weak_rt_ref.upgrade();
-                            if !rt_opt.is_none() {
-                                let rti = rt_opt.unwrap().clone();
+                        Some((eith, res))
 
-                                rti.do_in_es_runtime_thread_sync(Box::new(move |sm_rt: &SmRuntime| {
-                                    // resolve or reject promise
-                                    sm_rt.do_with_jsapi(|_rt, cx, _global| {
-
-                                        let prom_obj: *mut JSObject = {
-                                            let prom_epr: Box<EsPersistentRooted> = crate::spidermonkeyruntimewrapper::consume_cached_object(prom_regged_id);
-                                            trace!("epr should drop here");
-                                            prom_epr.get()
-                                        };
-                                        trace!("epr should be dropped here");
-                                        rooted!(in (cx) let mut prom_obj_root = prom_obj);
-                                        trace!("rooted promise");
-                                        if res.is_ok() {
-                                            trace!("rooting result");
-                                            rooted!(in (cx) let res_root = res.ok().unwrap().to_es_value(cx));
-                                            trace!("resolving prom");
-                                            let resolve_prom_res = es_utils::promises::resolve_promise(
-                                                cx,
-                                                prom_obj_root.handle(),
-                                                res_root.handle(),
-                                            );
-                                            if resolve_prom_res.is_err() {
-                                                panic!("could not resolve promise {} because of error: {}", prom_regged_id, resolve_prom_res.err().unwrap().err_msg());
-                                            }
-                                        } else {
-                                            trace!("rooting err result");
-                                            rooted!(in (cx) let res_root = res.err().unwrap().to_es_value(cx));
-                                            trace!("rejecting prom");
-                                            let reject_prom_res = es_utils::promises::reject_promise(
-                                                cx,
-                                                prom_obj_root.handle(),
-                                                res_root.handle(),
-                                            );
-                                            if reject_prom_res.is_err() {
-                                                panic!("could not reject promise {} because of error: {}", prom_regged_id, reject_prom_res.err().unwrap().err_msg());
-                                            }
-                                        }
-                                    });
-                                }));
-                            } else {
-                                trace!("rt was dropped before getting val for {}", id);
-                            }
-                        } else {
-                            // wtf
-                            panic!("eith had unexpected left");
-                        }
                         // eith and thus EsPersistentRooted is dropped here
                     }
                 } else {
                     // EsValueFacade was dropped before instantiating a promise obj
                     // do nothing
                     trace!("PROMISE_ANSWERS had no val for {}", id);
+                    None
                 }
-            } // end of locked scope
+            }; // end of locked scope
+
+            if let Some((eith, res)) = eith_opt {
+                if eith.is_right() {
+                    // in our right we have a rooted promise and a weakref to our runtimeinner
+                    let (prom_regged_id, weak_rt_ref) = eith.right().unwrap();
+                    trace!("found promise with id {} in right", prom_regged_id);
+
+                    let rt_opt = weak_rt_ref.upgrade();
+                    if !rt_opt.is_none() {
+                        let rti = rt_opt.unwrap().clone();
+
+                        rti.do_in_es_runtime_thread_sync(Box::new(move |sm_rt: &SmRuntime| {
+                            // resolve or reject promise
+                            sm_rt.do_with_jsapi(move|_rt, cx, _global| {
+
+                                let prom_obj: *mut JSObject = {
+                                    let prom_epr: Box<EsPersistentRooted> = crate::spidermonkeyruntimewrapper::consume_cached_object(prom_regged_id);
+                                    trace!("epr should drop here");
+                                    prom_epr.get()
+                                };
+                                trace!("epr should be dropped here");
+                                rooted!(in (cx) let mut prom_obj_root = prom_obj);
+                                trace!("rooted promise");
+
+                                if res.is_ok() {
+                                    trace!("rooting result");
+                                    rooted!(in (cx) let res_root = res.ok().unwrap().to_es_value(cx));
+                                    trace!("resolving prom");
+                                    let resolve_prom_res = es_utils::promises::resolve_promise(
+                                        cx,
+                                        prom_obj_root.handle(),
+                                        res_root.handle(),
+                                    );
+                                    if resolve_prom_res.is_err() {
+                                        panic!("could not resolve promise {} because of error: {}", prom_regged_id, resolve_prom_res.err().unwrap().err_msg());
+                                    }
+                                } else {
+                                    trace!("rooting err result");
+                                    rooted!(in (cx) let res_root = res.err().unwrap().to_es_value(cx));
+                                    trace!("rejecting prom");
+                                    let reject_prom_res = es_utils::promises::reject_promise(
+                                        cx,
+                                        prom_obj_root.handle(),
+                                        res_root.handle(),
+                                    );
+                                    if reject_prom_res.is_err() {
+                                        panic!("could not reject promise {} because of error: {}", prom_regged_id, reject_prom_res.err().unwrap().err_msg());
+                                    }
+                                }
+                            });
+                        }));
+                    } else {
+                        trace!("rt was dropped before getting val for {}", id);
+                    }
+                } else {
+                    // wtf
+                    panic!("eith had unexpected left");
+                }
+            }
         };
 
         trace!("spawning prom reso task for {}", id);
