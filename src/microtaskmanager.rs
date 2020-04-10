@@ -1,3 +1,4 @@
+use crate::debugmutex::DebugMutex;
 use log::trace;
 use std::cell::RefCell;
 use std::mem::replace;
@@ -20,7 +21,7 @@ thread_local!(
 /// those tasks need not impl the Send trait and there is no locking happening to add
 /// the task to the queue
 pub struct MicroTaskManager {
-    jobs: Mutex<Vec<Box<dyn FnOnce() -> () + Send + 'static>>>,
+    jobs: DebugMutex<Vec<Box<dyn FnOnce() -> () + Send + 'static>>>,
     empty_cond: Condvar,
     worker_thread_name: String,
 }
@@ -29,7 +30,7 @@ impl MicroTaskManager {
     pub fn new() -> Arc<Self> {
         let uuid = format!("sttm_wt_{}", Uuid::new_v4());
         let sttm = MicroTaskManager {
-            jobs: Mutex::new(vec![]),
+            jobs: DebugMutex::new(vec![], "MicroTaskManager::jobs"),
             empty_cond: Condvar::new(),
             worker_thread_name: uuid.clone(),
         };
@@ -56,7 +57,7 @@ impl MicroTaskManager {
     /// add a task which will run asynchronously
     pub fn add_task<T: FnOnce() -> () + Send + 'static>(&self, task: T) -> () {
         {
-            let mut lck = self.jobs.lock().unwrap();
+            let mut lck = self.jobs.lock("add_task").unwrap();
             let jobs = &mut *lck;
             jobs.push(Box::new(task));
         }
@@ -99,7 +100,7 @@ impl MicroTaskManager {
     }
 
     fn has_jobs(&self) -> bool {
-        let jobs_lck = self.jobs.lock().unwrap();
+        let jobs_lck = self.jobs.lock("has_jobs").unwrap();
         !jobs_lck.is_empty()
     }
 
@@ -123,7 +124,7 @@ impl MicroTaskManager {
     fn worker_loop(&self) {
         let jobs: Vec<Box<dyn FnOnce() -> () + Send + 'static>>;
         {
-            let mut jobs_lck = self.jobs.lock().unwrap();
+            let mut jobs_lck = self.jobs.lock("worker_loop").unwrap();
 
             if jobs_lck.is_empty() && !self.has_local_jobs() {
                 let dur = Duration::from_secs(1);

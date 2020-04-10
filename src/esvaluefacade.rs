@@ -1,5 +1,6 @@
 use log::trace;
 
+use crate::debugmutex::DebugMutex;
 use crate::es_utils;
 use crate::es_utils::arrays::{get_array_element, get_array_length, new_array};
 use crate::es_utils::rooting::EsPersistentRooted;
@@ -15,7 +16,7 @@ use rand::Rng;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 /// the EsValueFacade is a converter between rust variables and script objects
@@ -46,7 +47,7 @@ thread_local! {
 
 lazy_static! {
     static ref PROMISE_ANSWERS: Arc<
-        Mutex<
+        DebugMutex<
             HashMap<
                 usize,
                 Option<
@@ -57,7 +58,7 @@ lazy_static! {
                 >,
             >,
         >,
-    > = Arc::new(Mutex::new(HashMap::new()));
+    > = Arc::new(DebugMutex::new(HashMap::new(), "PROMISE_ANSWERS"));
 }
 
 impl EsValueFacade {
@@ -190,6 +191,7 @@ impl EsValueFacade {
 
         // on drop of EsValueFacade
         // if map val for key is None, remove from map
+        trace!("prepping promise, gen id");
 
         let id = {
             // locked scope
@@ -201,7 +203,7 @@ impl EsValueFacade {
                         (i32, Weak<EsRuntimeWrapperInner>),
                     >,
                 >,
-            > = &mut PROMISE_ANSWERS.lock().unwrap();
+            > = &mut PROMISE_ANSWERS.lock("gen_id").unwrap();
 
             let mut rng = rand::thread_rng();
             let mut id = rng.gen();
@@ -229,12 +231,12 @@ impl EsValueFacade {
                             (i32, Weak<EsRuntimeWrapperInner>),
                         >,
                     >,
-                > = &mut PROMISE_ANSWERS.lock().unwrap();
+                > = &mut PROMISE_ANSWERS.lock("in_task").unwrap();
 
                 if map.contains_key(&id) {
                     let val = map.get(&id).unwrap();
                     if val.is_none() {
-                        trace!("PROMISE_ANSWERS had Sone for {} setting to val", id);
+                        trace!("PROMISE_ANSWERS had Some for {} setting to val", id);
                         // set result in left
                         let new_val = Some(Either::Left(res));
                         map.insert(id, new_val);
@@ -639,7 +641,7 @@ impl EsValueFacade {
                         (i32, Weak<EsRuntimeWrapperInner>),
                     >,
                 >,
-            > = &mut PROMISE_ANSWERS.lock().unwrap();
+            > = &mut PROMISE_ANSWERS.lock("to_es_value.7").unwrap();
             let id = self.val_promise.as_ref().unwrap();
             if let Some(opt) = map.get(id) {
                 trace!("create promise");
@@ -730,7 +732,7 @@ impl Drop for EsValueFacade {
                         (i32, Weak<EsRuntimeWrapperInner>),
                     >,
                 >,
-            > = &mut PROMISE_ANSWERS.lock().unwrap();
+            > = &mut PROMISE_ANSWERS.lock("EsValueFacade::drop").unwrap();
             let id = self.val_promise.as_ref().unwrap();
             if let Some(opt) = map.get(id) {
                 if opt.is_none() {
