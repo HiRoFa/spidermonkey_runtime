@@ -5,6 +5,9 @@ use mozjs::jsapi::JSFunction;
 use mozjs::jsapi::JSNative;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JSType;
+use mozjs::rust::jsapi_wrapped::JS_CallFunctionName;
+use mozjs::rust::jsapi_wrapped::JS_CallFunctionValue;
+
 use mozjs::jsapi::JS_DefineFunction;
 use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_NewFunction;
@@ -12,8 +15,7 @@ use mozjs::jsapi::JS_ObjectIsFunction;
 use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsval::JSVal;
 use mozjs::jsval::UndefinedValue;
-use mozjs::rust::jsapi_wrapped::JS_CallFunctionName;
-use mozjs::rust::{HandleObject, MutableHandle};
+use mozjs::rust::{HandleObject, HandleValue, MutableHandle};
 
 /// call a method by name
 pub fn call_method_name(
@@ -56,6 +58,52 @@ pub fn call_method_name2(
             ret_val,
         )
     } {
+        Ok(())
+    } else {
+        if let Some(err) = report_es_ex(context) {
+            Err(err)
+        } else {
+            Err(EsErrorInfo {
+                message: "unknown error".to_string(),
+                filename: "".to_string(),
+                lineno: 0,
+                column: 0,
+            })
+        }
+    }
+}
+
+/// call a method by name
+pub fn call_method_value(
+    context: *mut JSContext,
+    this_obj: HandleObject,
+    function_val: HandleValue,
+    args: Vec<JSVal>,
+    ret_val: &mut MutableHandle<JSVal>,
+) -> Result<(), EsErrorInfo> {
+    let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*args) };
+
+    // root the args here
+    rooted!(in(context) let _argument_object = unsafe {JS_NewArrayObject(context, &arguments_value_array)});
+
+    call_method_value2(
+        context,
+        this_obj,
+        function_val,
+        arguments_value_array,
+        ret_val,
+    )
+}
+
+/// call a method by name with a rooted arguments array
+pub fn call_method_value2(
+    context: *mut JSContext,
+    this_obj: HandleObject,
+    function_val: HandleValue,
+    args: HandleValueArray,
+    ret_val: &mut MutableHandle<JSVal>,
+) -> Result<(), EsErrorInfo> {
+    if unsafe { JS_CallFunctionValue(context, this_obj, function_val, &args, ret_val) } {
         Ok(())
     } else {
         if let Some(err) = report_es_ex(context) {
