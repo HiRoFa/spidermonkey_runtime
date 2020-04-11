@@ -1,5 +1,7 @@
 # 0.2.3 (work in progress)
 
+* lots of threading related issues, mostly about preventing deadlocks when using EsValueFacade::new_promise()
+
 # 0.2.2
 
 * EsValueFacade::new_promise, create a facade with a closure which will be run async, results in a Promise being passed to the script runtime
