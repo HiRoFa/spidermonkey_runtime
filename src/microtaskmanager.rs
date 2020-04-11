@@ -56,27 +56,38 @@ impl MicroTaskManager {
 
     /// add a task which will run asynchronously
     pub fn add_task<T: FnOnce() -> () + Send + 'static>(&self, task: T) -> () {
+        trace!("MicroTaskManager::add_task");
         {
             let mut lck = self.jobs.lock("add_task").unwrap();
             let jobs = &mut *lck;
             jobs.push(Box::new(task));
         }
+        trace!("MicroTaskManager::add_task / notify");
         self.empty_cond.notify_all();
     }
 
     /// execute a task synchronously in the worker thread
     pub fn exe_task<R: Send + 'static, T: FnOnce() -> R + Send + 'static>(&self, task: T) -> R {
+        trace!("MicroTaskManager::exe_task");
         // create a channel, put sender in job, wait for receiver here
         // don;t block from worker threads
         self.assert_is_not_worker_thread();
 
+        trace!("MicroTaskManager::exe_task / create channel");
+
         let (sender, receiver) = channel();
+
         let job = move || {
+            trace!("MicroTaskManager::exe_task / job");
             let res: R = task();
+            trace!("MicroTaskManager::exe_task / send");
             sender.send(res).unwrap();
         };
         self.add_task(job);
-        receiver.recv().unwrap()
+        trace!("MicroTaskManager::exe_task / receive");
+        let ret = receiver.recv().unwrap();
+        trace!("MicroTaskManager::exe_task / received");
+        ret
     }
 
     /// method for adding tasks from worker, these do not need to impl Send
@@ -127,14 +138,17 @@ impl MicroTaskManager {
             let mut jobs_lck = self.jobs.lock("worker_loop").unwrap();
 
             if jobs_lck.is_empty() && !self.has_local_jobs() {
-                let dur = Duration::from_secs(1);
+                let dur = Duration::from_secs(5);
                 jobs_lck = self.empty_cond.wait_timeout(jobs_lck, dur).ok().unwrap().0;
             }
 
             jobs = replace(&mut *jobs_lck, vec![]);
         }
 
-        // do local jobs first
+        for job in jobs {
+            job();
+        }
+
         LOCAL_JOBS.with(|rc| {
             let mut local_todos = vec![];
             {
@@ -148,10 +162,6 @@ impl MicroTaskManager {
                 local_todo();
             }
         });
-
-        for job in jobs {
-            job();
-        }
     }
 }
 
