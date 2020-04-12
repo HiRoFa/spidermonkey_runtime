@@ -50,12 +50,7 @@ lazy_static! {
         DebugMutex<
             HashMap<
                 usize,
-                Option<
-                    Either<
-                        Result<EsValueFacade, EsValueFacade>,
-                        (i32, Weak<EsRuntimeWrapperInner>),
-                    >,
-                >,
+                Option<Either<Result<EsValueFacade, String>, (i32, Weak<EsRuntimeWrapperInner>)>>,
             >,
         >,
     > = Arc::new(DebugMutex::new(HashMap::new(), "PROMISE_ANSWERS"));
@@ -168,7 +163,7 @@ impl EsValueFacade {
 
     pub fn new_promise<C>(resolver: C) -> EsValueFacade
     where
-        C: FnOnce() -> Result<EsValueFacade, EsValueFacade> + Send + 'static,
+        C: FnOnce() -> Result<EsValueFacade, String> + Send + 'static,
     {
         // todo, instead of EsRootedValue, we need to use a ManagedObj (store id here and obj in js)
         // because espersistentobj can not be sent between threads..
@@ -197,12 +192,7 @@ impl EsValueFacade {
             // locked scope
             let map: &mut HashMap<
                 usize,
-                Option<
-                    Either<
-                        Result<EsValueFacade, EsValueFacade>,
-                        (i32, Weak<EsRuntimeWrapperInner>),
-                    >,
-                >,
+                Option<Either<Result<EsValueFacade, String>, (i32, Weak<EsRuntimeWrapperInner>)>>,
             > = &mut PROMISE_ANSWERS.lock("gen_id").unwrap();
 
             let mut rng = rand::thread_rng();
@@ -222,17 +212,14 @@ impl EsValueFacade {
             let res = resolver();
             trace!("got prom result for {}, ok={}", id, res.is_ok());
             let eith_opt: Option<(
-                Either<Result<EsValueFacade, EsValueFacade>, (i32, Weak<EsRuntimeWrapperInner>)>,
-                Result<EsValueFacade, EsValueFacade>,
+                Either<Result<EsValueFacade, String>, (i32, Weak<EsRuntimeWrapperInner>)>,
+                Result<EsValueFacade, String>,
             )> = {
                 // locked scope
                 let map: &mut HashMap<
                     usize,
                     Option<
-                        Either<
-                            Result<EsValueFacade, EsValueFacade>,
-                            (i32, Weak<EsRuntimeWrapperInner>),
-                        >,
+                        Either<Result<EsValueFacade, String>, (i32, Weak<EsRuntimeWrapperInner>)>,
                     >,
                 > = &mut PROMISE_ANSWERS.lock("in_task").unwrap();
 
@@ -302,7 +289,9 @@ impl EsValueFacade {
                                     }
                                 } else {
                                     trace!("rooting err result");
-                                    rooted!(in (cx) let res_root = res.err().unwrap().to_es_value(cx));
+                                    let err_str = res.err().unwrap();
+                                    let err_val = es_utils::new_es_value_from_str(cx, err_str.as_str());
+                                    rooted!(in (cx) let res_root = err_val);
                                     trace!("rejecting prom");
                                     let reject_prom_res = es_utils::promises::reject_promise(
                                         cx,
@@ -647,12 +636,7 @@ impl EsValueFacade {
             trace!("to_es_value.7 prepped_promise");
             let map: &mut HashMap<
                 usize,
-                Option<
-                    Either<
-                        Result<EsValueFacade, EsValueFacade>,
-                        (i32, Weak<EsRuntimeWrapperInner>),
-                    >,
-                >,
+                Option<Either<Result<EsValueFacade, String>, (i32, Weak<EsRuntimeWrapperInner>)>>,
             > = &mut PROMISE_ANSWERS.lock("to_es_value.7").unwrap();
             let id = self.val_promise.as_ref().unwrap();
             if let Some(opt) = map.get(id) {
@@ -701,7 +685,11 @@ impl EsValueFacade {
                             }
                         } else {
                             // reject prom
-                            rooted!(in (context) let res_root = res.err().unwrap().to_es_value(context));
+                            let err_str = res.err().unwrap();
+                            let err_val =
+                                es_utils::new_es_value_from_str(context, err_str.as_str());
+                            rooted!(in (context) let res_root = err_val);
+
                             let prom_reje_res = es_utils::promises::reject_promise(
                                 context,
                                 prom_root.handle(),
@@ -738,12 +726,7 @@ impl Drop for EsValueFacade {
             // drop from map if val is None, task has not run yet and to_es_val was not called
             let map: &mut HashMap<
                 usize,
-                Option<
-                    Either<
-                        Result<EsValueFacade, EsValueFacade>,
-                        (i32, Weak<EsRuntimeWrapperInner>),
-                    >,
-                >,
+                Option<Either<Result<EsValueFacade, String>, (i32, Weak<EsRuntimeWrapperInner>)>>,
             > = &mut PROMISE_ANSWERS.lock("EsValueFacade::drop").unwrap();
             let id = self.val_promise.as_ref().unwrap();
             if let Some(opt) = map.get(id) {
@@ -760,10 +743,12 @@ mod tests {
 
     use crate::es_utils::EsErrorInfo;
     use crate::esruntimewrapper::EsRuntimeWrapper;
+    use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
     use crate::esvaluefacade::EsValueFacade;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use log::trace;
     use std::collections::HashMap;
+    use std::sync::Arc;
     use std::time::Duration;
 
     #[test]
@@ -774,7 +759,7 @@ mod tests {
         rt.do_with_inner(|inner| {
             inner.register_op(
                 "test_op_0",
-                Box::new(|_sm_rt: &SmRuntime, args: Vec<EsValueFacade>| {
+                Arc::new(|_rt: &EsRuntimeWrapperInner, args: Vec<EsValueFacade>| {
                     let args1 = args.get(0).expect("did not get a first arg");
                     let args2 = args.get(1).expect("did not get a second arg");
 
@@ -786,7 +771,7 @@ mod tests {
             );
             inner.register_op(
                 "test_op_1",
-                Box::new(|_sm_rt: &SmRuntime, args: Vec<EsValueFacade>| {
+                Arc::new(|_rt: &EsRuntimeWrapperInner, args: Vec<EsValueFacade>| {
                     let args1 = args.get(0).expect("did not get a first arg");
                     let args2 = args.get(1).expect("did not get a second arg");
 
@@ -799,7 +784,7 @@ mod tests {
 
             inner.register_op(
                 "test_op_2",
-                Box::new(|_sm_rt: &SmRuntime, args: Vec<EsValueFacade>| {
+                Arc::new(|_rt: &EsRuntimeWrapperInner, args: Vec<EsValueFacade>| {
                     let args1 = args.get(0).expect("did not get a first arg");
                     let args2 = args.get(1).expect("did not get a second arg");
 
@@ -812,7 +797,7 @@ mod tests {
 
             inner.register_op(
                 "test_op_3",
-                Box::new(|_sm_rt: &SmRuntime, args: Vec<EsValueFacade>| {
+                Arc::new(|_rt: &EsRuntimeWrapperInner, args: Vec<EsValueFacade>| {
                     let args1 = args.get(0).expect("did not get a first arg");
                     let args2 = args.get(1).expect("did not get a second arg");
 
@@ -1031,7 +1016,7 @@ mod tests {
 
         let my_bad_prep_func = || {
             std::thread::sleep(Duration::from_secs(5));
-            return Err(EsValueFacade::new_i32(456));
+            return Err("456".to_string());
         };
 
         let prom_esvf = EsValueFacade::new_promise(my_prep_func);

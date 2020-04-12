@@ -33,9 +33,9 @@ use mozjs::rust::SIMPLE_GLOBAL_CLASS;
 
 use rand::Rng;
 
+use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ops::Deref;
 use std::os::raw::c_void;
 use std::panic::AssertUnwindSafe;
 use std::ptr;
@@ -44,7 +44,11 @@ use std::str;
 use std::sync::{Arc, Weak};
 
 /// the type for registering rust_ops in the script engine
-pub type OP = Box<dyn Fn(&SmRuntime, Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send>;
+pub type OP = Arc<
+    dyn Fn(&EsRuntimeWrapperInner, Vec<EsValueFacade>) -> Result<EsValueFacade, String>
+        + Send
+        + Sync,
+>;
 
 /// wrapper for the SpiderMonkey runtime
 pub struct SmRuntime {
@@ -111,8 +115,17 @@ impl SmRuntime {
             let function = JS_DefineFunction(
                 cx,
                 global.into(),
+                b"__invoke_rust_op_sync\0".as_ptr() as *const libc::c_char,
+                Some(invoke_rust_op_sync),
+                1,
+                0,
+            );
+            assert!(!function.is_null());
+            let function = JS_DefineFunction(
+                cx,
+                global.into(),
                 b"__invoke_rust_op\0".as_ptr() as *const libc::c_char,
-                Some(invoke_rust_op),
+                Some(invoke_rust_op_sync),
                 1,
                 0,
             );
@@ -255,7 +268,8 @@ impl SmRuntime {
         let op_map = &self.op_container;
         let op = op_map.get(&name).expect("no such op");
 
-        let ret = op(self, args);
+        let rt = self.clone_rtw_inner();
+        let ret = op(rt.borrow(), args);
 
         return ret;
     }
@@ -501,16 +515,61 @@ unsafe extern "C" fn invoke_rust_op(
 ) -> bool {
     let args = CallArgs::from_vp(vp, argc);
 
+    let op_res: Result<EsValueFacade, String> = invoke_rust_op_esvf(context, argc, vp, true);
+
+    // return stuff as JSVal
+    if op_res.is_ok() {
+        let op_res_esvf = op_res.ok().unwrap();
+        let es_ret_val = op_res_esvf.to_es_value(context);
+        args.rval().set(es_ret_val);
+    } else {
+        // report error to js?
+        debug!("op failed with {}", op_res.err().unwrap());
+        JS_ReportErrorASCII(context, b"op failed\0".as_ptr() as *const libc::c_char);
+    }
+    return true;
+}
+
+/// this function is called from script when the script invokes esses.invoke_rust_op
+/// it is used to invoke native rust functions from script
+unsafe extern "C" fn invoke_rust_op_sync(
+    context: *mut JSContext,
+    argc: u32,
+    vp: *mut mozjs::jsapi::Value,
+) -> bool {
+    let args = CallArgs::from_vp(vp, argc);
+
+    let op_res: Result<EsValueFacade, String> = invoke_rust_op_esvf(context, argc, vp, false);
+
+    // return stuff as JSVal
+    if op_res.is_ok() {
+        let op_res_esvf = op_res.ok().unwrap();
+        let es_ret_val = op_res_esvf.to_es_value(context);
+        args.rval().set(es_ret_val);
+    } else {
+        // report error to js?
+        debug!("op failed with {}", op_res.err().unwrap());
+        JS_ReportErrorASCII(context, b"op failed\0".as_ptr() as *const libc::c_char);
+    }
+    return true;
+}
+
+/// this function is called from script when the script invokes esses.invoke_rust_op
+/// it is used to invoke native rust functions from script
+fn invoke_rust_op_esvf(
+    context: *mut JSContext,
+    argc: u32,
+    vp: *mut mozjs::jsapi::Value,
+    as_promise: bool,
+) -> Result<EsValueFacade, String> {
+    let args = unsafe { CallArgs::from_vp(vp, argc) };
+
     if args.argc_ < 1 {
-        JS_ReportErrorASCII(
-            context,
-            b"invoke_rust_op() requires at least 1 argument: op_name\0".as_ptr()
-                as *const libc::c_char,
-        );
-        return false;
+        return Err("invoke_rust_op requires at least one arg: op_name".to_string());
     }
 
-    let op_name_arg: mozjs::rust::HandleValue = mozjs::rust::Handle::from_raw(args.get(0));
+    let op_name_arg: mozjs::rust::HandleValue =
+        unsafe { mozjs::rust::Handle::from_raw(args.get(0)) };
     let op_name = es_utils::es_value_to_str(context, &op_name_arg.get());
 
     trace!("running rust-op {} with and {} args", op_name, args.argc_);
@@ -518,17 +577,17 @@ unsafe extern "C" fn invoke_rust_op(
     // todo parse multiple args and stuff.. and scope... etc
     let mut args_vec: Vec<EsValueFacade> = Vec::new();
 
-    let op_res: Result<EsValueFacade, String> = SM_RT.with(move |sm_rt_rc| {
+    SM_RT.with(move |sm_rt_rc| {
         trace!("about to borrow sm_rt");
-        let sm_rt_ref = sm_rt_rc.borrow();
-        let sm_rt: &SmRuntime = sm_rt_ref.deref();
+        let sm_rt = &*sm_rt_rc.borrow();
 
         let global = sm_rt.global_obj;
         let rt = &sm_rt.runtime;
         rooted!(in (context) let global_root = global);
 
         for x in 1..args.argc_ {
-            let var_arg: mozjs::rust::HandleValue = mozjs::rust::Handle::from_raw(args.get(x));
+            let var_arg: mozjs::rust::HandleValue =
+                unsafe { mozjs::rust::Handle::from_raw(args.get(x)) };
             args_vec.push(EsValueFacade::new_v(
                 rt,
                 context,
@@ -537,23 +596,20 @@ unsafe extern "C" fn invoke_rust_op(
             ));
         }
 
-        trace!("about to invoke op {} from sm_rt", op_name);
-        sm_rt.invoke_op(op_name, args_vec)
-    });
-
-    // return stuff as JSVal
-    let mut es_ret_val = UndefinedValue(); // dit is een Value
-    if op_res.is_ok() {
-        let op_res_esvf = op_res.unwrap();
-        es_ret_val = op_res_esvf.to_es_value(context);
-    } else {
-        // todo report error to js?
-        debug!("op failed with {}", op_res.err().unwrap());
-        JS_ReportErrorASCII(context, b"op failed\0".as_ptr() as *const libc::c_char);
-    }
-
-    args.rval().set(es_ret_val);
-    return true;
+        if as_promise {
+            let rt = sm_rt.clone_rtw_inner();
+            let op = sm_rt
+                .op_container
+                .get(&op_name)
+                .expect("no such op")
+                .clone();
+            Ok(EsValueFacade::new_promise(move || {
+                op(rt.borrow(), args_vec)
+            }))
+        } else {
+            sm_rt.invoke_op(op_name, args_vec)
+        }
+    })
 }
 
 impl Drop for SmRuntime {
@@ -564,7 +620,7 @@ impl Drop for SmRuntime {
     }
 }
 
-/// this function is called when servo needs to scheduale a callback function to be executed
+/// this function is called when servo needs to schedule a callback function to be executed
 /// asynchronously because a Promise was constructed
 /// the callback obj is rooted and unrooted when dropped
 /// the async job is fed to the microtaskmanager and invoked later

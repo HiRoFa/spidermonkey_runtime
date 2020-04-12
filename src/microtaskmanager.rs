@@ -69,9 +69,14 @@ impl MicroTaskManager {
     /// execute a task synchronously in the worker thread
     pub fn exe_task<R: Send + 'static, T: FnOnce() -> R + Send + 'static>(&self, task: T) -> R {
         trace!("MicroTaskManager::exe_task");
+
+        if self.is_worker_thread() {
+            // don;t block from worker threads
+            trace!("MicroTaskManager::exe_task, is worker, just run");
+            return task();
+        }
+
         // create a channel, put sender in job, wait for receiver here
-        // don;t block from worker threads
-        self.assert_is_not_worker_thread();
 
         trace!("MicroTaskManager::exe_task / create channel");
 
@@ -120,6 +125,15 @@ impl MicroTaskManager {
             let local_jobs = &*rc.borrow();
             !local_jobs.is_empty()
         })
+    }
+
+    pub fn is_worker_thread(&self) -> bool {
+        let handle = thread::current();
+        if let Some(handle_name) = handle.name() {
+            self.worker_thread_name.as_str().eq(handle_name)
+        } else {
+            false
+        }
     }
 
     pub fn assert_is_worker_thread(&self) {

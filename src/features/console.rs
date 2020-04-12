@@ -335,7 +335,6 @@ unsafe extern "C" fn console_assert(
             context,
             b"console.assert requires at least 2 arguments\0".as_ptr() as *const libc::c_char,
         );
-        return false;
     }
 
     let mut values: Vec<JSVal> = vec![];
@@ -352,7 +351,6 @@ unsafe extern "C" fn console_assert(
             b"first argument to console.assert should be a boolean value\0".as_ptr()
                 as *const libc::c_char,
         );
-        return false;
     }
     let assertion: bool = assertion_val.to_boolean();
 

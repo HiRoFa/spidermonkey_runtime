@@ -34,10 +34,7 @@ new Promise((resolve, reject) => {
 
 There are 3 methods in the esses object to call a rust op.
 
-the preferred way is one of the asynchronous version.
-
-Currently they just run async in the same single threaded ThreadPool but 
-in the future they will run async a a multithreaded pool.
+the preferred way is ```invoke_rust_op(name, ...args)``` because then the rust-op runs in a separate multithreaded threadpool and thus don't block the script runtime thread. 
 
 ### esses.invoke_rust_op(op_name, ...args);
 

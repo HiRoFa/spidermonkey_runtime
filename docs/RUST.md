@@ -215,7 +215,7 @@ In order to call a rust function from script you need to add the rust function t
 fn reg_op(rt: &EsRuntimeWrapper) {
     rt.register_op(
         "my_rusty_op",
-        Box::new(|_sm_rt, args: Vec<EsValueFacade>| {
+        Arc::new(|_rt, args: Vec<EsValueFacade>| {
             let a = args.get(0).unwrap().get_i32();
             let b = args.get(1).unwrap().get_i32();
             Ok(EsValueFacade::new_i32(a * b))

@@ -90,7 +90,7 @@ Cargo.toml
 # latest
 es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git"}
 # but you should check in the repo for the tag or branch you want to use and link to that
-# es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git", tag = "0.2.1"}
+# es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git", tag = "0.3.0"}
 ```
 
 
@@ -119,7 +119,7 @@ my_app.rs
 
         rt.register_op(
             "my_rusty_op",
-            Box::new(|_sm_rt, args: Vec<EsValueFacade>| {
+            Arc::new(|_rt, args: Vec<EsValueFacade>| {
                 let a = args.get(0).unwrap().get_i32();
                 let b = args.get(1).unwrap().get_i32();
                 Ok(EsValueFacade::new_i32(a * b))

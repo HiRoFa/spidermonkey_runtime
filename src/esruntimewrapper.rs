@@ -1,5 +1,3 @@
-use log::trace;
-
 use std::{str, thread};
 
 use std::sync::{Arc, Weak};
@@ -138,9 +136,7 @@ impl EsRuntimeWrapper {
     }
 
     pub fn do_with_inner<R, F: FnOnce(&EsRuntimeWrapperInner) -> R>(&self, f: F) -> R {
-        trace!("about to lock inner");
         let inner = self.inner.clone();
-        trace!("got lock on inner");
         f(&*inner)
     }
 

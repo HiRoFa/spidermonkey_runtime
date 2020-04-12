@@ -7,6 +7,7 @@ this.esses = new (class Esses {
         this._next_id = 0;
         this._cleanup_jobs = [];
         this._registered_promises = new Map();
+        this._runtime_id = Math.floor(Math.random() * 10000);
 
     }
 
@@ -34,19 +35,18 @@ this.esses = new (class Esses {
     }
 
     /**
-    * currently this runs in the same threadpool as all jobs for this runtime but in future this will become a multithreaded pool
     * @returns {Promise}
     */
     invoke_rust_op(name, ...args) {
 
-        return new Promise((resolve, reject) => {
-            try {
-                let res = this.invoke_rust_op_sync(name, args);
-                resolve(res);
-            } catch(ex) {
-                reject(ex);
-            }
-        });
+        console.log("invoke_rust_op_sync %s ", name);
+        try {
+            let rust_result = __invoke_rust_op(name, ...args);
+            return rust_result;
+        } catch(ex) {
+            console.error("invoke_rust_op %s failed with %s", name, "" + ex);
+            throw ex;
+        }
 
     }
 
@@ -68,10 +68,11 @@ this.esses = new (class Esses {
 
         console.log("invoke_rust_op_sync %s ", name);
         try {
-            let rust_result = __invoke_rust_op(name, ...args);
+            let rust_result = __invoke_rust_op_sync(name, ...args);
             return rust_result;
         } catch(ex) {
             console.error("invoke_rust_op_sync %s failed with %s", name, "" + ex);
+            throw ex;
         }
 
     }

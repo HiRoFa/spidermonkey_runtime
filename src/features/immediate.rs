@@ -1,13 +1,15 @@
 use log::debug;
 
 use crate::esruntimewrapper::EsRuntimeWrapper;
+use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
 use crate::esvaluefacade::EsValueFacade;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
+use std::sync::Arc;
 
 pub(crate) fn init(rt: &EsRuntimeWrapper) {
     rt.register_op(
         "sched_immediate",
-        Box::new(|sm_rt: &SmRuntime, args: Vec<EsValueFacade>| {
+        Arc::new(|rt: &EsRuntimeWrapperInner, args: Vec<EsValueFacade>| {
             debug!(
                 "running op sched_immediate in rust with rt with {} args",
                 args.len()
@@ -23,15 +25,12 @@ pub(crate) fn init(rt: &EsRuntimeWrapper) {
                 id
             );
 
-            // todo pass runtime or runtimeid as param for every OP
-            //rt.eval(code);
-
-            sm_rt.do_with_sm_rt_async(move |sm_rt| {
-                sm_rt
-                    .call(vec!["esses", "async"], "_run_immediate_from_rust", vec![EsValueFacade::new_i32(id)])
-                    .ok()
-                    .expect("could not invoke _run_immediate_from_rust");
-            });
+            rt.call(
+                // todo natively do this
+                vec!["esses", "async"],
+                "_run_immediate_from_rust",
+                vec![EsValueFacade::new_i32(id)],
+            );
 
             debug!("done running sched immediate in rust with id {}", id);
 

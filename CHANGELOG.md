@@ -1,4 +1,9 @@
-# 0.2.3 (work in progress)
+# 0.3.1 (work in progress) 
+
+# 0.3.0
+
+* broke compatibility because of changed interface for rust-ops, hence version jumped to 0.3
+* rust-ops now run async and return a promise from rust
 
 * lots of threading related issues, mostly about preventing deadlocks when using EsValueFacade::new_promise()
 
