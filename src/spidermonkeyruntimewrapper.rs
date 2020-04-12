@@ -125,7 +125,7 @@ impl SmRuntime {
                 cx,
                 global.into(),
                 b"__invoke_rust_op\0".as_ptr() as *const libc::c_char,
-                Some(invoke_rust_op_sync),
+                Some(invoke_rust_op),
                 1,
                 0,
             );
