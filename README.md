@@ -51,14 +51,14 @@ Please see the [CHANGELOG](CHANGELOG.md) for what's new.
 * [x] init a EsValueFacade as a promise from rust, #19
 * [x] more tests for e.g. error handling in module loading, error handling in promises
 
-# 0.2.x 
+# 0.3.x 
 
-* [ ] run rust-ops multithreaded, and return Promises from rust #8
+* [x] run rust-ops multithreaded, and return Promises from rust #8
 * [ ] dynamic imports #20
 * [ ] typedArrays from and to Vecs
 * [ ] complete set of from/to primitives in EsValueFacade
 
-# 0.3 goals
+# 0.9 goals
 
 * [ ] Use PersistentRooted instead of deprecated Add\*Root and Remove\*Root
 
