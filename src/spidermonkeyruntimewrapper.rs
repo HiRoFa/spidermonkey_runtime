@@ -173,9 +173,6 @@ impl SmRuntime {
         );
 
         self.do_with_jsapi(|_rt, cx, _global| {
-            // todo cache modules like promise callbacks
-            //
-
             let load_res = es_utils::modules::compile_module(cx, module_src, module_file_name);
 
             if let Some(err) = load_res.err() {
@@ -196,9 +193,9 @@ impl SmRuntime {
                 es_utils::eval(rt, global, eval_code, file_name, rval.handle_mut());
 
             if eval_res.is_ok() {
-                return Ok(EsValueFacade::new_v(rt, cx, global, rval.handle()));
+                Ok(EsValueFacade::new_v(rt, cx, global, rval.handle()))
             } else {
-                return Err(eval_res.err().unwrap());
+                Err(eval_res.err().unwrap())
             }
         })
     }
@@ -217,9 +214,9 @@ impl SmRuntime {
                 es_utils::eval(rt, global, eval_code, file_name, rval.handle_mut());
 
             if eval_res.is_ok() {
-                return Ok(());
+                Ok(())
             } else {
-                return Err(eval_res.err().unwrap());
+                Err(eval_res.err().unwrap())
             }
         })
     }
@@ -320,6 +317,7 @@ impl SmRuntime {
         args: Vec<EsValueFacade>,
     ) -> Result<EsValueFacade, EsErrorInfo> {
         let mut arguments_value_vec: Vec<JSVal> = vec![];
+
         for arg_vf in args {
             // todo root these
             arguments_value_vec.push(arg_vf.to_es_value(context));
@@ -337,9 +335,9 @@ impl SmRuntime {
         );
 
         if res2.is_ok() {
-            return Ok(EsValueFacade::new_v(rt, context, global, rval.handle()));
+            Ok(EsValueFacade::new_v(rt, context, global, rval.handle()))
         } else {
-            return Err(res2.err().unwrap());
+            Err(res2.err().unwrap())
         }
     }
 
@@ -372,9 +370,9 @@ impl SmRuntime {
         );
 
         if res2.is_ok() {
-            return Ok(EsValueFacade::new_v(rt, context, global, rval.handle()));
+            Ok(EsValueFacade::new_v(rt, context, global, rval.handle()))
         } else {
-            return Err(res2.err().unwrap());
+            Err(res2.err().unwrap())
         }
     }
 
@@ -589,16 +587,15 @@ fn invoke_rust_op_esvf(
 
     trace!("running rust-op {} with and {} args", op_name, args.argc_);
 
-    // todo parse multiple args and stuff.. and scope... etc
+    // todo root these
     let mut args_vec: Vec<EsValueFacade> = Vec::new();
 
     SM_RT.with(move |sm_rt_rc| {
         trace!("about to borrow sm_rt");
         let sm_rt = &*sm_rt_rc.borrow();
 
-        let global = sm_rt.global_obj;
         let rt = &sm_rt.runtime;
-        rooted!(in (context) let global_root = global);
+        rooted!(in (context) let global_root = sm_rt.global_obj);
 
         for x in 1..args.argc_ {
             let var_arg: mozjs::rust::HandleValue =
@@ -661,8 +658,7 @@ unsafe extern "C" fn enqueue_promise_job(
 
                     sm_rt.do_with_jsapi(|_rt, cx, _global| {
                         trace!("rooting null");
-                        let null_obj: *mut JSObject = NullValue().to_object_or_null();
-                        rooted!(in (cx) let null_root = null_obj);
+                        rooted!(in (cx) let null_root = NullValue().to_object_or_null());
 
                         trace!("calling cb.call");
                         let call_res = cb.call(cx, null_root.handle());

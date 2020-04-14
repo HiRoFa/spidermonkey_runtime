@@ -159,7 +159,7 @@ pub fn new_es_value_from_str(context: *mut JSContext, s: &str) -> mozjs::jsapi::
 
 /// convert a StringValue to a rust string
 #[allow(dead_code)]
-pub fn es_value_to_str(context: *mut JSContext, val: &mozjs::jsapi::Value) -> String {
+pub fn es_value_to_str(context: *mut JSContext, val: &JSVal) -> String {
     let jsa: *mut mozjs::jsapi::JSString = val.to_string();
     return es_jsstring_to_string(context, jsa);
 }

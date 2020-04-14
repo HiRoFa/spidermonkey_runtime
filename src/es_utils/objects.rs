@@ -14,7 +14,9 @@ use mozjs::jsapi::JSITER_OWNONLY;
 use mozjs::jsval::{JSVal, UndefinedValue};
 use mozjs::rust::jsapi_wrapped::GetPropertyKeys;
 use mozjs::rust::wrappers::JS_DefineProperty;
-use mozjs::rust::{HandleObject, HandleValue, IdVector, IntoHandle, MutableHandleValue};
+use mozjs::rust::{
+    HandleObject, HandleValue, IdVector, IntoHandle, MutableHandleObject, MutableHandleValue,
+};
 use std::ptr;
 
 /// get a single member of a JSObject
@@ -118,8 +120,6 @@ pub fn get_prototype(
     ret_val: MutableHandleObject,
 ) -> Result<(), EsErrorInfo> {
     let ok = unsafe { JS_GetPrototype(context, obj.into_handle(), ret_val) };
-
-    // todo rebuild with ret_val: MutableHandle instead of returning Value
 
     if !ok {
         let err_opt = report_es_ex(context);

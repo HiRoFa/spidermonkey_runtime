@@ -124,9 +124,6 @@ impl EsValueFacade {
     where
         C: FnOnce() -> Result<EsValueFacade, String> + Send + 'static,
     {
-        // todo, instead of EsRootedValue, we need to use a ManagedObj (store id here and obj in js)
-        // because espersistentobj can not be sent between threads..
-
         // create a lazy_static map in a Mutex
         // the mutex contains a Map<usize, Either<Result<EsValueFacade, EsErrorInfo>, EsPersistentRooted>>
         // the usize is stored as an id in self.val_promise_id
@@ -542,9 +539,9 @@ impl EsValueFacade {
                 );
 
                 if res2.is_ok() {
-                    return Ok(EsValueFacade::new_v(rt, cx, global, rval.handle()));
+                    Ok(EsValueFacade::new_v(rt, cx, global, rval.handle()))
                 } else {
-                    return Err(res2.err().unwrap());
+                    Err(res2.err().unwrap())
                 }
             },
         )
@@ -578,21 +575,21 @@ impl EsValueFacade {
     pub fn as_js_expression_str(&self) -> String {
         if self.is_boolean() {
             if self.get_boolean() {
-                return "true".to_string();
+                "true".to_string()
             } else {
-                return "false".to_string();
+                "false".to_string()
             }
         } else if self.is_i32() {
-            return format!("{}", self.get_i32());
+            format!("{}", self.get_i32())
         } else if self.is_f64() {
-            return format!("{}", self.get_f64());
+            format!("{}", self.get_f64())
         } else if self.is_string() {
-            return format!("\"{}\"", self.get_string());
+            format!("\"{}\"", self.get_string())
         } else if self.is_managed_object() {
-            return format!("/* Future {} */", self.get_managed_object_id());
+            format!("/* Future {} */", self.get_managed_object_id())
         } else if self.is_array() {
             // todo
-            return format!("[]");
+            format!("[]")
         } else if self.is_object() {
             let mut res: String = String::new();
             let map = self.get_object();
@@ -609,9 +606,10 @@ impl EsValueFacade {
             }
 
             res.push('}');
-            return res;
+            res
+        } else {
+            "null".to_string()
         }
-        "null".to_string()
     }
 
     pub(crate) fn to_es_value(&self, context: *mut JSContext) -> mozjs::jsapi::Value {

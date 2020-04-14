@@ -10,7 +10,7 @@ pub fn compile_module(
     src: &str,
     file_name: &str,
 ) -> Result<*mut JSObject, EsErrorInfo> {
-    // use mozjs::jsapi::CompileModule; todo, how are the wrapped once different?
+    // use mozjs::jsapi::CompileModule; todo, how are the wrapped ones different?
     // https://doc.servo.org/mozjs/jsapi/fn.CompileModule.html
 
     let src_vec: Vec<u16> = src.encode_utf16().collect();
