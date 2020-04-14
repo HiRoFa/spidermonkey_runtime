@@ -174,6 +174,9 @@ Besides rust you'll need to install the following packages to compile the mozjs 
     * python
 * // from 0.2.0
     * llvm (mozjs_sys needs llvm-objdump)
+* on openSUSE i also needed
+  * python-xml
+  * gcc-c
 
 for more detailed info please visit https://github.com/servo/mozjs#building 
 
