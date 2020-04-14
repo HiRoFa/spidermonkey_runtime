@@ -7,7 +7,7 @@ the easiest way to do that is by calling EsRuntimeWrapper.do_in_es_runtime_threa
 ```rust
 
 fn call_jsapi_stuff(rt: &EsRuntimeWrapper) {
-    let res = rt.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntimeWrapper| {
+    let res = rt.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntimeWrapper| {
     
         // do_with_jsapi does a couple of things
         // 1.  root the global obj
@@ -21,7 +21,7 @@ fn call_jsapi_stuff(rt: &EsRuntimeWrapper) {
             true
         })
 
-    }));
+    });
 }
 
 ```

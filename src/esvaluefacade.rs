@@ -34,10 +34,10 @@ pub struct EsValueFacade {
     val_f64: Option<f64>,
     val_boolean: Option<bool>,
     val_managed_var: Option<RustManagedEsVar>,
-
     val_object: Option<HashMap<String, EsValueFacade>>,
     val_array: Option<Vec<EsValueFacade>>,
     val_promise: Option<usize>,
+    val_js_function: Option<(i32, Arc<EsRuntimeWrapperInner>)>,
 }
 
 thread_local! {
@@ -80,85 +80,44 @@ impl EsValueFacade {
             val_object: None,
             val_array: None,
             val_promise: None,
+            val_js_function: None,
         }
     }
 
     pub fn new_f64(num: f64) -> Self {
-        EsValueFacade {
-            val_string: None,
-            val_f64: Some(num),
-            val_i32: None,
-            val_boolean: None,
-            val_managed_var: None,
-            val_object: None,
-            val_array: None,
-            val_promise: None,
-        }
+        let mut ret = Self::undefined();
+        ret.val_f64 = Some(num);
+        ret
     }
 
     pub fn new_obj(props: HashMap<String, EsValueFacade>) -> Self {
-        EsValueFacade {
-            val_string: None,
-            val_f64: None,
-            val_i32: None,
-            val_boolean: None,
-            val_managed_var: None,
-            val_object: Some(props),
-            val_array: None,
-            val_promise: None,
-        }
+        let mut ret = Self::undefined();
+        ret.val_object = Some(props);
+        ret
     }
 
     pub fn new_i32(num: i32) -> Self {
-        EsValueFacade {
-            val_string: None,
-            val_i32: Some(num),
-            val_f64: None,
-            val_boolean: None,
-            val_managed_var: None,
-            val_object: None,
-            val_array: None,
-            val_promise: None,
-        }
+        let mut ret = Self::undefined();
+        ret.val_i32 = Some(num);
+        ret
     }
 
     pub fn new_str(s: String) -> Self {
-        EsValueFacade {
-            val_string: Some(s),
-            val_i32: None,
-            val_f64: None,
-            val_boolean: None,
-            val_managed_var: None,
-            val_object: None,
-            val_array: None,
-            val_promise: None,
-        }
+        let mut ret = Self::undefined();
+        ret.val_string = Some(s);
+        ret
     }
 
     pub fn new_bool(b: bool) -> Self {
-        EsValueFacade {
-            val_string: None,
-            val_i32: None,
-            val_f64: None,
-            val_boolean: Some(b),
-            val_managed_var: None,
-            val_object: None,
-            val_array: None,
-            val_promise: None,
-        }
+        let mut ret = Self::undefined();
+        ret.val_boolean = Some(b);
+        ret
     }
 
     pub fn new_array(vals: Vec<EsValueFacade>) -> Self {
-        EsValueFacade {
-            val_string: None,
-            val_i32: None,
-            val_f64: None,
-            val_boolean: None,
-            val_managed_var: None,
-            val_object: None,
-            val_array: Some(vals),
-            val_promise: None,
-        }
+        let mut ret = Self::undefined();
+        ret.val_array = Some(vals);
+        ret
     }
 
     pub fn new_promise<C>(resolver: C) -> EsValueFacade
@@ -319,16 +278,11 @@ impl EsValueFacade {
         // run task
         crate::esruntimewrapper::EsRuntimeWrapper::add_helper_task(task);
 
-        EsValueFacade {
-            val_string: None,
-            val_i32: None,
-            val_f64: None,
-            val_boolean: None,
-            val_managed_var: None,
-            val_object: None,
-            val_array: None,
-            val_promise: Some(id),
-        }
+        let mut ret = Self::undefined();
+
+        ret.val_promise = Some(id);
+
+        ret
     }
 
     pub(crate) fn new_v(
@@ -344,6 +298,7 @@ impl EsValueFacade {
         let mut val_managed_var = None;
         let mut val_object = None;
         let mut val_array = None;
+        let mut val_js_function = None;
 
         let rval: JSVal = *rval_handle;
 
@@ -432,6 +387,16 @@ impl EsValueFacade {
 
                     val_managed_var = Some(rmev);
                 }
+            } else if es_utils::functions::object_is_function(obj) {
+                // wrap function in persistentrooted
+
+                let rti_ref = crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
+                    let sm_rt: &SmRuntime = &*sm_rt_rc.borrow();
+                    sm_rt.clone_rtw_inner()
+                });
+                let cached_id =
+                    crate::spidermonkeyruntimewrapper::register_cached_object(context, obj);
+                val_js_function = Some((cached_id, rti_ref));
             } else {
                 let prop_names: Vec<String> =
                     crate::es_utils::objects::get_js_obj_prop_names(context, obj_root.handle());
@@ -470,6 +435,7 @@ impl EsValueFacade {
             val_object,
             val_array,
             val_promise: None,
+            val_js_function,
         };
 
         ret
@@ -526,6 +492,64 @@ impl EsValueFacade {
         return self.val_array.as_ref().unwrap();
     }
 
+    pub fn invoke_function(&self, args: Vec<EsValueFacade>) -> Result<EsValueFacade, EsErrorInfo> {
+        trace!("EsValueFacade.invoke_function()");
+        let rt_arc = self.val_js_function.as_ref().unwrap().1.clone();
+        let cached_id = self.val_js_function.as_ref().unwrap().0;
+
+        let job = move |sm_rt: &SmRuntime| Self::invoke_function2(cached_id, sm_rt, args);
+
+        rt_arc.do_in_es_runtime_thread_sync(job)
+    }
+
+    pub fn invoke_function2(
+        cached_id: i32,
+        sm_rt: &SmRuntime,
+        args: Vec<EsValueFacade>,
+    ) -> Result<EsValueFacade, EsErrorInfo> {
+        trace!("EsValueFacade.invoke_function2()");
+        sm_rt
+            .do_with_jsapi(|rt, cx, global| Self::invoke_function3(cached_id, rt, cx, global, args))
+    }
+
+    pub(crate) fn invoke_function3(
+        cached_id: i32,
+        rt: &Runtime,
+        cx: *mut JSContext,
+        global: HandleObject,
+        args: Vec<EsValueFacade>,
+    ) -> Result<EsValueFacade, EsErrorInfo> {
+        trace!("EsValueFacade.invoke_function3()");
+        crate::spidermonkeyruntimewrapper::do_with_cached_object(
+            &cached_id,
+            |boxed_epr: &Box<EsPersistentRooted>| {
+                let mut arguments_value_vec: Vec<JSVal> = vec![];
+                for arg_vf in &args {
+                    // todo root these
+                    arguments_value_vec.push(arg_vf.to_es_value(cx));
+                }
+
+                rooted!(in (cx) let mut rval = UndefinedValue());
+                rooted!(in (cx) let scope = mozjs::jsval::NullValue().to_object_or_null());
+                rooted!(in (cx) let function_val = mozjs::jsval::ObjectValue(boxed_epr.get()));
+
+                let res2: Result<(), EsErrorInfo> = es_utils::functions::call_method_value(
+                    cx,
+                    scope.handle(),
+                    function_val.handle(),
+                    arguments_value_vec,
+                    &mut rval.handle_mut(),
+                );
+
+                if res2.is_ok() {
+                    return Ok(EsValueFacade::new_v(rt, cx, global, rval.handle()));
+                } else {
+                    return Err(res2.err().unwrap());
+                }
+            },
+        )
+    }
+
     pub fn is_string(&self) -> bool {
         self.val_string.is_some()
     }
@@ -546,6 +570,9 @@ impl EsValueFacade {
     }
     pub fn is_array(&self) -> bool {
         self.val_array.is_some()
+    }
+    pub fn is_function(&self) -> bool {
+        self.val_js_function.is_some()
     }
 
     pub fn as_js_expression_str(&self) -> String {
@@ -734,6 +761,13 @@ impl Drop for EsValueFacade {
                     map.remove(id);
                 }
             }
+        } else if self.is_function() {
+            let rt_arc = self.val_js_function.as_ref().unwrap().1.clone();
+            let cached_obj_id = self.val_js_function.as_ref().unwrap().0;
+
+            rt_arc.do_in_es_runtime_thread(move |_sm_rt| {
+                crate::spidermonkeyruntimewrapper::consume_cached_object(cached_obj_id);
+            });
         }
     }
 }
@@ -745,7 +779,6 @@ mod tests {
     use crate::esruntimewrapper::EsRuntimeWrapper;
     use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
     use crate::esvaluefacade::EsValueFacade;
-    use crate::spidermonkeyruntimewrapper::SmRuntime;
     use log::trace;
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -834,6 +867,43 @@ mod tests {
             assert_eq!(esvf1.get_i32().clone(), (13 * 17) as i32);
             assert_eq!(esvf2.get_boolean(), false);
             assert_eq!(esvf3.get_string(), format!("{}", 13 * 17).as_str());
+        });
+    }
+
+    #[test]
+    fn in_and_output_vars2() {
+        println!("in_and_output_vars_2");
+
+        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        rt.do_with_inner(|inner: &EsRuntimeWrapperInner| {
+            inner.register_op(
+                "test_op_4",
+                Arc::new(|_rt: &EsRuntimeWrapperInner, args: Vec<EsValueFacade>| {
+                    let func = args.get(0).expect("need at least one arg");
+
+                    assert!(func.is_function());
+
+                    let a1 = EsValueFacade::new_i32(3);
+                    let a2 = EsValueFacade::new_i32(7);
+
+                    let res = func.invoke_function(vec![a1, a2]);
+
+                    if res.is_ok() {
+                        Ok(res.ok().unwrap())
+                    } else {
+                        Err(res.err().unwrap().err_msg())
+                    }
+                }),
+            );
+
+            let res4 = inner.eval_sync(
+                "esses.invoke_rust_op_sync('test_op_4', (a, b) => {return a * b;});",
+                "test_vars4.es",
+            );
+
+            let esvf4 = res4.ok().expect("4 did not get a result");
+
+            assert_eq!(esvf4.get_i32().clone(), (7 * 3) as i32);
         });
     }
 

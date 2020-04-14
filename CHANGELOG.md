@@ -1,5 +1,8 @@
 # 0.3.1 (work in progress) 
 
+* removed necessity to box closures when calling EsRuntimeWrapper::run_in_es_runtime_thread*()
+* added possibility to invoke EsValueFacade when it wraps a JS function. E.g. when calling a rust-op with a function arguments to be used as consumer
+
 # 0.3.0
 
 * broke compatibility because of changed interface for rust-ops, hence version jumped to 0.3

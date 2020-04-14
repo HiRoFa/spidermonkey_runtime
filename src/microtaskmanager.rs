@@ -141,11 +141,6 @@ impl MicroTaskManager {
         assert_eq!(handle.name(), Some(self.worker_thread_name.as_str()));
     }
 
-    pub fn assert_is_not_worker_thread(&self) {
-        let handle = thread::current();
-        assert_ne!(handle.name(), Some(self.worker_thread_name.as_str()));
-    }
-
     fn worker_loop(&self) {
         let jobs: Vec<Box<dyn FnOnce() -> () + Send + 'static>>;
         {

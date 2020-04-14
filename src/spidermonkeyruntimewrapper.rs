@@ -320,8 +320,8 @@ impl SmRuntime {
         args: Vec<EsValueFacade>,
     ) -> Result<EsValueFacade, EsErrorInfo> {
         let mut arguments_value_vec: Vec<JSVal> = vec![];
-
         for arg_vf in args {
+            // todo root these
             arguments_value_vec.push(arg_vf.to_es_value(context));
         }
 
@@ -357,6 +357,7 @@ impl SmRuntime {
         let mut arguments_value_vec: Vec<JSVal> = vec![];
 
         for arg_vf in args {
+            // todo root these
             arguments_value_vec.push(arg_vf.to_es_value(context));
         }
 
@@ -422,6 +423,20 @@ pub fn register_cached_object(context: *mut JSContext, obj: *mut JSObject) -> i3
         trace!("cache obj with id {}", id);
 
         id
+    })
+}
+
+pub fn do_with_cached_object<C, R>(id: &i32, consumer: C) -> R
+where
+    C: Fn(&Box<EsPersistentRooted>) -> R,
+{
+    OBJECT_CACHE.with(|object_cache_rc| {
+        let map = &mut *object_cache_rc.borrow_mut();
+        if let Some(boxed_epr) = map.get(id) {
+            consumer(boxed_epr)
+        } else {
+            panic!("no such id");
+        }
     })
 }
 

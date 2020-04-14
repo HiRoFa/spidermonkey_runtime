@@ -3,7 +3,6 @@ use log::debug;
 use crate::esruntimewrapper::EsRuntimeWrapper;
 use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
 use crate::esvaluefacade::EsValueFacade;
-use crate::spidermonkeyruntimewrapper::SmRuntime;
 use std::sync::Arc;
 
 pub(crate) fn init(rt: &EsRuntimeWrapper) {

@@ -6,9 +6,6 @@ use crate::spidermonkeyruntimewrapper::SmRuntime;
 use log::{debug, trace};
 use std::sync::Arc;
 
-pub type ImmutableJob<R> = Box<dyn FnOnce(&SmRuntime) -> R + Send + 'static>;
-pub type MutableJob<R> = Box<dyn FnOnce(&mut SmRuntime) -> R + Send + 'static>;
-
 pub struct EsRuntimeWrapperInner {
     pub(crate) task_manager: Arc<MicroTaskManager>,
     pub(crate) _pre_cleanup_tasks: Vec<Box<dyn Fn(&EsRuntimeWrapperInner) -> () + Send + Sync>>,
@@ -115,32 +112,36 @@ impl EsRuntimeWrapperInner {
         // reset cleaning var here
     }
 
-    pub fn do_in_es_runtime_thread(&self, immutable_job: ImmutableJob<()>) -> () {
+    pub fn do_in_es_runtime_thread<J>(&self, job: J)
+    where
+        J: FnOnce(&SmRuntime) -> () + Send + 'static,
+    {
         trace!("do_in_es_runtime_thread");
         // this is executed in the single thread in the Threadpool, therefore Runtime and global are stored in a thread_local
 
-        let job = || {
+        let async_job = || {
             let ret = crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt| {
                 debug!("got rt from thread_local");
-                immutable_job(&mut sm_rt.borrow())
+                job(&mut sm_rt.borrow())
             });
 
             return ret;
         };
 
-        self.task_manager.add_task(job);
+        self.task_manager.add_task(async_job);
     }
-    pub fn do_in_es_runtime_thread_sync<R: Send + 'static>(
-        &self,
-        immutable_job: ImmutableJob<R>,
-    ) -> R {
+
+    pub fn do_in_es_runtime_thread_sync<R: Send + 'static, J>(&self, job: J) -> R
+    where
+        J: FnOnce(&SmRuntime) -> R + Send + 'static,
+    {
         trace!("do_in_es_runtime_thread_sync");
         // this is executed in the single thread in the Threadpool, therefore Runtime and global are stored in a thread_local
 
         let job = || {
             let ret = crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt| {
                 debug!("got rt from thread_local");
-                immutable_job(&mut sm_rt.borrow())
+                job(&mut sm_rt.borrow())
             });
 
             ret
@@ -149,7 +150,10 @@ impl EsRuntimeWrapperInner {
         self.task_manager.exe_task(job)
     }
 
-    pub fn do_in_es_runtime_thread_mut_sync(&self, mutable_job: MutableJob<()>) -> () {
+    pub fn do_in_es_runtime_thread_mut_sync<R: Send + 'static, J>(&self, mutable_job: J) -> R
+    where
+        J: FnOnce(&mut SmRuntime) -> R + Send + 'static,
+    {
         trace!("do_in_es_runtime_thread_mut_sync");
         // this is executed in the single thread in the Threadpool, therefore Runtime and global are stored in a thread_local
 
@@ -162,7 +166,7 @@ impl EsRuntimeWrapperInner {
             return ret;
         };
 
-        self.task_manager.exe_task(job);
+        self.task_manager.exe_task(job)
     }
     pub(crate) fn register_op(
         &self,

@@ -51,9 +51,13 @@ Please see the [CHANGELOG](CHANGELOG.md) for what's new.
 * [x] init a EsValueFacade as a promise from rust, #19
 * [x] more tests for e.g. error handling in module loading, error handling in promises
 
-# 0.3.x 
+# 0.3.0 
 
 * [x] run rust-ops multithreaded, and return Promises from rust #8
+
+# 0.3.x
+
+* [x] pass functions as consumer argument to rust-ops
 * [ ] dynamic imports #20
 * [ ] typedArrays from and to Vecs
 * [ ] complete set of from/to primitives in EsValueFacade

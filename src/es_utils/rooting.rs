@@ -61,6 +61,7 @@ impl Drop for EsPersistentRooted {
     #[allow(unsafe_code)]
     fn drop(&mut self) {
         unsafe {
+            // todo which thread does this? do we need a Weak<EsRuntimeInner> here to het the rt and run this drop code in the sm_rt thread (async)?
             let cx = Runtime::get();
             trace!("EsPersistentRooted -> RemoveRawValueRoot");
             RemoveRawValueRoot(cx, self.permanent_js_root.get_unsafe());

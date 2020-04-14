@@ -6,7 +6,7 @@ use crate::es_sys_scripts;
 use crate::features;
 
 use crate::es_utils::EsErrorInfo;
-use crate::esruntimewrapperinner::{EsRuntimeWrapperInner, ImmutableJob, MutableJob};
+use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
 use crate::esvaluefacade::EsValueFacade;
 
 use crate::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
@@ -140,18 +140,24 @@ impl EsRuntimeWrapper {
         f(&*inner)
     }
 
-    pub fn do_in_es_runtime_thread(&self, immutable_job: ImmutableJob<()>) -> () {
+    pub fn do_in_es_runtime_thread<R: Send + 'static, J>(&self, immutable_job: J) -> ()
+    where
+        J: FnOnce(&SmRuntime) -> () + Send + 'static,
+    {
         self.do_with_inner(|inner| inner.do_in_es_runtime_thread(immutable_job))
     }
 
-    pub fn do_in_es_runtime_thread_sync<R: Send + 'static>(
-        &self,
-        immutable_job: ImmutableJob<R>,
-    ) -> R {
+    pub fn do_in_es_runtime_thread_sync<R: Send + 'static, J>(&self, immutable_job: J) -> R
+    where
+        J: FnOnce(&SmRuntime) -> R + Send + 'static,
+    {
         self.do_with_inner(|inner| inner.do_in_es_runtime_thread_sync(immutable_job))
     }
 
-    pub fn do_in_es_runtime_thread_mut_sync(&self, mutable_job: MutableJob<()>) -> () {
+    pub fn do_in_es_runtime_thread_mut_sync<R: Send + 'static, J>(&self, mutable_job: J) -> R
+    where
+        J: FnOnce(&mut SmRuntime) -> R + Send + 'static,
+    {
         self.do_with_inner(|inner| inner.do_in_es_runtime_thread_mut_sync(mutable_job))
     }
 
@@ -193,12 +199,12 @@ pub mod tests {
             .module_code_loader(Box::new(module_code_loader))
             .build();
 
-        rt.do_in_es_runtime_thread_sync(Box::new(|sm_rt| {
+        rt.do_in_es_runtime_thread_sync(|sm_rt| {
             sm_rt.do_with_jsapi(|_rt, _cx, _global| {
                 // uncomment this to test with gc in sadistic mode
                 // crate::es_utils::set_gc_zeal_options(cx);
             })
-        }));
+        });
 
         Arc::new(rt)
     }
@@ -213,7 +219,7 @@ pub mod tests {
             .gc_interval(Duration::from_secs(1))
             .build();
 
-        rt.do_in_es_runtime_thread_sync(Box::new(|sm_rt| {
+        rt.do_in_es_runtime_thread_sync(|sm_rt| {
             sm_rt
                 .eval("this.f = () => {return 123;};", " test.es")
                 .ok()
@@ -247,7 +253,7 @@ pub mod tests {
 
             sm_rt.eval("1+1;", " test.es").ok().unwrap();
             sm_rt.cleanup();
-        }));
+        });
         std::thread::sleep(Duration::from_secs(3));
     }
 
