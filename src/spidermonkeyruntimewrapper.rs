@@ -17,6 +17,7 @@ use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JSString;
 use mozjs::jsapi::JS_DefineFunction;
+use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_NewGlobalObject;
 use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::OnNewGlobalHookOption;
@@ -403,6 +404,39 @@ impl SmRuntime {
 thread_local! {
 // store epr in Box because https://doc.servo.org/mozjs_sys/jsgc/struct.Heap.html#method.boxed
     static OBJECT_CACHE: RefCell<HashMap<i32, Box<EsPersistentRooted>>> = RefCell::new(HashMap::new());
+}
+
+pub(crate) fn do_with_rooted_esvf_vec<R, C>(
+    context: *mut JSContext,
+    vec: Vec<EsValueFacade>,
+    consumer: C,
+) -> R
+where
+    C: FnOnce(&HandleValueArray) -> R,
+{
+    rooted!(in (context) let mut arr_val_root = NullValue());
+
+    crate::es_utils::arrays::new_array(context, vec![], &mut arr_val_root.handle_mut());
+
+    rooted!(in (context) let arr_obj_root = arr_val_root.to_object());
+
+    let mut values = vec![];
+
+    for esvf in &vec {
+        let val: JSVal = esvf.to_es_value(context);
+        rooted!(in (context) let val_root = val);
+        crate::es_utils::arrays::push_array_element(
+            context,
+            arr_obj_root.handle(),
+            val_root.handle(),
+        );
+        // todo  if i move the val, is it then still actually rooted?
+        // tdo do gc here and after push
+        values.push(val);
+    }
+    let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*values) };
+    //rooted!(in(context) let _argument_object = unsafe { JS_NewArrayObject(context, &arguments_value_array) });
+    consumer(&arguments_value_array)
 }
 
 pub fn register_cached_object(context: *mut JSContext, obj: *mut JSObject) -> i32 {

@@ -14,9 +14,7 @@ use mozjs::jsapi::JSITER_OWNONLY;
 use mozjs::jsval::{JSVal, UndefinedValue};
 use mozjs::rust::jsapi_wrapped::GetPropertyKeys;
 use mozjs::rust::wrappers::JS_DefineProperty;
-use mozjs::rust::{
-    HandleObject, HandleValue, IdVector, IntoHandle, MutableHandleObject, MutableHandleValue,
-};
+use mozjs::rust::{HandleObject, HandleValue, IdVector, IntoHandle, MutableHandleValue};
 use std::ptr;
 
 /// get a single member of a JSObject
