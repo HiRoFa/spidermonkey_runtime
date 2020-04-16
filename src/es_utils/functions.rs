@@ -5,9 +5,10 @@ use mozjs::jsapi::JSFunction;
 use mozjs::jsapi::JSNative;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JSType;
-use mozjs::rust::jsapi_wrapped::JS_CallFunctionName;
-use mozjs::rust::jsapi_wrapped::JS_CallFunctionValue;
+use mozjs::jsapi::JS_CallFunctionName;
+use mozjs::jsapi::JS_CallFunctionValue;
 
+use log::trace;
 use mozjs::jsapi::JS_DefineFunction;
 use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_NewFunction;
@@ -15,7 +16,7 @@ use mozjs::jsapi::JS_ObjectIsFunction;
 use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsval::JSVal;
 use mozjs::jsval::UndefinedValue;
-use mozjs::rust::{HandleObject, HandleValue, MutableHandle};
+use mozjs::rust::{HandleObject, HandleValue, MutableHandle, MutableHandleValue};
 
 /// call a method by name
 pub fn call_method_name(
@@ -23,7 +24,7 @@ pub fn call_method_name(
     scope: HandleObject,
     function_name: &str,
     args: Vec<JSVal>,
-    ret_val: &mut MutableHandle<JSVal>,
+    ret_val: MutableHandleValue,
 ) -> Result<(), EsErrorInfo> {
     let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*args) };
 
@@ -45,8 +46,10 @@ pub fn call_method_name2(
     scope: HandleObject,
     function_name: &str,
     args: HandleValueArray,
-    ret_val: &mut MutableHandle<JSVal>,
+    ret_val: MutableHandleValue,
 ) -> Result<(), EsErrorInfo> {
+    trace!("call_method_name2: {}", function_name);
+
     let n = format!("{}\0", function_name);
 
     if unsafe {
@@ -55,7 +58,7 @@ pub fn call_method_name2(
             scope.into(),
             n.as_ptr() as *const libc::c_char,
             &args,
-            ret_val,
+            ret_val.into(),
         )
     } {
         Ok(())
@@ -79,7 +82,7 @@ pub fn call_method_value(
     this_obj: HandleObject,
     function_val: HandleValue,
     args: Vec<JSVal>,
-    ret_val: &mut MutableHandle<JSVal>,
+    ret_val: MutableHandleValue,
 ) -> Result<(), EsErrorInfo> {
     let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*args) };
 
@@ -101,9 +104,17 @@ pub fn call_method_value2(
     this_obj: HandleObject,
     function_val: HandleValue,
     args: HandleValueArray,
-    ret_val: &mut MutableHandle<JSVal>,
+    ret_val: MutableHandleValue,
 ) -> Result<(), EsErrorInfo> {
-    if unsafe { JS_CallFunctionValue(context, this_obj, function_val, &args, ret_val) } {
+    if unsafe {
+        JS_CallFunctionValue(
+            context,
+            this_obj.into(),
+            function_val.into(),
+            &args,
+            ret_val.into(),
+        )
+    } {
         Ok(())
     } else {
         if let Some(err) = report_es_ex(context) {
@@ -119,22 +130,44 @@ pub fn call_method_value2(
     }
 }
 
-/// call a method by name on an object by name
-/// e.g. esses.cleanup() can be called by calling
-/// call_obj_method_name(cx, glob, vec!["esses"], "cleanup", vec![]);
-#[allow(dead_code)]
 pub fn call_obj_method_name(
     context: *mut JSContext,
     scope: HandleObject,
     obj_names: Vec<&str>,
     function_name: &str,
     args: Vec<JSVal>,
-    ret_val: &mut MutableHandle<JSVal>,
+    ret_val: MutableHandleValue,
 ) -> Result<(), EsErrorInfo> {
     let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*args) };
 
+    trace!("call_obj_method_name: {}", function_name);
+
     // root the args here
     rooted!(in(context) let _argument_object = unsafe {JS_NewArrayObject(context, &arguments_value_array)});
+
+    call_obj_method_name2(
+        context,
+        scope,
+        obj_names,
+        function_name,
+        arguments_value_array,
+        ret_val,
+    )
+}
+
+/// call a method by name on an object by name
+/// e.g. esses.cleanup() can be called by calling
+/// call_obj_method_name(cx, glob, vec!["esses"], "cleanup", vec![]);
+#[allow(dead_code)]
+pub fn call_obj_method_name2(
+    context: *mut JSContext,
+    scope: HandleObject,
+    obj_names: Vec<&str>,
+    function_name: &str,
+    arguments_value_array: HandleValueArray,
+    ret_val: MutableHandleValue,
+) -> Result<(), EsErrorInfo> {
+    trace!("call_obj_method_name2: {}", function_name);
 
     let mut sub_scope: *mut JSObject = *scope;
     for obj_name in obj_names {
@@ -292,7 +325,7 @@ mod tests {
                     global,
                     "test_method_by_name_func",
                     vec![a, b],
-                    &mut rval.handle_mut(),
+                    rval.handle_mut(),
                 );
                 if fres.is_err() {
                     panic!(fres.err().unwrap().message);
@@ -308,6 +341,12 @@ mod tests {
 
     #[test]
     fn test_obj_method_by_name() {
+        for _x in 0..100 {
+            test_obj_method_by_name2();
+        }
+    }
+
+    fn test_obj_method_by_name2() {
         let ret = test_with_sm_rt(|sm_rt| {
             sm_rt.do_with_jsapi(|rt, cx, global| {
 
@@ -335,7 +374,7 @@ mod tests {
                     vec!["test_obj_method_by_name"],
                     "test_obj_method_by_name_func",
                     vec![a, b],
-                    &mut rval.handle_mut(),
+                    rval.handle_mut(),
                 );
                 if fres.is_err() {
                     panic!(fres.err().unwrap().message);

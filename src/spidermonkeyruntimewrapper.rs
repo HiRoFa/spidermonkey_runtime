@@ -234,7 +234,7 @@ impl SmRuntime {
                     global,
                     "_esses_cleanup",
                     vec![],
-                    &mut ret_val.handle_mut(),
+                    ret_val.handle_mut(),
                 );
                 if cleanup_res.is_err() {
                     let err = cleanup_res.err().unwrap();
@@ -317,29 +317,25 @@ impl SmRuntime {
         function_name: &str,
         args: Vec<EsValueFacade>,
     ) -> Result<EsValueFacade, EsErrorInfo> {
-        let mut arguments_value_vec: Vec<JSVal> = vec![];
-
-        for arg_vf in args {
-            // todo root these
-            arguments_value_vec.push(arg_vf.to_es_value(context));
-        }
+        trace!("sm_rt.call_obj_method_name({}, ...)", function_name);
 
         rooted!(in(context) let mut rval = UndefinedValue());
+        do_with_rooted_esvf_vec(context, args, |hva| {
+            let res2: Result<(), EsErrorInfo> = es_utils::functions::call_obj_method_name2(
+                context,
+                scope,
+                obj_names,
+                function_name,
+                hva,
+                rval.handle_mut(),
+            );
 
-        let res2: Result<(), EsErrorInfo> = es_utils::functions::call_obj_method_name(
-            context,
-            scope,
-            obj_names,
-            function_name,
-            arguments_value_vec,
-            &mut rval.handle_mut(),
-        );
-
-        if res2.is_ok() {
-            Ok(EsValueFacade::new_v(rt, context, global, rval.handle()))
-        } else {
-            Err(res2.err().unwrap())
-        }
+            if res2.is_ok() {
+                Ok(EsValueFacade::new_v(rt, context, global, rval.handle()))
+            } else {
+                Err(res2.err().unwrap())
+            }
+        })
     }
 
     /// call a method by name
@@ -353,28 +349,23 @@ impl SmRuntime {
         function_name: &str,
         args: Vec<EsValueFacade>,
     ) -> Result<EsValueFacade, EsErrorInfo> {
-        let mut arguments_value_vec: Vec<JSVal> = vec![];
-
-        for arg_vf in args {
-            // todo root these
-            arguments_value_vec.push(arg_vf.to_es_value(context));
-        }
-
         rooted!(in(context) let mut rval = UndefinedValue());
 
-        let res2: Result<(), EsErrorInfo> = es_utils::functions::call_method_name(
-            context,
-            scope,
-            function_name,
-            arguments_value_vec,
-            &mut rval.handle_mut(),
-        );
+        do_with_rooted_esvf_vec(context, args, |hva| {
+            let res2: Result<(), EsErrorInfo> = es_utils::functions::call_method_name2(
+                context,
+                scope,
+                function_name,
+                hva,
+                rval.handle_mut(),
+            );
 
-        if res2.is_ok() {
-            Ok(EsValueFacade::new_v(rt, context, global, rval.handle()))
-        } else {
-            Err(res2.err().unwrap())
-        }
+            if res2.is_ok() {
+                Ok(EsValueFacade::new_v(rt, context, global, rval.handle()))
+            } else {
+                Err(res2.err().unwrap())
+            }
+        })
     }
 
     /// use the jsapi objects in this runtime
@@ -412,12 +403,13 @@ pub(crate) fn do_with_rooted_esvf_vec<R, C>(
     consumer: C,
 ) -> R
 where
-    C: FnOnce(&HandleValueArray) -> R,
+    C: FnOnce(HandleValueArray) -> R,
 {
+    trace!("sm_rt::do_with_rooted_esvf_vec, vec_len={}", vec.len());
+
     rooted!(in (context) let mut arr_val_root = NullValue());
 
     crate::es_utils::arrays::new_array(context, vec![], &mut arr_val_root.handle_mut());
-
     rooted!(in (context) let arr_obj_root = arr_val_root.to_object());
 
     let mut values = vec![];
@@ -429,14 +421,21 @@ where
             context,
             arr_obj_root.handle(),
             val_root.handle(),
-        );
-        // todo  if i move the val, is it then still actually rooted?
-        // tdo do gc here and after push
+        )
+        .ok()
+        .unwrap();
+        // hmm val is moved here...
+
         values.push(val);
     }
+
+    trace!("sm_rt::do_with_rooted_esvf_vec, init hva");
     let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*values) };
-    //rooted!(in(context) let _argument_object = unsafe { JS_NewArrayObject(context, &arguments_value_array) });
-    consumer(&arguments_value_array)
+    // root the hva itself
+    trace!("sm_rt::do_with_rooted_esvf_vec, root hva");
+    rooted!(in(context) let _argument_object = unsafe { JS_NewArrayObject(context, &arguments_value_array) });
+    trace!("sm_rt::do_with_rooted_esvf_vec, run consumer");
+    consumer(arguments_value_array)
 }
 
 pub fn register_cached_object(context: *mut JSContext, obj: *mut JSObject) -> i32 {
@@ -840,7 +839,7 @@ mod tests {
     use crate::es_utils;
     use crate::es_utils::EsErrorInfo;
     use crate::esvaluefacade::EsValueFacade;
-    use crate::spidermonkeyruntimewrapper::SmRuntime;
+    use crate::spidermonkeyruntimewrapper::{do_with_rooted_esvf_vec, SmRuntime};
     use mozjs::jsval::UndefinedValue;
 
     #[test]
@@ -851,7 +850,7 @@ mod tests {
         let res = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(
 
-                Box::new(|sm_rt: &SmRuntime| {
+                |sm_rt: &SmRuntime| {
                     sm_rt.do_with_jsapi(|rt, cx, global| {
                         rooted!(in(cx) let mut rval = UndefinedValue());
                         let _eval_res = es_utils::eval(
@@ -885,7 +884,7 @@ mod tests {
                     })
                 }
 
-                ))
+                )
         });
 
         assert_eq!(res, "abc_true_123".to_string());
@@ -986,5 +985,57 @@ mod tests {
                 std::thread::sleep(std::time::Duration::from_millis(10));
             }
         })
+    }
+
+    #[test]
+    fn test_hva() {
+        for x in 0..100 {
+            test_hva2();
+        }
+    }
+
+    #[test]
+    fn test_hva2() {
+        use mozjs::jsapi::HandleValueArray;
+
+        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let ret = rt.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
+            sm_rt.do_with_jsapi(|rt, cx, global| {
+                rooted!(in (cx) let mut func_root = UndefinedValue());
+                rt.evaluate_script(
+                    global,
+                    "(function(a, b, c, d){return [a, b, c, d].join('-');});",
+                    "test_hva.es",
+                    0,
+                    func_root.handle_mut(),
+                )
+                .ok()
+                .unwrap();
+
+                let args = vec![
+                    EsValueFacade::new_i32(1),
+                    EsValueFacade::new_i32(2),
+                    EsValueFacade::new_i32(3),
+                    EsValueFacade::new_i32(4),
+                ];
+
+                do_with_rooted_esvf_vec(cx, args, |hva: HandleValueArray| {
+                    rooted!(in (cx) let mut rval = UndefinedValue());
+                    es_utils::functions::call_method_value2(
+                        cx,
+                        global,
+                        func_root.handle(),
+                        hva,
+                        rval.handle_mut(),
+                    )
+                    .ok()
+                    .unwrap();
+                    let res_str = es_utils::es_value_to_str(cx, &*rval);
+
+                    res_str
+                })
+            })
+        });
+        assert_eq!(ret.as_str(), "1-2-3-4");
     }
 }

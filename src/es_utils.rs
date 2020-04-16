@@ -19,6 +19,7 @@ pub mod functions;
 pub mod modules;
 pub mod objects;
 pub mod promises;
+
 pub mod rooting;
 
 /// get the type of a JSVal
@@ -32,7 +33,7 @@ pub fn set_gc_zeal_options(cx: *mut JSContext) {
     use mozjs::jsapi::JS_SetGCZeal;
     debug!("setting gc_zeal_options");
 
-    let level = 14;
+    let level = 2;
     let frequency = 1; //JS_DEFAULT_ZEAL_FREQ;
     unsafe { JS_SetGCZeal(cx, level, frequency) };
 }

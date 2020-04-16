@@ -357,7 +357,7 @@ impl EsValueFacade {
                     vec!["esses"],
                     "registerPromiseForResolutionInRust",
                     vec![rval],
-                    &mut id_val.handle_mut(),
+                    id_val.handle_mut(),
                 );
 
                 if reg_res.is_err() {
@@ -535,7 +535,7 @@ impl EsValueFacade {
                     scope.handle(),
                     function_val.handle(),
                     arguments_value_vec,
-                    &mut rval.handle_mut(),
+                    rval.handle_mut(),
                 );
 
                 if res2.is_ok() {

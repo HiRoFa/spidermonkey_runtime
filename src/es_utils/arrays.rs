@@ -36,6 +36,8 @@ pub fn get_array_length(
 ) -> Result<u32, EsErrorInfo> {
     let mut l: u32 = 0;
 
+    trace!("arrays::get_array_length");
+
     let ok = unsafe { JS_GetArrayLength(context, arr_obj.into(), &mut l) };
 
     if !ok {
@@ -43,6 +45,7 @@ pub fn get_array_length(
             return Err(err);
         }
     }
+    trace!("arrays::get_array_length l={}", l);
     Ok(l)
 }
 
@@ -67,7 +70,9 @@ pub fn push_array_element(
     arr_obj: HandleObject,
     val: HandleValue,
 ) -> Result<(), EsErrorInfo> {
+    trace!("arrays::push_array_element");
     let idx = get_array_length(context, arr_obj).ok().unwrap();
+    trace!("arrays::push_array_element, idx={}", idx);
     set_array_element(context, arr_obj, idx, val)
 }
 
@@ -130,7 +135,7 @@ mod tests {
         get_array_element, get_array_length, new_array, object_is_array, push_array_element,
         set_array_element,
     };
-    use crate::es_utils::functions::call_obj_method_name;
+    use crate::es_utils::functions::{call_method_value, call_obj_method_name};
     use crate::es_utils::objects::get_es_obj_prop_val;
     use crate::es_utils::tests::test_with_sm_rt;
     use crate::es_utils::{es_value_to_str, report_es_ex};
@@ -195,7 +200,7 @@ mod tests {
         let res = test_with_sm_rt(|sm_rt| {
             println!("running arrays test");
 
-            sm_rt.do_with_jsapi(|_rt, context, global| {
+            sm_rt.do_with_jsapi(|rt, context, global| {
                 rooted!(in (context) let v1_root = Int32Value(12));
                 rooted!(in (context) let v2_root = Int32Value(15));
 
@@ -203,9 +208,8 @@ mod tests {
 
                 rooted!(in (context) let mut array_rval = UndefinedValue());
                 new_array(context, items, &mut array_rval.handle_mut());
-                let arr_val: JSVal = *array_rval;
-                let arr_obj: *mut JSObject = arr_val.to_object();
-                rooted!(in (context) let test_create_array_root = arr_obj);
+
+                rooted!(in (context) let test_create_array_root = array_rval.get().to_object());
 
                 rooted!(in (context) let v3_root = Int32Value(7));
                 let _set_res = set_array_element(
@@ -215,30 +219,43 @@ mod tests {
                     v3_root.handle(),
                 );
 
-                let length_res = get_array_length(context, test_create_array_root.handle());
-                assert_eq!(3, length_res.ok().unwrap());
+                for _x in 0..100 {
+                    let length_res = get_array_length(context, test_create_array_root.handle());
+                    assert_eq!(3, length_res.ok().unwrap());
+                }
 
-                rooted!(in (context) let v4_root = Int32Value(21));
-                push_array_element(context, test_create_array_root.handle(), v4_root.handle())
-                    .ok()
-                    .unwrap();
+                for _x in 0..11 {
+                    rooted!(in (context) let v4_root = Int32Value(21));
+                    push_array_element(context, test_create_array_root.handle(), v4_root.handle())
+                        .ok()
+                        .unwrap();
+                }
 
                 rooted!(in (context) let mut stringify_res_root = UndefinedValue());
 
-                let test_create_array_val: JSVal = ObjectValue(arr_obj);
+                rooted!(in (context) let new_rooted_arr_val = ObjectValue(test_create_array_root.get()));
 
+                rooted!(in (context) let mut stringify_func_root = UndefinedValue());
+
+                rt.evaluate_script(global, "JSON.stringify.bind(JSON);", "get_stringify.es", 0, stringify_func_root.handle_mut());
+
+                call_method_value(context, global, stringify_func_root.handle(), vec![new_rooted_arr_val.get()], stringify_res_root.handle_mut()).ok().unwrap();
+                /*
+                // tddo, why does this cause a invalid mem ref when testing with gc_ZEAL
                 call_obj_method_name(
                     context,
                     global,
                     vec!["JSON"],
                     "stringify",
-                    vec![test_create_array_val],
-                    &mut stringify_res_root.handle_mut(),
+                    vec![new_rooted_arr_val.get()],
+                    stringify_res_root.handle_mut(),
                 )
                 .ok()
                 .unwrap();
+                */
+
                 let stringify_res_str = es_value_to_str(context, &*stringify_res_root.handle());
-                assert_eq!(stringify_res_str.as_str(), "[12,15,7,21]");
+                assert_eq!(stringify_res_str.as_str(), "[12,15,7,21,21,21,21,21,21,21,21,21,21,21]");
 
                 true
             })
