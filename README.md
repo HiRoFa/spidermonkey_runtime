@@ -15,7 +15,19 @@ From 0.2.0 it works with the latest mozjs crate version 0.13.0.
 
 Please see the [CHANGELOG](CHANGELOG.md) for what's new.
 
-# 0.1 goals
+# Goals
+
+Implementing a script engine in rust seems a very tedious job which involves learning a lot about the inner workings of that engine.
+
+The main goal of this project is to make that job **easy**!
+
+The manner in which this is achieved is primarily focused on abstracting the workings of the engine from the implementor, therefore some functionality may not be the fastest way of getting things done.
+
+So a second goal is to make implementing fast and efficient integration doable for the uninitiated, the most common tasks you do with the engine should be doable with the utils in this package and working examples should be provided in the test modules.
+
+The reason I chose Spidermonkey as the engine is that I've been dealing with less modern engines in my java projects and not being able to use the latest and greatest ECMA-script features becomes quite disappointing at times.    
+
+## 0.1 goals
 
 * [x] Get a grip on when to use rooted values (Handle) and when to use Values (JSVal) 
 * [x] Easy loading script files
@@ -38,39 +50,39 @@ Please see the [CHANGELOG](CHANGELOG.md) for what's new.
   * [x] cache modules
 * [x] No more memory leaks
 
-# 0.2 goals
+## 0.2 goals
 
 * [x] use newer mozjs
 
-# 0.2.1 goals
+## 0.2.1 goals
 
 * [x] re-enable posibility to create multiple runtimes
 
-# 0.2.2 goals
+## 0.2.2 goals
 
 * [x] init a EsValueFacade as a promise from rust, #19
 * [x] more tests for e.g. error handling in module loading, error handling in promises
 
-# 0.3.0 
+## 0.3.0 
 
 * [x] run rust-ops multithreaded, and return Promises from rust #8
 
-# 0.3.x
+## 0.3.x
 
 * [x] pass functions as consumer argument to rust-ops
 * [ ] dynamic imports #20
 * [ ] typedArrays from and to Vecs
 * [ ] complete set of from/to primitives in EsValueFacade
 
-# 0.9 goals
+## 0.9 goals
 
 * [ ] Use PersistentRooted instead of deprecated Add\*Root and Remove\*Root
 
-# 1.0 goals
+## 1.0 goals
 
 * [ ] No more segfaults in unit test with gc_zeal_options
 
-# 2.0 goals
+## 2.0 goals
 
 * [ ] TypeScript support
 * [ ] Interactive Debugging
@@ -79,11 +91,11 @@ Please see the [CHANGELOG](CHANGELOG.md) for what's new.
 
 # Other plans
 
-I'm also working on a more feature rich runtime with a commandline tool and also an application server based on this runtime
+I'm also working on a more feature rich runtime with a commandline tool, and an application server based on this runtime.
 
 These are in a very early testing stage and may become available later as a separate project.
 
-I'dd like to hear what you would want to see in this project and or what you'd like to use it for, please drop me a line @ incoming+drfos-es-runtime-17727229-issue-@incoming.gitlab.com
+I'dd like to hear what you would want to see in this project and or what you'd like to use it for, please drop me a line @ [my gitlab](mailto:incoming+drfos-es-runtime-17727229-issue-@incoming.gitlab.com).
 
 # examples
 
@@ -94,11 +106,8 @@ Cargo.toml
 # latest
 es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git"}
 # but you should check in the repo for the tag or branch you want to use and link to that
-# es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git", tag = "0.3.0"}
+# es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git", tag = "0.3.1"}
 ```
-
-
-
 
 my_app.rs
 

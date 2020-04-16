@@ -26,6 +26,13 @@ fn call_jsapi_stuff(rt: &EsRuntimeWrapper) {
 
 ```
 
+## about JSAPI
+
+// todo
+* function ref
+* mozjs docs
+* howto rooting
+
 ## objects
 
 utils in es_utils::objects
