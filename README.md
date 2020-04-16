@@ -17,13 +17,13 @@ Please see the [CHANGELOG](CHANGELOG.md) for what's new.
 
 # Goals
 
-Implementing a script engine in rust seems a very tedious job which involves learning a lot about the inner workings of that engine.
+Embedding a script engine in a rust project seems a very tedious job which involves learning a lot about the inner workings of that engine.
 
 The main goal of this project is to make that job **easy**!
 
 The manner in which this is achieved is primarily focused on abstracting the workings of the engine from the implementor, therefore some functionality may not be the fastest way of getting things done.
 
-So a second goal is to make implementing fast and efficient integration doable for the uninitiated, the most common tasks you do with the engine should be doable with the utils in this package and working examples should be provided in the test modules.
+So a second goal is to make implementing a fast and efficient integration doable for the uninitiated, the most common tasks you do with the engine should be doable with the utils in this package and working examples should be provided in the test modules.
 
 The reason I chose Spidermonkey as the engine is that I've been dealing with less modern engines in my java projects and not being able to use the latest and greatest ECMA-script features becomes quite disappointing at times.    
 
