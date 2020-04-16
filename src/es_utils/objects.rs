@@ -1,6 +1,7 @@
 use crate::es_utils::{es_jsstring_to_string, es_value_to_str, report_es_ex, EsErrorInfo};
 use mozjs::glue::RUST_JSID_IS_STRING;
 use mozjs::glue::RUST_JSID_TO_STRING;
+use mozjs::jsapi::HandleValueArray;
 use mozjs::jsapi::JSClass;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
@@ -9,12 +10,13 @@ use mozjs::jsapi::JS_GetProperty;
 use mozjs::jsapi::JS_GetPrototype;
 use mozjs::jsapi::JS_NewObjectWithGivenProto;
 use mozjs::jsapi::JS_NewPlainObject;
-use mozjs::jsapi::MutableHandleObject;
 use mozjs::jsapi::JSITER_OWNONLY;
 use mozjs::jsval::{JSVal, UndefinedValue};
 use mozjs::rust::jsapi_wrapped::GetPropertyKeys;
 use mozjs::rust::wrappers::JS_DefineProperty;
-use mozjs::rust::{HandleObject, HandleValue, IdVector, IntoHandle, MutableHandleValue};
+use mozjs::rust::{
+    HandleObject, HandleValue, IdVector, IntoHandle, MutableHandleObject, MutableHandleValue,
+};
 use std::ptr;
 
 /// get a single member of a JSObject
@@ -101,6 +103,23 @@ pub fn new_object_from_prototype(
     }
 }
 
+/// constrcut a new object based on a constructor
+pub fn new_from_constructor(
+    context: *mut JSContext,
+    constructor: HandleValue,
+    args: HandleValueArray,
+    ret_val: MutableHandleObject,
+) -> Result<(), EsErrorInfo> {
+    let ok =
+        unsafe { mozjs::jsapi::Construct1(context, constructor.into(), &args, ret_val.into()) };
+    if !ok {
+        if let Some(err) = report_es_ex(context) {
+            return Err(err);
+        }
+    }
+    Ok(())
+}
+
 static CLASS: JSClass = JSClass {
     name: b"EventTargetPrototype\0" as *const u8 as *const libc::c_char,
     flags: 0,
@@ -117,7 +136,7 @@ pub fn get_prototype(
     obj: HandleObject,
     ret_val: MutableHandleObject,
 ) -> Result<(), EsErrorInfo> {
-    let ok = unsafe { JS_GetPrototype(context, obj.into_handle(), ret_val) };
+    let ok = unsafe { JS_GetPrototype(context, obj.into_handle(), ret_val.into()) };
 
     if !ok {
         let err_opt = report_es_ex(context);
@@ -197,10 +216,13 @@ mod tests {
     use crate::es_utils;
     use crate::es_utils::objects::{get_es_obj_prop_val, get_js_obj_prop_names};
     use crate::es_utils::{es_value_to_str, report_es_ex};
+    use crate::esruntimewrapper::EsRuntimeWrapper;
     use crate::esvaluefacade::EsValueFacade;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use mozjs::jsval::{JSVal, UndefinedValue};
+    use std::borrow::Borrow;
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     #[test]
     fn test_get_js_obj_prop_values() {
@@ -322,5 +344,59 @@ mod tests {
         let map = res.ok().unwrap();
         let map: &HashMap<String, EsValueFacade> = map.get_object();
         assert_eq!(map.get(&"b".to_string()).unwrap().get_string(), "abc");
+    }
+
+    #[test]
+    fn test_constructor() {
+        use mozjs::jsapi::HandleValueArray;
+        use mozjs::jsval::NullValue;
+
+        let rt_arc: Arc<EsRuntimeWrapper> = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt: &EsRuntimeWrapper = rt_arc.borrow();
+        let ok = rt.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
+            sm_rt.do_with_jsapi(|rt, cx, global| {
+                rooted!(in (cx) let mut constructor_root = UndefinedValue());
+                let eval_res = es_utils::eval(
+                    rt,
+                    global,
+                    "(class MyClass {constructor(){this.b = 5;} a(){return this.b;}});",
+                    "test_constructor.es",
+                    constructor_root.handle_mut(),
+                );
+                if eval_res.is_err() {
+                    panic!("eval failed: {}", eval_res.err().unwrap().err_msg());
+                }
+
+                rooted!(in (cx) let mut b_instance_root = NullValue().to_object_or_null());
+                let args = HandleValueArray::new();
+                es_utils::objects::new_from_constructor(
+                    cx,
+                    constructor_root.handle(),
+                    args,
+                    b_instance_root.handle_mut(),
+                )
+                .ok()
+                .unwrap();
+
+                rooted!(in (cx) let mut ret_val = UndefinedValue());
+                es_utils::functions::call_method_name(
+                    cx,
+                    b_instance_root.handle(),
+                    "a",
+                    vec![],
+                    ret_val.handle_mut(),
+                )
+                .ok()
+                .unwrap();
+
+                let val: JSVal = *ret_val;
+
+                let i: i32 = val.to_int32();
+
+                assert_eq!(i, 5);
+                true
+            })
+        });
+        assert_eq!(ok, true);
     }
 }

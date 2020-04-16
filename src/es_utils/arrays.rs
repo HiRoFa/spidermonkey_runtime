@@ -135,11 +135,10 @@ mod tests {
         get_array_element, get_array_length, new_array, object_is_array, push_array_element,
         set_array_element,
     };
-    use crate::es_utils::functions::{call_method_value, call_obj_method_name};
+    use crate::es_utils::functions::call_method_value;
     use crate::es_utils::objects::get_es_obj_prop_val;
     use crate::es_utils::tests::test_with_sm_rt;
     use crate::es_utils::{es_value_to_str, report_es_ex};
-    use mozjs::jsapi::JSObject;
     use mozjs::jsval::JSVal;
     use mozjs::jsval::UndefinedValue;
     use mozjs::jsval::{Int32Value, ObjectValue};
@@ -237,7 +236,7 @@ mod tests {
 
                 rooted!(in (context) let mut stringify_func_root = UndefinedValue());
 
-                rt.evaluate_script(global, "JSON.stringify.bind(JSON);", "get_stringify.es", 0, stringify_func_root.handle_mut());
+                rt.evaluate_script(global, "JSON.stringify.bind(JSON);", "get_stringify.es", 0, stringify_func_root.handle_mut()).ok().unwrap();
 
                 call_method_value(context, global, stringify_func_root.handle(), vec![new_rooted_arr_val.get()], stringify_res_root.handle_mut()).ok().unwrap();
                 /*

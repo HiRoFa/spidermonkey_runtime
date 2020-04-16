@@ -16,7 +16,7 @@ use mozjs::jsapi::JS_ObjectIsFunction;
 use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsval::JSVal;
 use mozjs::jsval::UndefinedValue;
-use mozjs::rust::{HandleObject, HandleValue, MutableHandle, MutableHandleValue};
+use mozjs::rust::{HandleObject, HandleValue, MutableHandleValue};
 
 /// call a method by name
 pub fn call_method_name(

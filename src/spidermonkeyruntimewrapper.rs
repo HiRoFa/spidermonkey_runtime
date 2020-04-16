@@ -1,7 +1,6 @@
 use crate::es_utils;
 use crate::es_utils::rooting::EsPersistentRooted;
 use crate::es_utils::EsErrorInfo;
-use crate::esruntimewrapper::EsRuntimeWrapper;
 use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
 use crate::esvaluefacade::EsValueFacade;
 
@@ -270,37 +269,6 @@ impl SmRuntime {
         let ret = op(rt.borrow(), args);
 
         return ret;
-    }
-    pub(crate) fn do_with_sm_rt_async<F>(&self, f: F)
-    where
-        F: FnOnce(&SmRuntime) + Send + 'static,
-    {
-        self.opt_es_rt_inner
-            .as_ref()
-            .unwrap()
-            .upgrade()
-            .expect("parent EsRuntimeWrapperInner was dropped")
-            .do_in_es_runtime_thread(Box::new(move |sm_rt: &SmRuntime| {
-                f(sm_rt);
-            }));
-    }
-    #[allow(dead_code)]
-    pub(crate) fn do_with_esses_rt_async<F>(&self, f: F)
-    where
-        F: FnOnce(&EsRuntimeWrapperInner) + Send + 'static,
-    {
-        // add job to esruntime.helpertasks, clone inner and pass it?
-        //self.opt_es_rt_inner.unwrap().do_in_helper_thread();
-
-        let inner_clone = self
-            .opt_es_rt_inner
-            .as_ref()
-            .unwrap()
-            .upgrade()
-            .expect("parent EsRuntimeWrapperInner was dropped");
-        EsRuntimeWrapper::add_helper_task(move || {
-            f(&*inner_clone);
-        });
     }
 
     /// call a method by name on an object by name
@@ -989,7 +957,7 @@ mod tests {
 
     #[test]
     fn test_hva() {
-        for x in 0..100 {
+        for _x in 0..100 {
             test_hva2();
         }
     }
