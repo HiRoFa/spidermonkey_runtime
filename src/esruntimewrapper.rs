@@ -188,6 +188,7 @@ pub mod tests {
     }
 
     fn init_test_runtime() -> Arc<EsRuntimeWrapper> {
+        log::info!("test: init_test_runtime");
         simple_logging::log_to_file("esruntimewrapper.log", LevelFilter::Trace)
             .ok()
             .unwrap();
@@ -203,7 +204,7 @@ pub mod tests {
         rt.do_in_es_runtime_thread_sync(|sm_rt| {
             sm_rt.do_with_jsapi(|_rt, _cx, _global| {
                 // uncomment this to test with gc in sadistic mode
-                //crate::es_utils::set_gc_zeal_options(_cx);
+                crate::es_utils::set_gc_zeal_options(_cx);
             })
         });
 
@@ -212,6 +213,7 @@ pub mod tests {
 
     #[test]
     fn test_gc() {
+        log::info!("test: test_gc");
         simple_logging::log_to_file("esruntimewrapper.log", LevelFilter::Trace)
             .ok()
             .unwrap();
@@ -260,6 +262,7 @@ pub mod tests {
 
     #[test]
     fn test_module() {
+        log::info!("test: test_module");
         let esrt: Arc<EsRuntimeWrapper> = TEST_RT.clone();
 
         let load_mod_res = esrt.load_module_sync("import {other} from 'foo_test_mod.mes';\n\nlet test_method_0 = (a) => {return a * 11;};\n\nesses.test_method_1 = (a) => {return a * 12;};", "test_module_rt.mes");
@@ -294,6 +297,7 @@ pub mod tests {
 
     #[test]
     fn call_method() {
+        log::info!("test: call_method");
         let rt: Arc<EsRuntimeWrapper> = TEST_RT.clone();
         rt.eval_sync(
             "this.myObj = {childObj: {myMethod: function(a, b){return a*b;}}};",
@@ -314,6 +318,7 @@ pub mod tests {
 
     #[test]
     fn test_async_await() {
+        log::info!("test: test_async_await");
         let rt: Arc<EsRuntimeWrapper> = TEST_RT.clone();
 
         let code = "\

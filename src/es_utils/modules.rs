@@ -51,6 +51,7 @@ mod tests {
 
     #[test]
     fn test_module() {
+        log::info!("test: test_module");
         let res = test_with_sm_rt(|sm_rt| {
             sm_rt.do_with_jsapi(|_rt, cx, _global| {
 
@@ -86,6 +87,7 @@ mod tests {
 
     #[test]
     fn test_module_gc() {
+        log::info!("test: test_module_gc");
         let res = test_with_sm_rt(|sm_rt| {
             sm_rt.do_with_jsapi(|_rt, cx, _global| {
 

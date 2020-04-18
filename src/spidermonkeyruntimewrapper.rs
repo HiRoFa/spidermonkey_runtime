@@ -797,6 +797,7 @@ mod tests {
 
     #[test]
     fn test_call_method_name() {
+        log::info!("test: test_call_method_name");
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let res = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(
@@ -842,6 +843,7 @@ mod tests {
     }
 
     fn _test_import() {
+        log::info!("test: test_import");
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let import_res: Result<EsValueFacade, EsErrorInfo> = rt.eval_sync(
             "import {foo, bar} from 'test_module';\n\n'ok';",
@@ -857,6 +859,7 @@ mod tests {
 
     /// dynamic imports don't seem to be implemented in our version of JSAPI, so we'll skip this for now
     fn _test_dynamic_import() {
+        log::info!("test: test_dynamic_import");
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let import_res: Result<EsValueFacade, EsErrorInfo> = rt.eval_sync(
             "import('test_module').then((answer) => {console.log('imported module: ' + JSON.stringify(answer));});\n\n'ok';",
@@ -872,6 +875,7 @@ mod tests {
 
     #[test]
     fn test_call_method_obj_name() {
+        log::info!("test: test_call_method_obj_name");
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let res = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(
@@ -940,6 +944,7 @@ mod tests {
 
     #[test]
     fn test_hva() {
+        log::info!("test: test_hva");
         use mozjs::jsapi::HandleValueArray;
 
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();

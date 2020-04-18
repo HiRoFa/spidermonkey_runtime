@@ -226,6 +226,7 @@ mod tests {
 
     #[test]
     fn test_get_js_obj_prop_values() {
+        log::info!("test: test_get_js_obj_prop_values");
         use log::trace;
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
 
@@ -300,6 +301,7 @@ mod tests {
 
     #[test]
     fn test_get_js_obj_prop_names() {
+        log::info!("test: test_get_js_obj_prop_names");
         use mozjs::jsapi::JSObject;
 
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
@@ -338,6 +340,7 @@ mod tests {
 
     #[test]
     fn test_get_obj_props() {
+        log::info!("test: test_get_obj_props");
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let res = rt.eval_sync("({a: 1, b: 'abc', c: true, d: 'much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string'});", "test_get_obj_props");
         assert!(res.is_ok());
@@ -348,6 +351,7 @@ mod tests {
 
     #[test]
     fn test_constructor() {
+        log::info!("test: test_constructor");
         use mozjs::jsapi::HandleValueArray;
         use mozjs::jsval::NullValue;
 

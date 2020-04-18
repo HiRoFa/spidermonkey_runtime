@@ -784,7 +784,7 @@ mod tests {
 
     #[test]
     fn in_and_output_vars() {
-        println!("in_and_output_vars_1");
+        log::info!("test: in_and_output_vars");
 
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         rt.do_with_inner(|inner| {
@@ -870,7 +870,7 @@ mod tests {
 
     #[test]
     fn in_and_output_vars2() {
-        println!("in_and_output_vars_2");
+        log::info!("test: in_and_output_vars2");
 
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         rt.do_with_inner(|inner: &EsRuntimeWrapperInner| {
@@ -907,7 +907,7 @@ mod tests {
 
     #[test]
     fn test_wait_for_native_prom() {
-        println!("test_wait_for_native_prom");
+        log::info!("test: test_wait_for_native_prom");
 
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let esvf_prom = rt
@@ -931,7 +931,7 @@ mod tests {
 
     #[test]
     fn test_wait_for_prom() {
-        println!("test_wait_for_prom_1");
+        log::info!("test: test_wait_for_prom");
 
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let esvf_prom = rt
@@ -955,7 +955,7 @@ mod tests {
 
     #[test]
     fn test_wait_for_prom2() {
-        trace!("test_wait_for_prom_2");
+        log::info!("test: test_wait_for_prom2");
 
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
 
@@ -989,6 +989,7 @@ mod tests {
 
     #[test]
     fn test_get_object() {
+        log::info!("test: test_get_object");
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let esvf = rt
             .eval_sync(
@@ -1010,6 +1011,7 @@ mod tests {
 
     #[test]
     fn test_getset_array() {
+        log::info!("test: test_getset_array");
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let esvf = rt
             .eval_sync("([5, 7, 9]);", "test_getset_array.es")
@@ -1046,6 +1048,7 @@ mod tests {
 
     #[test]
     fn test_set_object() {
+        log::info!("test: test_set_object");
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let _esvf = rt
             .eval_sync(
@@ -1075,6 +1078,7 @@ mod tests {
 
     #[test]
     fn test_prepped_prom() {
+        log::info!("test: test_prepped_prom");
         let rt: &EsRuntimeWrapper = &*crate::esruntimewrapper::tests::TEST_RT.clone();
 
         let my_prep_func = || {
@@ -1124,6 +1128,7 @@ mod tests {
 
     #[test]
     fn test_prepped_prom_resolve() {
+        log::info!("test: test_prepped_prom_resolve");
         let rt: &EsRuntimeWrapper = &*crate::esruntimewrapper::tests::TEST_RT.clone();
 
         let my_prep_func = || {

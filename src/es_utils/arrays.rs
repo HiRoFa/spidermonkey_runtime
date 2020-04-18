@@ -145,6 +145,7 @@ mod tests {
 
     #[test]
     fn test_is_array() {
+        log::info!("test: test_is_array");
         let res = test_with_sm_rt(|sm_rt| {
             println!("running arrays test");
             sm_rt.do_with_jsapi(|_rt, cx, global| {
@@ -196,6 +197,7 @@ mod tests {
 
     #[test]
     fn test_create_array() {
+        log::info!("test: test_create_array");
         let res = test_with_sm_rt(|sm_rt| {
             println!("running arrays test");
 

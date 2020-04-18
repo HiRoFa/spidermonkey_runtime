@@ -277,6 +277,7 @@ mod tests {
 
     #[test]
     fn test_instance_of_function() {
+        log::info!("test: test_instance_of_function");
         let res = test_with_sm_rt(|sm_rt| {
             sm_rt.do_with_jsapi(|rt, cx, global| {
                 rooted!(in(cx) let mut rval = UndefinedValue());
@@ -306,6 +307,7 @@ mod tests {
 
     #[test]
     fn test_method_by_name() {
+        log::info!("test: test_method_by_name");
         let ret = test_with_sm_rt(|sm_rt| {
             sm_rt.do_with_jsapi(|rt, cx, global| {
                 rooted!(in(cx) let mut rval = UndefinedValue());
@@ -341,12 +343,14 @@ mod tests {
 
     #[test]
     fn test_obj_method_by_name() {
+        log::info!("test: test_obj_method_by_name");
         for _x in 0..100 {
             test_obj_method_by_name2();
         }
     }
 
     fn test_obj_method_by_name2() {
+        log::info!("test: test_obj_method_by_name2");
         let ret = test_with_sm_rt(|sm_rt| {
             sm_rt.do_with_jsapi(|rt, cx, global| {
 

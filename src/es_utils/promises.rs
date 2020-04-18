@@ -100,6 +100,7 @@ mod tests {
 
     #[test]
     fn test_instance_of_promise() {
+        log::info!("test: test_instance_of_promise");
         let res = test_with_sm_rt(|sm_rt| {
             sm_rt.do_with_jsapi(|rt, cx, global| {
                 rooted!(in(cx) let mut rval = UndefinedValue());
@@ -132,6 +133,7 @@ mod tests {
 
     #[test]
     fn test_not_instance_of_promise() {
+        log::info!("test: test_not_instance_of_promise");
         let res = test_with_sm_rt(|sm_rt| {
             sm_rt.do_with_jsapi(|rt, cx, global| {
                 rooted!(in(cx) let mut rval = UndefinedValue());
