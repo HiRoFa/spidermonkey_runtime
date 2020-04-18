@@ -381,6 +381,7 @@ where
     rooted!(in (context) let arr_obj_root = arr_val_root.to_object());
 
     let mut values = vec![];
+    values.reserve(vec.len());
 
     for esvf in &vec {
         let val: JSVal = esvf.to_es_value(context);
@@ -395,6 +396,31 @@ where
         // hmm val is moved here...
 
         values.push(val);
+    }
+
+    trace!("sm_rt::do_with_rooted_esvf_vec, init hva");
+    let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*values) };
+    // root the hva itself
+    trace!("sm_rt::do_with_rooted_esvf_vec, root hva");
+    rooted!(in(context) let _argument_object = unsafe { JS_NewArrayObject(context, &arguments_value_array) });
+    trace!("sm_rt::do_with_rooted_esvf_vec, run consumer");
+    consumer(arguments_value_array)
+}
+
+pub(crate) fn do_with_rooted_esvf_vec2<R, C>(
+    context: *mut JSContext,
+    vec: Vec<EsValueFacade>,
+    consumer: C,
+) -> R
+where
+    C: FnOnce(HandleValueArray) -> R,
+{
+    trace!("sm_rt::do_with_rooted_esvf_vec, vec_len={}", vec.len());
+
+    auto_root!(in (context) let mut values = vec![]);
+
+    for esvf in vec {
+        values.push(esvf.to_es_value(context));
     }
 
     trace!("sm_rt::do_with_rooted_esvf_vec, init hva");
@@ -807,8 +833,12 @@ mod tests {
     use crate::es_utils;
     use crate::es_utils::EsErrorInfo;
     use crate::esvaluefacade::EsValueFacade;
-    use crate::spidermonkeyruntimewrapper::{do_with_rooted_esvf_vec, SmRuntime};
+    use crate::spidermonkeyruntimewrapper::{
+        do_with_rooted_esvf_vec, do_with_rooted_esvf_vec2, SmRuntime,
+    };
+    use log::trace;
     use mozjs::jsval::UndefinedValue;
+    use std::net::ToSocketAddrs;
 
     #[test]
     fn test_call_method_name() {
@@ -957,13 +987,6 @@ mod tests {
 
     #[test]
     fn test_hva() {
-        for _x in 0..100 {
-            test_hva2();
-        }
-    }
-
-    #[test]
-    fn test_hva2() {
         use mozjs::jsapi::HandleValueArray;
 
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
@@ -980,30 +1003,36 @@ mod tests {
                 .ok()
                 .unwrap();
 
-                let args = vec![
-                    EsValueFacade::new_i32(1),
-                    EsValueFacade::new_i32(2),
-                    EsValueFacade::new_i32(3),
-                    EsValueFacade::new_i32(4),
-                ];
+                let mut ret = "".to_string();
+                for _x in 0..100 {
+                    trace!("test_hva_loop");
+                    let args = vec![
+                        EsValueFacade::new_i32(1),
+                        EsValueFacade::new_str("abc".to_string()),
+                        EsValueFacade::new_i32(3),
+                        EsValueFacade::new_str("def".to_string()),
+                    ];
+                    trace!("test_hva_loop / 2");
+                    ret = do_with_rooted_esvf_vec2(cx, args, |hva: HandleValueArray| {
+                        rooted!(in (cx) let mut rval = UndefinedValue());
+                        es_utils::functions::call_method_value2(
+                            cx,
+                            global,
+                            func_root.handle(),
+                            hva,
+                            rval.handle_mut(),
+                        )
+                        .ok()
+                        .unwrap();
+                        let res_str = es_utils::es_value_to_str(cx, &*rval);
 
-                do_with_rooted_esvf_vec(cx, args, |hva: HandleValueArray| {
-                    rooted!(in (cx) let mut rval = UndefinedValue());
-                    es_utils::functions::call_method_value2(
-                        cx,
-                        global,
-                        func_root.handle(),
-                        hva,
-                        rval.handle_mut(),
-                    )
-                    .ok()
-                    .unwrap();
-                    let res_str = es_utils::es_value_to_str(cx, &*rval);
-
-                    res_str
-                })
+                        res_str
+                    });
+                    trace!("test_hva_loop / 3");
+                }
+                ret
             })
         });
-        assert_eq!(ret.as_str(), "1-2-3-4");
+        assert_eq!(ret.as_str(), "1-abc-3-def");
     }
 }
