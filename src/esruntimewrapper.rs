@@ -334,7 +334,7 @@ pub mod tests {
                     ";
 
         let prom_facade = rt.eval_sync(code, "call_method").ok().unwrap();
-        let wait_res = prom_facade.get_promise_result_blocking(Duration::from_secs(5));
+        let wait_res = prom_facade.get_promise_result_blocking(Duration::from_secs(60));
         let prom_res = wait_res.ok().unwrap();
         let esvf_res = prom_res.ok().unwrap();
         assert_eq!(&123, esvf_res.get_i32());

@@ -375,48 +375,6 @@ where
 {
     trace!("sm_rt::do_with_rooted_esvf_vec, vec_len={}", vec.len());
 
-    rooted!(in (context) let mut arr_val_root = NullValue());
-
-    crate::es_utils::arrays::new_array(context, vec![], &mut arr_val_root.handle_mut());
-    rooted!(in (context) let arr_obj_root = arr_val_root.to_object());
-
-    let mut values = vec![];
-    values.reserve(vec.len());
-
-    for esvf in &vec {
-        let val: JSVal = esvf.to_es_value(context);
-        rooted!(in (context) let val_root = val);
-        crate::es_utils::arrays::push_array_element(
-            context,
-            arr_obj_root.handle(),
-            val_root.handle(),
-        )
-        .ok()
-        .unwrap();
-        // hmm val is moved here...
-
-        values.push(val);
-    }
-
-    trace!("sm_rt::do_with_rooted_esvf_vec, init hva");
-    let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*values) };
-    // root the hva itself
-    trace!("sm_rt::do_with_rooted_esvf_vec, root hva");
-    rooted!(in(context) let _argument_object = unsafe { JS_NewArrayObject(context, &arguments_value_array) });
-    trace!("sm_rt::do_with_rooted_esvf_vec, run consumer");
-    consumer(arguments_value_array)
-}
-
-pub(crate) fn do_with_rooted_esvf_vec2<R, C>(
-    context: *mut JSContext,
-    vec: Vec<EsValueFacade>,
-    consumer: C,
-) -> R
-where
-    C: FnOnce(HandleValueArray) -> R,
-{
-    trace!("sm_rt::do_with_rooted_esvf_vec, vec_len={}", vec.len());
-
     auto_root!(in (context) let mut values = vec![]);
 
     for esvf in vec {
@@ -833,17 +791,12 @@ mod tests {
     use crate::es_utils;
     use crate::es_utils::EsErrorInfo;
     use crate::esvaluefacade::EsValueFacade;
-    use crate::spidermonkeyruntimewrapper::{
-        do_with_rooted_esvf_vec, do_with_rooted_esvf_vec2, SmRuntime,
-    };
+    use crate::spidermonkeyruntimewrapper::{do_with_rooted_esvf_vec, SmRuntime};
     use log::trace;
     use mozjs::jsval::UndefinedValue;
-    use std::net::ToSocketAddrs;
 
     #[test]
     fn test_call_method_name() {
-        //simple_logger::init().unwrap();
-
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
         let res = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(
@@ -1013,7 +966,7 @@ mod tests {
                         EsValueFacade::new_str("def".to_string()),
                     ];
                     trace!("test_hva_loop / 2");
-                    ret = do_with_rooted_esvf_vec2(cx, args, |hva: HandleValueArray| {
+                    ret = do_with_rooted_esvf_vec(cx, args, |hva: HandleValueArray| {
                         rooted!(in (cx) let mut rval = UndefinedValue());
                         es_utils::functions::call_method_value2(
                             cx,
