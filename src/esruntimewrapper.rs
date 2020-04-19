@@ -204,7 +204,7 @@ pub mod tests {
         rt.do_in_es_runtime_thread_sync(|sm_rt| {
             sm_rt.do_with_jsapi(|_rt, _cx, _global| {
                 // uncomment this to test with gc in sadistic mode
-                crate::es_utils::set_gc_zeal_options(_cx);
+                // crate::es_utils::set_gc_zeal_options(_cx);
             })
         });
 
