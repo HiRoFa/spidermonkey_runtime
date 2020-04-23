@@ -250,6 +250,32 @@ pub fn define_native_function(
     //https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/JSAPI_reference/JS_DefineFunction
 }
 
+/// define a new native function on an object
+/// JSNative = Option<unsafe extern "C" fn(*mut JSContext, u32, *mut Value) -> bool>
+pub fn define_native_constructor(
+    cx: *mut JSContext,
+    obj: HandleObject,
+    constructor_name: &str,
+    native_function: JSNative,
+) -> *mut JSFunction {
+    let n = format!("{}\0", constructor_name);
+
+    let ret: *mut JSFunction = unsafe {
+        JS_DefineFunction(
+            cx,
+            obj.into(),
+            n.as_ptr() as *const libc::c_char,
+            native_function,
+            1,
+            mozjs::jsapi::JSFUN_CONSTRUCTOR,
+        )
+    };
+
+    ret
+
+    //https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/JSAPI_reference/JS_DefineFunction
+}
+
 /// define a new native function
 /// JSNative = Option<unsafe extern "C" fn(*mut JSContext, u32, *mut Value) -> bool>
 pub fn new_native_function(
@@ -261,6 +287,28 @@ pub fn new_native_function(
 
     let ret: *mut JSFunction =
         unsafe { JS_NewFunction(cx, native_function, 1, 0, n.as_ptr() as *const libc::c_char) };
+
+    ret
+
+    //https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/JSAPI_reference/JS_DefineFunction
+}
+
+pub fn new_native_constructor(
+    cx: *mut JSContext,
+    constructor_name: &str,
+    native_function: JSNative,
+) -> *mut JSFunction {
+    let n = format!("{}\0", constructor_name);
+
+    let ret: *mut JSFunction = unsafe {
+        JS_NewFunction(
+            cx,
+            native_function,
+            1,
+            mozjs::jsapi::JSFUN_CONSTRUCTOR,
+            n.as_ptr() as *const libc::c_char,
+        )
+    };
 
     ret
 

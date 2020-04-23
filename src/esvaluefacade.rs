@@ -223,7 +223,7 @@ impl EsValueFacade {
                             sm_rt.do_with_jsapi(move|_rt, cx, _global| {
 
                                 let prom_obj: *mut JSObject = {
-                                    let prom_epr: Box<EsPersistentRooted> = crate::spidermonkeyruntimewrapper::consume_cached_object(prom_regged_id);
+                                    let prom_epr: EsPersistentRooted = crate::spidermonkeyruntimewrapper::consume_cached_object(prom_regged_id);
                                     trace!("epr should drop here");
                                     prom_epr.get()
                                 };
@@ -519,7 +519,7 @@ impl EsValueFacade {
         trace!("EsValueFacade.invoke_function3()");
         crate::spidermonkeyruntimewrapper::do_with_cached_object(
             &cached_id,
-            |boxed_epr: &Box<EsPersistentRooted>| {
+            |epr: &EsPersistentRooted| {
                 let mut arguments_value_vec: Vec<JSVal> = vec![];
                 for arg_vf in &args {
                     // todo root these
@@ -528,7 +528,7 @@ impl EsValueFacade {
 
                 rooted!(in (cx) let mut rval = UndefinedValue());
                 rooted!(in (cx) let scope = mozjs::jsval::NullValue().to_object_or_null());
-                rooted!(in (cx) let function_val = mozjs::jsval::ObjectValue(boxed_epr.get()));
+                rooted!(in (cx) let function_val = mozjs::jsval::ObjectValue(epr.get()));
 
                 let res2: Result<(), EsErrorInfo> = es_utils::functions::call_method_value(
                     cx,
@@ -777,7 +777,6 @@ mod tests {
     use crate::esruntimewrapper::EsRuntimeWrapper;
     use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
     use crate::esvaluefacade::EsValueFacade;
-    use log::trace;
     use std::collections::HashMap;
     use std::sync::Arc;
     use std::time::Duration;

@@ -19,7 +19,7 @@ pub mod functions;
 pub mod modules;
 pub mod objects;
 pub mod promises;
-
+pub mod reflection;
 pub mod rooting;
 
 /// get the type of a JSVal

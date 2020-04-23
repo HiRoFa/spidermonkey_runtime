@@ -23,7 +23,7 @@ use mozjs::jsapi::OnNewGlobalHookOption;
 use mozjs::jsapi::SetJobQueue;
 use mozjs::jsapi::SetModuleResolveHook;
 use mozjs::jsapi::JS::HandleValueArray;
-use mozjs::jsval::{JSVal, NullValue, ObjectValue, UndefinedValue};
+use mozjs::jsval::{NullValue, ObjectValue, UndefinedValue};
 use mozjs::panic::wrap_panic;
 use mozjs::rust::wrappers::JS_CallFunctionValue;
 use mozjs::rust::HandleObject;
@@ -362,7 +362,7 @@ impl SmRuntime {
 
 thread_local! {
 // store epr in Box because https://doc.servo.org/mozjs_sys/jsgc/struct.Heap.html#method.boxed
-    static OBJECT_CACHE: RefCell<HashMap<i32, Box<EsPersistentRooted>>> = RefCell::new(HashMap::new());
+    static OBJECT_CACHE: RefCell<HashMap<i32, EsPersistentRooted>> = RefCell::new(HashMap::new());
 }
 
 pub(crate) fn do_with_rooted_esvf_vec<R, C>(
@@ -391,7 +391,7 @@ where
 }
 
 pub fn register_cached_object(context: *mut JSContext, obj: *mut JSObject) -> i32 {
-    let mut epr = Box::new(EsPersistentRooted::default());
+    let mut epr = EsPersistentRooted::default();
     unsafe { epr.init(context, obj) };
     OBJECT_CACHE.with(|object_cache_rc| {
         let map = &mut *object_cache_rc.borrow_mut();
@@ -411,19 +411,19 @@ pub fn register_cached_object(context: *mut JSContext, obj: *mut JSObject) -> i3
 
 pub fn do_with_cached_object<C, R>(id: &i32, consumer: C) -> R
 where
-    C: Fn(&Box<EsPersistentRooted>) -> R,
+    C: Fn(&EsPersistentRooted) -> R,
 {
     OBJECT_CACHE.with(|object_cache_rc| {
         let map = &mut *object_cache_rc.borrow_mut();
-        if let Some(boxed_epr) = map.get(id) {
-            consumer(boxed_epr)
+        if let Some(epr) = map.get(id) {
+            consumer(epr)
         } else {
             panic!("no such id");
         }
     })
 }
 
-pub fn consume_cached_object(id: i32) -> Box<EsPersistentRooted> {
+pub fn consume_cached_object(id: i32) -> EsPersistentRooted {
     trace!("consume cached obj with id {}", id);
     OBJECT_CACHE.with(|object_cache_rc| {
         let map = &mut *object_cache_rc.borrow_mut();
@@ -434,10 +434,10 @@ pub fn consume_cached_object(id: i32) -> Box<EsPersistentRooted> {
 
 thread_local! {
 // store epr in Box because https://doc.servo.org/mozjs_sys/jsgc/struct.Heap.html#method.boxed
-    static MODULE_CACHE: RefCell<LruCache<String, Box<EsPersistentRooted>>> = RefCell::new(init_cache());
+    static MODULE_CACHE: RefCell<LruCache<String, EsPersistentRooted>> = RefCell::new(init_cache());
 }
 
-fn init_cache() -> LruCache<String, Box<EsPersistentRooted>> {
+fn init_cache() -> LruCache<String, EsPersistentRooted> {
     let ct = SM_RT.with(|sm_rt_rc| {
         let sm_rt = &*sm_rt_rc.borrow();
         sm_rt.clone_rtw_inner().module_cache_size.clone()
@@ -496,7 +496,7 @@ unsafe extern "C" fn import_module(
     MODULE_CACHE.with(|cache_rc| {
         trace!("caching module for {}", &file_name);
         let cache = &mut *cache_rc.borrow_mut();
-        let mut mpr = Box::new(EsPersistentRooted::default());
+        let mut mpr = EsPersistentRooted::default();
         mpr.init(cx, compiled_module);
         cache.put(file_name, mpr);
     });
