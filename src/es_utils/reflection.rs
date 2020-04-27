@@ -23,14 +23,26 @@ pub struct Proxy {
     class_name: String,
     constructor: Option<Box<dyn Fn(*mut JSContext, &CallArgs) -> Result<i32, String>>>,
     finalizer: Option<Box<dyn Fn(&i32) -> ()>>,
-    properties: HashMap<&'static str, (Box<dyn Fn() -> JSVal>, Box<dyn Fn(HandleValue) -> ()>)>,
+    properties: HashMap<
+        &'static str,
+        (
+            Box<dyn Fn(i32) -> JSVal>,
+            Box<dyn Fn(i32, HandleValue) -> ()>,
+        ),
+    >,
 }
 
 pub struct ProxyBuilder {
     class_name: String,
     constructor: Option<Box<dyn Fn(*mut JSContext, &CallArgs) -> Result<i32, String>>>,
     finalizer: Option<Box<dyn Fn(&i32) -> ()>>,
-    properties: HashMap<&'static str, (Box<dyn Fn() -> JSVal>, Box<dyn Fn(HandleValue) -> ()>)>,
+    properties: HashMap<
+        &'static str,
+        (
+            Box<dyn Fn(i32) -> JSVal>,
+            Box<dyn Fn(i32, HandleValue) -> ()>,
+        ),
+    >,
 }
 
 thread_local! {
@@ -130,8 +142,8 @@ impl ProxyBuilder {
     }
     pub fn property<G, S>(&mut self, name: &'static str, getter: G, setter: S) -> &mut Self
     where
-        G: Fn() -> JSVal + 'static,
-        S: Fn(HandleValue) -> () + 'static,
+        G: Fn(i32) -> JSVal + 'static,
+        S: Fn(i32, HandleValue) -> () + 'static,
     {
         self.properties
             .insert(name, (Box::new(getter), Box::new(setter)));
@@ -159,8 +171,8 @@ mod tests {
 
         rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
-                sm_rt.do_with_jsapi(|rt, cx, global| {
-                    let proxy_arc = ProxyBuilder::new("TestClass1")
+                sm_rt.do_with_jsapi(|_rt, cx, global| {
+                    let _proxy_arc = ProxyBuilder::new("TestClass1")
                         .constructor(|cx: *mut JSContext, args: &CallArgs| {
                             // this will run in the sm_rt workerthread so global is rooted here
                             debug!("proxytest: construct");
@@ -171,14 +183,15 @@ mod tests {
                             } else {
                                 foo = "NoName".to_string();
                             }
+                            debug!("proxytest: construct with name {}", foo);
                             Ok(1)
                         })
-                        .property("foo", || {
+                        .property("foo", |_obj_id| {
                             Int32Value(123)
-                        }, |val| {})
-                        .property("bar", || {
+                        }, |_obj_id, _val| {})
+                        .property("bar", |_obj_id| {
                             Int32Value(456)
-                        }, |val| {})
+                        }, |_obj_id, _val| {})
                         .finalizer(|id: &i32| {
                             debug!("proxytest: finalize id {}", id);
                         })
@@ -190,7 +203,7 @@ mod tests {
                         )
                         .ok()
                         .unwrap();
-                    //assert_eq!(&123, esvf.get_i32());
+                    assert_eq!(&123, esvf.get_i32());
                 });
             });
             inner.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
@@ -300,13 +313,55 @@ unsafe extern "C" fn getter(cx: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi
         );
         if let Some(class_name) = cn_res.ok() {
             trace!("reflection::getter get for cn:{}", class_name);
+
+            let callee: *mut JSObject = args.callee();
+            let prop_name_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+                cx,
+                HandleObject::from_marked_location(&callee),
+                "name",
+            );
+            if let Some(prop_name) = prop_name_res.ok() {
+                // lovely the name here is "get [propname]"
+                trace!("reflection::getter get {} for cn:{}", prop_name, class_name);
+
+                // get obj id
+                let obj_id = crate::es_utils::objects::get_es_obj_prop_val_as_i32(
+                    cx,
+                    obj_handle,
+                    PROXY_PROP_OBJ_ID,
+                );
+
+                trace!(
+                    "reflection::getter get {} for cn:{} for obj_id {}",
+                    prop_name,
+                    class_name,
+                    obj_id
+                );
+
+                let p_name = &prop_name[4..];
+
+                PROXIES.with(|proxies_rc| {
+                    let proxies = &*proxies_rc.borrow();
+                    if let Some(proxy) = proxies.get(&class_name).cloned() {
+                        if let Some(prop) = proxy.properties.get(p_name) {
+                            let js_val = prop.0(obj_id);
+                            trace!("got val for getter");
+                            args.rval().set(js_val);
+                        }
+                    }
+                });
+            }
         }
     }
 
     true
 }
 
-unsafe extern "C" fn setter(cx: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi::Value) -> bool {
+unsafe extern "C" fn setter(
+    _cx: *mut JSContext,
+    _argc: u32,
+    _vp: *mut mozjs::jsapi::Value,
+) -> bool {
     trace!("reflection::setter");
     true
 }
@@ -370,7 +425,6 @@ unsafe extern "C" fn construct(
         if let Some(constructor) = &proxy.constructor {
             trace!("constructing proxy constructor {}", class_name);
             let obj_id_res = constructor(cx, &args);
-            // bind obj id to JSObject? with a Symbol?
 
             if obj_id_res.is_ok() {
                 let obj_id = obj_id_res.ok().unwrap();
