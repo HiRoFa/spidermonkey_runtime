@@ -59,9 +59,13 @@ pub fn report_es_ex(context: *mut JSContext) -> Option<EsErrorInfo> {
             rooted!(in(context) let mut js_error_obj_root = js_error_obj);
 
             let message =
-                get_es_obj_prop_val_as_string(context, js_error_obj_root.handle(), "message");
+                get_es_obj_prop_val_as_string(context, js_error_obj_root.handle(), "message")
+                    .ok()
+                    .unwrap();
             let filename =
-                get_es_obj_prop_val_as_string(context, js_error_obj_root.handle(), "fileName");
+                get_es_obj_prop_val_as_string(context, js_error_obj_root.handle(), "fileName")
+                    .ok()
+                    .unwrap();
             let lineno =
                 get_es_obj_prop_val_as_i32(context, js_error_obj_root.handle(), "lineNumber");
             let column =
@@ -161,9 +165,16 @@ pub fn new_es_value_from_str(context: *mut JSContext, s: &str) -> mozjs::jsapi::
 
 /// convert a StringValue to a rust string
 #[allow(dead_code)]
-pub fn es_value_to_str(context: *mut JSContext, val: &JSVal) -> String {
-    let jsa: *mut mozjs::jsapi::JSString = val.to_string();
-    return es_jsstring_to_string(context, jsa);
+pub fn es_value_to_str(
+    context: *mut JSContext,
+    val: &mozjs::jsapi::Value,
+) -> Result<String, &'static str> {
+    if val.is_string() {
+        let jsa: *mut mozjs::jsapi::JSString = val.to_string();
+        Ok(es_jsstring_to_string(context, jsa))
+    } else {
+        Err("value was not a String")
+    }
 }
 
 /// convert a JSString to a rust string
@@ -227,7 +238,7 @@ mod tests {
                     let e_opt = report_es_ex(cx);
                     assert!(e_opt.is_none());
 
-                    es_value_to_str(cx, &rval).to_string()
+                    es_value_to_str(cx, &rval).ok().unwrap()
                 })
             }))
         });

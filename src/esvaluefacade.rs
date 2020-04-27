@@ -306,7 +306,7 @@ impl EsValueFacade {
         } else if rval.is_double() {
             val_f64 = Some(rval.to_number());
         } else if rval.is_string() {
-            let es_str = es_utils::es_value_to_str(context, &rval);
+            let es_str = es_utils::es_value_to_str(context, &rval).ok().unwrap();
 
             trace!("EsValueFacade::new got string {}", es_str);
 

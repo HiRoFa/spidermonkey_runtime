@@ -50,9 +50,7 @@ pub fn get_es_obj_prop_val_as_string(
     context: *mut JSContext,
     obj: HandleObject,
     prop_name: &str,
-) -> String {
-    // todo in console we use something to convert any val to string, should we use that here or fail on non-strings?
-
+) -> Result<String, &'static str> {
     rooted!(in (context) let mut rval = UndefinedValue());
     let res = get_es_obj_prop_val(context, obj, prop_name, rval.handle_mut());
     if res.is_err() {
@@ -211,6 +209,26 @@ pub fn set_es_obj_prop_val(
     }
 }
 
+/// set a property of an object
+#[allow(dead_code)]
+pub fn set_es_obj_prop_val_permanent(
+    context: *mut JSContext,
+    obj: HandleObject,
+    prop_name: &str,
+    prop_val: HandleValue,
+) {
+    let prop_name_str = format!("{}\0", prop_name);
+    unsafe {
+        JS_DefineProperty(
+            context,
+            obj,
+            prop_name_str.as_ptr() as *const libc::c_char,
+            prop_val,
+            mozjs::jsapi::JSPROP_PERMANENT as u32 + mozjs::jsapi::JSPROP_READONLY as u32,
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::es_utils;
@@ -274,7 +292,7 @@ mod tests {
                             rval.handle_mut(),
                         );
 
-                        test_vec.push(es_value_to_str(cx, &*rval));
+                        test_vec.push(es_value_to_str(cx, &*rval).ok().unwrap());
 
                         trace!("9 {}", prop_name);
                     }

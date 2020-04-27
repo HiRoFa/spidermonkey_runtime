@@ -568,7 +568,9 @@ fn invoke_rust_op_esvf(
 
     let op_name_arg: mozjs::rust::HandleValue =
         unsafe { mozjs::rust::Handle::from_raw(args.get(0)) };
-    let op_name = es_utils::es_value_to_str(context, &op_name_arg.get());
+    let op_name = es_utils::es_value_to_str(context, &op_name_arg.get())
+        .ok()
+        .unwrap();
 
     trace!("running rust-op {} with and {} args", op_name, args.argc_);
 
@@ -982,7 +984,7 @@ mod tests {
                         )
                         .ok()
                         .unwrap();
-                        let res_str = es_utils::es_value_to_str(cx, &*rval);
+                        let res_str = es_utils::es_value_to_str(cx, &*rval).ok().unwrap();
 
                         res_str
                     });

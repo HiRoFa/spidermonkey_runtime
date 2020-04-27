@@ -235,7 +235,7 @@ fn parse_line2(context: *mut JSContext, args: Vec<JSVal>) -> String {
     }
     let mut args = args;
     let arg1: JSVal = args.remove(0);
-    let message = es_utils::es_value_to_str(context, &arg1);
+    let message = es_utils::es_value_to_str(context, &arg1).ok().unwrap();
 
     let mut output = String::new();
     let mut field_code = String::new();

@@ -17,8 +17,9 @@ pub fn object_is_promise(context: *mut JSContext, obj: HandleObject) -> bool {
         rooted!(in (context) let constr_root = constr);
         if !constr.is_null() {
             let name_prop = get_es_obj_prop_val_as_string(context, constr_root.handle(), "name");
-
-            return name_prop.as_str().eq("Promise");
+            if let Some(name) = name_prop.ok() {
+                return name.as_str().eq("Promise");
+            }
         }
     }
     false

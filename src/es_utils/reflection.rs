@@ -1,4 +1,4 @@
-use crate::es_utils::{es_jsid_to_string, EsErrorInfo};
+use crate::es_utils::es_jsid_to_string;
 use core::ptr;
 use log::trace;
 use mozjs::jsapi::CallArgs;
@@ -10,7 +10,7 @@ use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::JSCLASS_FOREGROUND_FINALIZE;
 use mozjs::jsval::{JSVal, ObjectValue};
-use mozjs::rust::{Handle, HandleObject, HandleValue, Runtime};
+use mozjs::rust::{HandleObject, HandleValue};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ptr::replace;
@@ -70,6 +70,7 @@ impl Proxy {
                 Some(construct),
             );
         rooted!(in (cx) let func_root = func);
+
         //ret.init_properties(cx, func_root.handle());
 
         let ret_arc = Arc::new(ret);
@@ -146,12 +147,10 @@ impl ProxyBuilder {
 mod tests {
     use crate::es_utils::es_value_to_str;
     use crate::es_utils::reflection::*;
-    use crate::esvaluefacade::EsValueFacade;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use log::debug;
     use mozjs::jsapi::CallArgs;
-    use mozjs::jsval::{Int32Value, JSVal};
-    use mozjs::rust::Handle;
+    use mozjs::jsval::Int32Value;
 
     #[test]
     fn test_proxy() {
@@ -168,7 +167,7 @@ mod tests {
                             let foo;
                             if args.argc_ > 0 {
                                 let hv = args.get(0);
-                                foo = es_value_to_str(cx, &*hv);
+                                foo = es_value_to_str(cx, &*hv).ok().unwrap();
                             } else {
                                 foo = "NoName".to_string();
                             }
@@ -230,7 +229,7 @@ static ES_PROXY_CLASS: JSClass = JSClass {
     oOps: ptr::null(),
 };
 
-/// resolvea property, this means if we know how to hanle a prop we define that prop ob the instance obj
+/// resolvea property, this means if we know how to handle a prop we define that prop ob the instance obj
 unsafe extern "C" fn resolve(
     cx: *mut JSContext,
     obj: mozjs::jsapi::HandleObject,
@@ -243,25 +242,72 @@ unsafe extern "C" fn resolve(
 
     trace!("reflection::resolve {}", prop_name);
 
-    let instance_id = obj.get() as usize;
+    let rhandle = mozjs::rust::HandleObject::from_marked_location(&obj.get());
+    let class_name_res =
+        crate::es_utils::objects::get_es_obj_prop_val_as_string(cx, rhandle, PROXY_PROP_CLASS_NAME);
+    if let Some(class_name) = class_name_res.ok() {
+        PROXIES.with(|proxies_rc| {
+            let proxies = &*proxies_rc.borrow();
+            if let Some(proxy) = proxies.get(&class_name) {
+                trace!("check proxy {} for {}", class_name, prop_name);
 
-    PROXY_INSTANCE_IDS.with(|piid_rc| {
-        let piid = &*piid_rc.borrow();
-        if let Some(obj_id) = piid.get(&instance_id) {
-            PROXY_INSTANCE_CLASSNAMES.with(|piid_rc| {
-                let piid = &*piid_rc.borrow();
-                if let Some(class_name) = piid.get(obj_id) {
-                    PROXIES.with(|proxies_rc| {
-                        let proxies = &*proxies_rc.borrow();
-                        if let Some(proxy) = proxies.get(class_name) {
-                            trace!("check proxy {} for {}", class_name, prop_name);
-                        }
-                    });
+                if proxy.properties.contains_key(prop_name.as_str()) {
+                    trace!(
+                        "define prop for proxy {} for name {}",
+                        class_name,
+                        prop_name
+                    );
+
+                    let n = format!("{}\0", prop_name);
+
+                    let ok = mozjs::jsapi::JS_DefineProperty1(
+                        cx,
+                        obj,
+                        n.as_ptr() as *const libc::c_char,
+                        Some(getter),
+                        Some(setter),
+                        (mozjs::jsapi::JSPROP_PERMANENT
+                            & mozjs::jsapi::JSPROP_GETTER
+                            & mozjs::jsapi::JSPROP_SETTER) as u32,
+                    );
+                    if !ok {
+                        panic!("could not define prop");
+                    }
+
+                    *resolved = true;
+
+                    trace!("resolved prop {}", prop_name);
                 }
-            });
-        }
-    });
+            }
+        });
+    }
 
+    true
+}
+
+unsafe extern "C" fn getter(cx: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi::Value) -> bool {
+    trace!("reflection::getter");
+
+    let args = CallArgs::from_vp(vp, argc);
+    let thisv: mozjs::jsapi::Value = *args.thisv();
+
+    if thisv.is_object() {
+        let obj_handle = mozjs::rust::HandleObject::from_marked_location(&thisv.to_object());
+        let cn_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+            cx,
+            obj_handle,
+            PROXY_PROP_CLASS_NAME,
+        );
+        if let Some(class_name) = cn_res.ok() {
+            trace!("reflection::getter get for cn:{}", class_name);
+        }
+    }
+
+    true
+}
+
+unsafe extern "C" fn setter(cx: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi::Value) -> bool {
+    trace!("reflection::setter");
     true
 }
 
@@ -295,6 +341,9 @@ unsafe extern "C" fn finalize(_fop: *mut JSFreeOp, object: *mut JSObject) {
     }
 }
 
+const PROXY_PROP_CLASS_NAME: &str = "__proxy_class_name__";
+const PROXY_PROP_OBJ_ID: &str = "__proxy_obj_id__";
+
 unsafe extern "C" fn construct(
     cx: *mut JSContext,
     argc: u32,
@@ -310,7 +359,9 @@ unsafe extern "C" fn construct(
         cx,
         constructor_root.handle(),
         "name",
-    );
+    )
+    .ok()
+    .unwrap();
     trace!("reflection::construct cn={}", class_name);
 
     let proxy_opt = get_proxy(class_name.as_str());
@@ -324,7 +375,22 @@ unsafe extern "C" fn construct(
             if obj_id_res.is_ok() {
                 let obj_id = obj_id_res.ok().unwrap();
                 let ret: *mut JSObject = mozjs::jsapi::JS_NewObject(cx, &ES_PROXY_CLASS);
-                args.rval().set(ObjectValue(ret));
+
+                rooted!(in (cx) let ret_root = ret);
+                rooted!(in (cx) let pname_root = crate::es_utils::new_es_value_from_str(cx, &class_name));
+                rooted!(in (cx) let obj_id_root = mozjs::jsval::Int32Value(obj_id));
+                crate::es_utils::objects::set_es_obj_prop_val_permanent(
+                    cx,
+                    ret_root.handle(),
+                    PROXY_PROP_CLASS_NAME,
+                    pname_root.handle(),
+                );
+                crate::es_utils::objects::set_es_obj_prop_val_permanent(
+                    cx,
+                    ret_root.handle(),
+                    PROXY_PROP_OBJ_ID,
+                    obj_id_root.handle(),
+                );
 
                 PROXY_INSTANCE_IDS.with(|piid_rc| {
                     let piid = &mut *piid_rc.borrow_mut();
@@ -335,6 +401,8 @@ unsafe extern "C" fn construct(
                     let piid = &mut *piid_rc.borrow_mut();
                     piid.insert(obj_id.clone(), class_name.clone());
                 });
+
+                args.rval().set(ObjectValue(ret));
 
                 return true;
             } else {
