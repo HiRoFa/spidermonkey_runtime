@@ -1,3 +1,4 @@
+use crate::es_utils::{es_jsid_to_string, EsErrorInfo};
 use core::ptr;
 use log::trace;
 use mozjs::jsapi::CallArgs;
@@ -6,86 +7,212 @@ use mozjs::jsapi::JSClassOps;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSFreeOp;
 use mozjs::jsapi::JSObject;
+use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::JSCLASS_FOREGROUND_FINALIZE;
-use mozjs::jsval::ObjectValue;
-use mozjs::rust::HandleObject;
-
-// because we're using esvalue stuff here this should NOT be in es_utils
-
-pub trait EsProxy<T> {
-    //    fn construct(Vec<EsValueFacade>) -> T;
-    //    fn call(obj: Option<T>, function_name: &str, args: Vec<EsValueFacade>) -> EsValueFacade;
-    //    fn get(obj: Option<T>, prop_name: &str);
-    //    fn set(obj: Option<T>, prop_name: &str, val: EsValueFacade);
-    //    fn get_static_function_names() -> Vec<String>;
-    //    fn get_static_getter_setter_names() -> Vec<String>;
-    //    fn get_event_names() -> Vec<String>;
-}
-
-// todo impl a EsEvent trait?
-//pub fn invoke_event(obj: T, event_name: &str, event_obj: String) -> Vec<EsValueFacade> {
-//    panic!("NYI")
-//}
+use mozjs::jsval::{JSVal, ObjectValue};
+use mozjs::rust::{Handle, HandleObject, HandleValue, Runtime};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::ptr::replace;
+use std::sync::Arc;
 
 /// create a class def in the runtime which constructs and calls methods in a rust proxy
 ///
-pub fn reflect<T>(_scope: HandleObject, _name: &str, _proxy: Box<EsProxy<T>>) {}
+
+pub struct Proxy {
+    class_name: String,
+    constructor: Option<Box<dyn Fn(*mut JSContext, &CallArgs) -> Result<i32, String>>>,
+    finalizer: Option<Box<dyn Fn(&i32) -> ()>>,
+    properties: HashMap<&'static str, (Box<dyn Fn() -> JSVal>, Box<dyn Fn(HandleValue) -> ()>)>,
+}
+
+pub struct ProxyBuilder {
+    class_name: String,
+    constructor: Option<Box<dyn Fn(*mut JSContext, &CallArgs) -> Result<i32, String>>>,
+    finalizer: Option<Box<dyn Fn(&i32) -> ()>>,
+    properties: HashMap<&'static str, (Box<dyn Fn() -> JSVal>, Box<dyn Fn(HandleValue) -> ()>)>,
+}
+
+thread_local! {
+    static PROXY_INSTANCE_IDS: RefCell<HashMap<usize, i32>> = RefCell::new(HashMap::new());
+    static PROXY_INSTANCE_CLASSNAMES: RefCell<HashMap<i32, String>> = RefCell::new(HashMap::new());
+    static PROXIES: RefCell<HashMap<String, Arc<Proxy>>> = RefCell::new(HashMap::new());
+}
+
+pub fn get_proxy(name: &str) -> Option<Arc<Proxy>> {
+    // get proxy from PROXIES
+    PROXIES.with(|rc: &RefCell<HashMap<String, Arc<Proxy>>>| {
+        let map: &HashMap<String, Arc<Proxy>> = &*rc.borrow();
+        map.get(name).cloned()
+    })
+}
+
+impl Proxy {
+    fn new(cx: *mut JSContext, scope: HandleObject, builder: &mut ProxyBuilder) -> Arc<Self> {
+        let mut ret = Proxy {
+            class_name: builder.class_name.to_string(),
+            constructor: unsafe { replace(&mut builder.constructor, None) },
+            finalizer: unsafe { replace(&mut builder.finalizer, None) },
+            properties: HashMap::new(),
+        };
+
+        builder.properties.drain().all(|e| {
+            ret.properties.insert(e.0, e.1);
+            true
+        });
+
+        // todo, do we create an instance of proxy and set its constructor or do we define constructor and then add all static methods to that constructor obj? plan b is simpler but does that work on a native function?
+        let func: *mut mozjs::jsapi::JSFunction =
+            crate::es_utils::functions::define_native_constructor(
+                cx,
+                scope,
+                ret.class_name.as_str(),
+                Some(construct),
+            );
+        rooted!(in (cx) let func_root = func);
+        //ret.init_properties(cx, func_root.handle());
+
+        let ret_arc = Arc::new(ret);
+
+        PROXIES.with(|map_rc: &RefCell<HashMap<String, Arc<Proxy>>>| {
+            let map = &mut *map_rc.borrow_mut();
+            map.insert(ret_arc.class_name.clone(), ret_arc.clone());
+        });
+
+        ret_arc
+    }
+
+    /*fn init_properties(&self, cx: *mut JSContext, func: HandleObject) {
+        // this is actually how static_props should work, not instance props.. they should be resolved from the proxy_op
+        for prop_name in self.properties.keys() {
+            // https://doc.servo.org/mozjs/jsapi/fn.JS_DefineProperty1.html
+            // mozjs::jsapi::JS_DefineProperty1
+            // todo move this to es_utils::object
+            let n = format!("{}\0", prop_name);
+
+            let ok = unsafe {
+                mozjs::jsapi::JS_DefineProperty1(
+                    cx,
+                    func,
+                    n.as_ptr() as *const libc::c_char,
+                    JSPROP_PERMANENT + JSPROP_GETTER + JSPROP_SETTER + JSPROP_SHARED,
+                    Some(getter),
+                    Some(setter),
+                )
+            };
+        }
+    }*/
+}
+
+impl ProxyBuilder {
+    pub fn new(class_name: &str) -> Self {
+        ProxyBuilder {
+            class_name: class_name.to_string(),
+            constructor: None,
+            finalizer: None,
+            properties: HashMap::new(),
+        }
+    }
+    pub fn constructor<C>(&mut self, constructor: C) -> &mut Self
+    where
+        C: Fn(*mut JSContext, &CallArgs) -> Result<i32, String> + 'static,
+    {
+        self.constructor = Some(Box::new(constructor));
+        self
+    }
+    pub fn finalizer<F>(&mut self, finalizer: F) -> &mut Self
+    where
+        F: Fn(&i32) -> () + 'static,
+    {
+        self.finalizer = Some(Box::new(finalizer));
+        self
+    }
+    pub fn property<G, S>(&mut self, name: &'static str, getter: G, setter: S) -> &mut Self
+    where
+        G: Fn() -> JSVal + 'static,
+        S: Fn(HandleValue) -> () + 'static,
+    {
+        self.properties
+            .insert(name, (Box::new(getter), Box::new(setter)));
+        self
+    }
+
+    pub fn build(&mut self, cx: *mut JSContext, scope: HandleObject) -> Arc<Proxy> {
+        Proxy::new(cx, scope, self)
+    }
+}
 
 #[cfg(test)]
 mod tests {
+    use crate::es_utils::es_value_to_str;
     use crate::es_utils::reflection::*;
     use crate::esvaluefacade::EsValueFacade;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
+    use log::debug;
+    use mozjs::jsapi::CallArgs;
+    use mozjs::jsval::{Int32Value, JSVal};
+    use mozjs::rust::Handle;
 
     #[test]
-    fn test_reflection1() {
-        log::info!("test_reflection1");
-
+    fn test_proxy() {
+        log::info!("test_proxy");
         let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
 
-        let test_res_esvf: EsValueFacade = rt.do_with_inner(|inner| {
-            inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
-                sm_rt.do_with_jsapi(|_rt, cx, global| {
-                    // create constructor here
-
-
-
-                    crate::es_utils::functions::define_native_constructor(
-                        cx,
-                        global,
-                        "MyTestClass",
-                        Some(construct),
-                    );
-
-                    crate::es_utils::functions::define_native_constructor(
-                        cx,
-                        global,
-                        "MyOtherClass",
-                        Some(construct),
-                    );
-
+        rt.do_with_inner(|inner| {
+            inner.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
+                sm_rt.do_with_jsapi(|rt, cx, global| {
+                    let proxy_arc = ProxyBuilder::new("TestClass1")
+                        .constructor(|cx: *mut JSContext, args: &CallArgs| {
+                            // this will run in the sm_rt workerthread so global is rooted here
+                            debug!("proxytest: construct");
+                            let foo;
+                            if args.argc_ > 0 {
+                                let hv = args.get(0);
+                                foo = es_value_to_str(cx, &*hv);
+                            } else {
+                                foo = "NoName".to_string();
+                            }
+                            Ok(1)
+                        })
+                        .property("foo", || {
+                            Int32Value(123)
+                        }, |val| {})
+                        .property("bar", || {
+                            Int32Value(456)
+                        }, |val| {})
+                        .finalizer(|id: &i32| {
+                            debug!("proxytest: finalize id {}", id);
+                        })
+                        .build(cx, global);
+                    let esvf = sm_rt
+                        .eval(
+                            "let tp_obj = new TestClass1('bar'); tp_obj.abc = 1; console.log('tp_obj.abc = %s', tp_obj.abc); let i = tp_obj.foo; tp_obj = null; i;",
+                            "test_proxy.es",
+                        )
+                        .ok()
+                        .unwrap();
+                    //assert_eq!(&123, esvf.get_i32());
                 });
-
-                sm_rt
-                    .eval(
-                        "let obj = new MyTestClass(1, 'abc', true); let obj2 = new MyOtherClass(1, 'abc', true); 123;",
-                        "test_reflection1.es",
-                    )
-                    .ok()
-                    .unwrap()
-            }))
+            });
+            inner.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
+                sm_rt.cleanup();
+            });
         });
-
-        assert_eq!(&123, test_res_esvf.get_i32())
     }
 }
+
+// todo, test resolve methods and such
+// todo should this wrap a native variant? with callargs and such
+// and thus should i impl a native variant first in es_utils?
+// yes.. yes i should...
+// should allways impl https://developer.mozilla.org/en-US/docs/Web/API/EventTarget
 
 static ES_PROXY_CLASS_CLASS_OPS: JSClassOps = JSClassOps {
     addProperty: None,
     delProperty: None,
     enumerate: None,
     newEnumerate: None,
-    resolve: None,
+    resolve: Some(resolve),
     mayResolve: None,
     finalize: Some(finalize),
     call: None,
@@ -103,8 +230,69 @@ static ES_PROXY_CLASS: JSClass = JSClass {
     oOps: ptr::null(),
 };
 
-unsafe extern "C" fn finalize(_fop: *mut JSFreeOp, _object: *mut JSObject) {
+/// resolvea property, this means if we know how to hanle a prop we define that prop ob the instance obj
+unsafe extern "C" fn resolve(
+    cx: *mut JSContext,
+    obj: mozjs::jsapi::HandleObject,
+    key: mozjs::jsapi::HandleId,
+    resolved: *mut bool,
+) -> bool {
+    trace!("reflection::resolve");
+
+    let prop_name = es_jsid_to_string(cx, key);
+
+    trace!("reflection::resolve {}", prop_name);
+
+    let instance_id = obj.get() as usize;
+
+    PROXY_INSTANCE_IDS.with(|piid_rc| {
+        let piid = &*piid_rc.borrow();
+        if let Some(obj_id) = piid.get(&instance_id) {
+            PROXY_INSTANCE_CLASSNAMES.with(|piid_rc| {
+                let piid = &*piid_rc.borrow();
+                if let Some(class_name) = piid.get(obj_id) {
+                    PROXIES.with(|proxies_rc| {
+                        let proxies = &*proxies_rc.borrow();
+                        if let Some(proxy) = proxies.get(class_name) {
+                            trace!("check proxy {} for {}", class_name, prop_name);
+                        }
+                    });
+                }
+            });
+        }
+    });
+
+    true
+}
+
+unsafe extern "C" fn finalize(_fop: *mut JSFreeOp, object: *mut JSObject) {
     trace!("reflection::finalize");
+
+    let ptr_usize = object as usize;
+    let id_opt = PROXY_INSTANCE_IDS.with(|piid_rc| {
+        let piid = &mut *piid_rc.borrow_mut();
+        piid.remove(&ptr_usize)
+    });
+
+    if let Some(id) = id_opt {
+        let cn = PROXY_INSTANCE_CLASSNAMES
+            .with(|piid_rc| {
+                let piid = &mut *piid_rc.borrow_mut();
+                piid.remove(&id)
+            })
+            .unwrap();
+
+        trace!("finalize id {} of type {}", id, cn);
+        let proxy_opt = PROXIES.with(|proxies_rc| {
+            let proxies = &*proxies_rc.borrow();
+            proxies.get(&cn).cloned()
+        });
+        if let Some(proxy) = proxy_opt {
+            if let Some(finalizer) = &proxy.finalizer {
+                finalizer(&id);
+            }
+        }
+    }
 }
 
 unsafe extern "C" fn construct(
@@ -116,16 +304,48 @@ unsafe extern "C" fn construct(
 
     let args = CallArgs::from_vp(vp, argc);
 
-    let thisv = args.calleev();
+    rooted!(in (cx) let constructor_root = args.calleev().to_object());
 
-    rooted!(in (cx) let obj_root = thisv.to_object());
-
-    let class_name =
-        crate::es_utils::objects::get_es_obj_prop_val_as_string(cx, obj_root.handle(), "name");
+    let class_name = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+        cx,
+        constructor_root.handle(),
+        "name",
+    );
     trace!("reflection::construct cn={}", class_name);
 
-    let ret: *mut JSObject = mozjs::jsapi::JS_NewObject(cx, &ES_PROXY_CLASS);
-    args.rval().set(ObjectValue(ret));
+    let proxy_opt = get_proxy(class_name.as_str());
+    if let Some(proxy) = proxy_opt {
+        trace!("constructing proxy {}", class_name);
+        if let Some(constructor) = &proxy.constructor {
+            trace!("constructing proxy constructor {}", class_name);
+            let obj_id_res = constructor(cx, &args);
+            // bind obj id to JSObject? with a Symbol?
 
-    true
+            if obj_id_res.is_ok() {
+                let obj_id = obj_id_res.ok().unwrap();
+                let ret: *mut JSObject = mozjs::jsapi::JS_NewObject(cx, &ES_PROXY_CLASS);
+                args.rval().set(ObjectValue(ret));
+
+                PROXY_INSTANCE_IDS.with(|piid_rc| {
+                    let piid = &mut *piid_rc.borrow_mut();
+                    piid.insert(ret as usize, obj_id.clone());
+                });
+
+                PROXY_INSTANCE_CLASSNAMES.with(|piid_rc| {
+                    let piid = &mut *piid_rc.borrow_mut();
+                    piid.insert(obj_id.clone(), class_name.clone());
+                });
+
+                return true;
+            } else {
+                JS_ReportErrorASCII(cx, b"constructor failed\0".as_ptr() as *const libc::c_char);
+
+                return false;
+            }
+        }
+    }
+
+    JS_ReportErrorASCII(cx, b"no such class found\0".as_ptr() as *const libc::c_char);
+
+    return false;
 }

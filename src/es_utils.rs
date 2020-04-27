@@ -1,6 +1,7 @@
 use crate::es_utils::objects::{get_es_obj_prop_val_as_i32, get_es_obj_prop_val_as_string};
 use log::{debug, trace};
 use mozjs::conversions::jsstr_to_string;
+use mozjs::glue::{RUST_JSID_IS_STRING, RUST_JSID_TO_STRING};
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSString;
 use mozjs::jsapi::JSType;
@@ -173,6 +174,13 @@ pub fn es_jsstring_to_string(
     unsafe {
         return jsstr_to_string(context, js_string);
     }
+}
+
+// convert a PropertyKey or JSID to String
+pub fn es_jsid_to_string(context: *mut JSContext, id: mozjs::jsapi::HandleId) -> String {
+    assert!(unsafe { RUST_JSID_IS_STRING(id.into()) });
+    rooted!(in(context) let id_str = unsafe{RUST_JSID_TO_STRING(id.into())});
+    es_jsstring_to_string(context, *id_str)
 }
 
 /// call the garbage collector
