@@ -82,16 +82,13 @@ impl Proxy {
         });
 
         // todo, do we create an instance of proxy and set its constructor or do we define constructor and then add all static methods to that constructor obj? plan b is simpler but does that work on a native function?
-        let func: *mut mozjs::jsapi::JSFunction =
-            crate::es_utils::functions::define_native_constructor(
-                cx,
-                scope,
-                ret.class_name.as_str(),
-                Some(construct),
-            );
-        rooted!(in (cx) let func_root = func);
 
-        //ret.init_properties(cx, func_root.handle());
+        crate::es_utils::functions::define_native_constructor(
+            cx,
+            scope,
+            ret.class_name.as_str(),
+            Some(construct),
+        );
 
         let ret_arc = Arc::new(ret);
 
@@ -120,16 +117,6 @@ impl Proxy {
     }
 
     pub fn invoke_static_method(method_name: &str, args: Vec<HandleValue>) {
-        panic!("NYI");
-    }
-
-    fn get(obj_id: i32, prop_name: &str) -> JSVal {
-        // invoke this from C fn getter
-        panic!("NYI");
-    }
-
-    fn set(obj_id: i32, prop_name: &str, val: JSVal) -> () {
-        // invoke this from C fn setter
         panic!("NYI");
     }
 
@@ -289,7 +276,7 @@ mod tests {
                         .build(cx, global);
                     let esvf = sm_rt
                         .eval(
-                            "let tp_obj = new TestClass1('bar'); tp_obj.abc = 1; console.log('tp_obj.abc = %s', tp_obj.abc); let i = tp_obj.foo; tp_obj.foo = 987; tp_obj.methodA(1, 2, 3); tp_obj.methodB(true); tp_obj = null; i;",
+                            "let tp_obj = new TestClass1('bar'); tp_obj.abc = 1; console.log('tp_obj.abc = %s', tp_obj.abc); let i = tp_obj.foo; tp_obj.foo = 987; tp_obj.methodA(1, 2, 3); tp_obj.methodB(true); tp_obj.addEventListener('saved', (evt) => {console.log('tp_obj was saved');}); tp_obj.dispatchEvent('saved', {}); tp_obj = null; i;",
                             "test_proxy.es",
                         )
                         .ok()
@@ -355,7 +342,46 @@ unsafe extern "C" fn resolve(
             if let Some(proxy) = proxies.get(&class_name) {
                 trace!("check proxy {} for {}", class_name, prop_name);
 
-                if proxy.properties.contains_key(prop_name.as_str()) {
+                if prop_name.as_str().eq("addEventListener") {
+                    trace!("define addEventListener");
+
+                    let robj = mozjs::rust::HandleObject::from_marked_location(&obj.get());
+                    crate::es_utils::functions::define_native_function(
+                        cx,
+                        robj,
+                        "addEventListener",
+                        Some(add_event_listener),
+                    );
+
+                    *resolved = true;
+                    trace!("resolved addEventListener {}", prop_name);
+                } else if prop_name.as_str().eq("removeEventListener") {
+                    trace!("define removeEventListener");
+
+                    let robj = mozjs::rust::HandleObject::from_marked_location(&obj.get());
+                    crate::es_utils::functions::define_native_function(
+                        cx,
+                        robj,
+                        "removeEventListener",
+                        Some(remove_event_listener),
+                    );
+
+                    *resolved = true;
+                    trace!("resolved removeEventListener {}", prop_name);
+                } else if prop_name.as_str().eq("dispatchEvent") {
+                    trace!("define dispatchEvent");
+
+                    let robj = mozjs::rust::HandleObject::from_marked_location(&obj.get());
+                    crate::es_utils::functions::define_native_function(
+                        cx,
+                        robj,
+                        "dispatchEvent",
+                        Some(dispatch_event),
+                    );
+
+                    *resolved = true;
+                    trace!("resolved dispatchEvent {}", prop_name);
+                } else if proxy.properties.contains_key(prop_name.as_str()) {
                     trace!(
                         "define prop for proxy {} for name {}",
                         class_name,
@@ -523,6 +549,36 @@ unsafe extern "C" fn setter(cx: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi
         }
     }
 
+    true
+}
+
+unsafe extern "C" fn add_event_listener(
+    cx: *mut JSContext,
+    argc: u32,
+    vp: *mut mozjs::jsapi::Value,
+) -> bool {
+    trace!("add_event_listener");
+    // todo
+    true
+}
+
+unsafe extern "C" fn remove_event_listener(
+    cx: *mut JSContext,
+    argc: u32,
+    vp: *mut mozjs::jsapi::Value,
+) -> bool {
+    trace!("remove_event_listener");
+    //todo
+    true
+}
+
+unsafe extern "C" fn dispatch_event(
+    cx: *mut JSContext,
+    argc: u32,
+    vp: *mut mozjs::jsapi::Value,
+) -> bool {
+    trace!("dispatch_event");
+    //todo
     true
 }
 

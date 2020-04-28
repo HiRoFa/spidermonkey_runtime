@@ -224,7 +224,7 @@ pub fn set_es_obj_prop_val_permanent(
             obj,
             prop_name_str.as_ptr() as *const libc::c_char,
             prop_val,
-            mozjs::jsapi::JSPROP_PERMANENT as u32 + mozjs::jsapi::JSPROP_READONLY as u32,
+            (mozjs::jsapi::JSPROP_PERMANENT & mozjs::jsapi::JSPROP_READONLY) as u32,
         );
     }
 }
