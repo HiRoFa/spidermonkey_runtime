@@ -30,6 +30,7 @@ pub struct Proxy {
             Box<dyn Fn(i32, HandleValue) -> ()>,
         ),
     >,
+    methods: HashMap<&'static str, Box<dyn Fn(i32, &CallArgs) -> JSVal>>,
 }
 
 pub struct ProxyBuilder {
@@ -43,6 +44,7 @@ pub struct ProxyBuilder {
             Box<dyn Fn(i32, HandleValue) -> ()>,
         ),
     >,
+    methods: HashMap<&'static str, Box<dyn Fn(i32, &CallArgs) -> JSVal>>,
 }
 
 thread_local! {
@@ -66,10 +68,16 @@ impl Proxy {
             constructor: unsafe { replace(&mut builder.constructor, None) },
             finalizer: unsafe { replace(&mut builder.finalizer, None) },
             properties: HashMap::new(),
+            methods: HashMap::new(),
         };
 
         builder.properties.drain().all(|e| {
             ret.properties.insert(e.0, e.1);
+            true
+        });
+
+        builder.methods.drain().all(|e| {
+            ret.methods.insert(e.0, e.1);
             true
         });
 
@@ -93,6 +101,66 @@ impl Proxy {
         });
 
         ret_arc
+    }
+
+    pub fn new_instance(args: Vec<HandleValue>) -> *mut JSObject {
+        panic!("NYI");
+    }
+
+    pub fn dispatch_event(obj_id: i32, event_name: &str, event_obj: HandleObject) {
+        panic!("NYI");
+    }
+
+    pub fn dispatch_static_event(event_name: &str, event_obj: HandleObject) {
+        panic!("NYI");
+    }
+
+    pub fn invoke_method(obj_id: i32, method_name: &str, args: Vec<HandleValue>) {
+        panic!("NYI");
+    }
+
+    pub fn invoke_static_method(method_name: &str, args: Vec<HandleValue>) {
+        panic!("NYI");
+    }
+
+    fn get(obj_id: i32, prop_name: &str) -> JSVal {
+        // invoke this from C fn getter
+        panic!("NYI");
+    }
+
+    fn set(obj_id: i32, prop_name: &str, val: JSVal) -> () {
+        // invoke this from C fn setter
+        panic!("NYI");
+    }
+
+    fn static_get(prop_name: &str) -> JSVal {
+        // invoke this from C fn getter
+        panic!("NYI");
+    }
+
+    fn static_set(prop_name: &str, val: JSVal) -> () {
+        // invoke this from C fn setter
+        panic!("NYI");
+    }
+
+    fn add_event_listener(obj_id: i32, event_type: &str, listener: HandleObject) {
+        // assert that listener is a function?
+        panic!("NYI");
+    }
+
+    fn remove_event_listener(obj_id: i32, event_type: &str, listener: HandleObject) {
+        // assert that listener is a function?
+        panic!("NYI");
+    }
+
+    fn add_static_event_listener(event_type: &str, listener: HandleObject) {
+        // assert that listener is a function?
+        panic!("NYI");
+    }
+
+    fn remove_static_event_listener(event_type: &str, listener: HandleObject) {
+        // assert that listener is a function?
+        panic!("NYI");
     }
 
     /*fn init_properties(&self, cx: *mut JSContext, func: HandleObject) {
@@ -124,8 +192,10 @@ impl ProxyBuilder {
             constructor: None,
             finalizer: None,
             properties: HashMap::new(),
+            methods: HashMap::new(),
         }
     }
+
     pub fn constructor<C>(&mut self, constructor: C) -> &mut Self
     where
         C: Fn(*mut JSContext, &CallArgs) -> Result<i32, String> + 'static,
@@ -133,6 +203,7 @@ impl ProxyBuilder {
         self.constructor = Some(Box::new(constructor));
         self
     }
+
     pub fn finalizer<F>(&mut self, finalizer: F) -> &mut Self
     where
         F: Fn(&i32) -> () + 'static,
@@ -140,6 +211,7 @@ impl ProxyBuilder {
         self.finalizer = Some(Box::new(finalizer));
         self
     }
+
     pub fn property<G, S>(&mut self, name: &'static str, getter: G, setter: S) -> &mut Self
     where
         G: Fn(i32) -> JSVal + 'static,
@@ -147,6 +219,14 @@ impl ProxyBuilder {
     {
         self.properties
             .insert(name, (Box::new(getter), Box::new(setter)));
+        self
+    }
+
+    pub fn method<M>(&mut self, name: &'static str, method: M) -> &mut Self
+    where
+        M: Fn(i32, &CallArgs) -> JSVal + 'static,
+    {
+        self.methods.insert(name, Box::new(method));
         self
     }
 
@@ -162,7 +242,7 @@ mod tests {
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use log::debug;
     use mozjs::jsapi::CallArgs;
-    use mozjs::jsval::Int32Value;
+    use mozjs::jsval::{Int32Value, UndefinedValue};
 
     #[test]
     fn test_proxy() {
@@ -186,19 +266,30 @@ mod tests {
                             debug!("proxytest: construct with name {}", foo);
                             Ok(1)
                         })
-                        .property("foo", |_obj_id| {
+                        .property("foo", |obj_id| {
+                            debug!("proxy.get foo {}", obj_id);
                             Int32Value(123)
-                        }, |_obj_id, _val| {})
+                        }, |obj_id, _val| {
+                            debug!("proxy.set foo {}", obj_id);
+                        })
                         .property("bar", |_obj_id| {
                             Int32Value(456)
                         }, |_obj_id, _val| {})
                         .finalizer(|id: &i32| {
                             debug!("proxytest: finalize id {}", id);
                         })
+                        .method("methodA", |obj_id, args| {
+                            trace!("proxy.methodA called for obj {} with {} args", obj_id, args.argc_);
+                            UndefinedValue()
+                        })
+                        .method("methodB", |obj_id, args| {
+                            trace!("proxy.methodB called for obj {} with {} args", obj_id, args.argc_);
+                            UndefinedValue()
+                        })
                         .build(cx, global);
                     let esvf = sm_rt
                         .eval(
-                            "let tp_obj = new TestClass1('bar'); tp_obj.abc = 1; console.log('tp_obj.abc = %s', tp_obj.abc); let i = tp_obj.foo; tp_obj = null; i;",
+                            "let tp_obj = new TestClass1('bar'); tp_obj.abc = 1; console.log('tp_obj.abc = %s', tp_obj.abc); let i = tp_obj.foo; tp_obj.foo = 987; tp_obj.methodA(1, 2, 3); tp_obj.methodB(true); tp_obj = null; i;",
                             "test_proxy.es",
                         )
                         .ok()
@@ -273,6 +364,7 @@ unsafe extern "C" fn resolve(
 
                     let n = format!("{}\0", prop_name);
 
+                    // todo move this to es_utils (objects::define_native_getter_setter)
                     let ok = mozjs::jsapi::JS_DefineProperty1(
                         cx,
                         obj,
@@ -290,6 +382,23 @@ unsafe extern "C" fn resolve(
                     *resolved = true;
 
                     trace!("resolved prop {}", prop_name);
+                } else if proxy.methods.contains_key(prop_name.as_str()) {
+                    trace!(
+                        "define method for proxy {} for name {}",
+                        class_name,
+                        prop_name
+                    );
+
+                    let robj = mozjs::rust::HandleObject::from_marked_location(&obj.get());
+                    crate::es_utils::functions::define_native_function(
+                        cx,
+                        robj,
+                        prop_name.as_str(),
+                        Some(method),
+                    );
+
+                    *resolved = true;
+                    trace!("resolved method {}", prop_name);
                 }
             }
         });
@@ -357,12 +466,122 @@ unsafe extern "C" fn getter(cx: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi
     true
 }
 
-unsafe extern "C" fn setter(
-    _cx: *mut JSContext,
-    _argc: u32,
-    _vp: *mut mozjs::jsapi::Value,
-) -> bool {
+unsafe extern "C" fn setter(cx: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi::Value) -> bool {
     trace!("reflection::setter");
+
+    let args = CallArgs::from_vp(vp, argc);
+    let thisv: mozjs::jsapi::Value = *args.thisv();
+
+    if thisv.is_object() {
+        let obj_handle = mozjs::rust::HandleObject::from_marked_location(&thisv.to_object());
+        let cn_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+            cx,
+            obj_handle,
+            PROXY_PROP_CLASS_NAME,
+        );
+        if let Some(class_name) = cn_res.ok() {
+            trace!("reflection::setter get for cn:{}", class_name);
+
+            let callee: *mut JSObject = args.callee();
+            let prop_name_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+                cx,
+                HandleObject::from_marked_location(&callee),
+                "name",
+            );
+            if let Some(prop_name) = prop_name_res.ok() {
+                // lovely the name here is "set [propname]"
+                trace!("reflection::setter set {} for cn:{}", prop_name, class_name);
+
+                // get obj id
+                let obj_id = crate::es_utils::objects::get_es_obj_prop_val_as_i32(
+                    cx,
+                    obj_handle,
+                    PROXY_PROP_OBJ_ID,
+                );
+
+                trace!(
+                    "reflection::setter set {} for cn:{} for obj_id {}",
+                    prop_name,
+                    class_name,
+                    obj_id
+                );
+
+                let p_name = &prop_name[4..];
+
+                PROXIES.with(|proxies_rc| {
+                    let proxies = &*proxies_rc.borrow();
+                    if let Some(proxy) = proxies.get(&class_name).cloned() {
+                        if let Some(prop) = proxy.properties.get(p_name) {
+                            let val = HandleValue::from_marked_location(&args.index(0).get());
+
+                            trace!("reflection::setter setting val");
+                            prop.1(obj_id, val);
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    true
+}
+
+unsafe extern "C" fn method(cx: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi::Value) -> bool {
+    trace!("reflection::method");
+
+    let args = CallArgs::from_vp(vp, argc);
+    let thisv: mozjs::jsapi::Value = *args.thisv();
+
+    if thisv.is_object() {
+        let obj_handle = mozjs::rust::HandleObject::from_marked_location(&thisv.to_object());
+        let cn_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+            cx,
+            obj_handle,
+            PROXY_PROP_CLASS_NAME,
+        );
+        if let Some(class_name) = cn_res.ok() {
+            trace!("reflection::method for cn:{}", class_name);
+
+            let callee: *mut JSObject = args.callee();
+            let prop_name_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+                cx,
+                HandleObject::from_marked_location(&callee),
+                "name",
+            );
+            if let Some(prop_name) = prop_name_res.ok() {
+                // lovely the name here is "get [propname]"
+                trace!("reflection::method {} for cn:{}", prop_name, class_name);
+
+                // get obj id
+                let obj_id = crate::es_utils::objects::get_es_obj_prop_val_as_i32(
+                    cx,
+                    obj_handle,
+                    PROXY_PROP_OBJ_ID,
+                );
+
+                trace!(
+                    "reflection::method {} for cn:{} for obj_id {}",
+                    prop_name,
+                    class_name,
+                    obj_id
+                );
+
+                let p_name = prop_name.as_str();
+
+                PROXIES.with(|proxies_rc| {
+                    let proxies = &*proxies_rc.borrow();
+                    if let Some(proxy) = proxies.get(&class_name).cloned() {
+                        if let Some(prop) = proxy.methods.get(p_name) {
+                            trace!("got method for method");
+                            let js_val = prop(obj_id, &args); // todo pass Vec of HandleValue instead of callargs
+                            args.rval().set(js_val);
+                        }
+                    }
+                });
+            }
+        }
+    }
+
     true
 }
 
