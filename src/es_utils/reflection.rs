@@ -13,7 +13,7 @@ use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsapi::JSCLASS_FOREGROUND_FINALIZE;
-use mozjs::jsval::{JSVal, ObjectValue, UndefinedValue};
+use mozjs::jsval::{JSVal, NullValue, ObjectValue, UndefinedValue};
 use mozjs::rust::{HandleObject, HandleValue};
 
 use std::borrow::BorrowMut;
@@ -293,6 +293,7 @@ mod tests {
                             trace!("proxy.methodB called for obj {} with {} args", obj_id, args.argc_);
                             UndefinedValue()
                         })
+                        .event("saved")
                         .build(cx, global);
                     let esvf = sm_rt
                         .eval(
@@ -689,7 +690,7 @@ fn dispatch_event_for_proxy(
             if let Some(listener_vec) = obj_map.get(evt_type) {
                 rooted!(in (cx) let mut ret_val = UndefinedValue());
                 // todo this_obj should be the proxy obj..
-                rooted!(in (cx) let this_obj = UndefinedValue().to_object_or_null());
+                rooted!(in (cx) let this_obj = NullValue().to_object_or_null());
                 // since evt_obj is already rooted here we don;t need the auto_root macro, we can just use call_method_value()
 
                 for listener_epr in listener_vec {
