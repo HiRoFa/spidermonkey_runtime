@@ -2,18 +2,23 @@ use crate::es_utils::es_jsid_to_string;
 use crate::es_utils::rooting::EsPersistentRooted;
 use core::ptr;
 use log::trace;
+
 use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::JSClass;
 use mozjs::jsapi::JSClassOps;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSFreeOp;
 use mozjs::jsapi::JSObject;
+use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_ReportErrorASCII;
+use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsapi::JSCLASS_FOREGROUND_FINALIZE;
-use mozjs::jsval::{JSVal, ObjectValue};
+use mozjs::jsval::{JSVal, ObjectValue, UndefinedValue};
 use mozjs::rust::{HandleObject, HandleValue};
+
+use std::borrow::BorrowMut;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ptr::replace;
 use std::sync::Arc;
 
@@ -32,6 +37,7 @@ pub struct Proxy {
         ),
     >,
     methods: HashMap<&'static str, Box<dyn Fn(i32, &CallArgs) -> JSVal>>,
+    events: HashSet<&'static str>,
 }
 
 pub struct ProxyBuilder {
@@ -46,6 +52,7 @@ pub struct ProxyBuilder {
         ),
     >,
     methods: HashMap<&'static str, Box<dyn Fn(i32, &CallArgs) -> JSVal>>,
+    events: HashSet<&'static str>,
 }
 
 thread_local! {
@@ -70,6 +77,7 @@ impl Proxy {
             finalizer: unsafe { replace(&mut builder.finalizer, None) },
             properties: HashMap::new(),
             methods: HashMap::new(),
+            events: HashSet::new(),
         };
 
         builder.properties.drain().all(|e| {
@@ -79,6 +87,11 @@ impl Proxy {
 
         builder.methods.drain().all(|e| {
             ret.methods.insert(e.0, e.1);
+            true
+        });
+
+        builder.events.drain().all(|evt_type| {
+            ret.events.insert(evt_type);
             true
         });
 
@@ -181,6 +194,7 @@ impl ProxyBuilder {
             finalizer: None,
             properties: HashMap::new(),
             methods: HashMap::new(),
+            events: HashSet::new(),
         }
     }
 
@@ -221,6 +235,11 @@ impl ProxyBuilder {
     pub fn build(&mut self, cx: *mut JSContext, scope: HandleObject) -> Arc<Proxy> {
         Proxy::new(cx, scope, self)
     }
+
+    pub fn event(&mut self, evt_type: &'static str) -> &mut Self {
+        self.events.insert(evt_type);
+        self
+    }
 }
 
 #[cfg(test)]
@@ -246,7 +265,7 @@ mod tests {
                             debug!("proxytest: construct");
                             let foo;
                             if args.argc_ > 0 {
-                                let hv = args.get(0);
+                                let hv = args.index(0);
                                 foo = es_value_to_str(cx, &*hv).ok().unwrap();
                             } else {
                                 foo = "NoName".to_string();
@@ -572,6 +591,46 @@ unsafe extern "C" fn add_event_listener(
 ) -> bool {
     trace!("add_event_listener");
     // todo
+
+    if argc >= 2 {
+        let args = CallArgs::from_vp(vp, argc);
+        let type_handle_val = args.index(0);
+        let listener_handle_val = *args.index(1);
+
+        let listener_obj: *mut JSObject = listener_handle_val.to_object();
+
+        let listener_epr = EsPersistentRooted::new_from_obj(cx, listener_obj);
+        let type_str = crate::es_utils::es_value_to_str(cx, &type_handle_val)
+            .ok()
+            .unwrap();
+
+        let thisv: mozjs::jsapi::Value = *args.thisv();
+
+        let obj_id = get_obj_id_for(cx, thisv.to_object());
+
+        if let Some(proxy) = get_proxy_for(cx, thisv.to_object()) {
+            if proxy.events.contains(&type_str.as_str()) {
+                // we need this so we can get a &'static str
+                let type_str = proxy.events.get(type_str.as_str()).unwrap().clone();
+
+                PROXY_EVENT_LISTENERS.with(|pel_rc| {
+                    let pel = &mut *pel_rc.borrow_mut();
+                    if !pel.contains_key(&obj_id) {
+                        pel.insert(obj_id, HashMap::new());
+                    }
+                    let obj_map = pel.get_mut(&obj_id).unwrap();
+
+                    if !obj_map.contains_key(type_str) {
+                        obj_map.insert(type_str, vec![]);
+                    }
+
+                    let listener_vec = obj_map.get_mut(type_str).unwrap();
+                    listener_vec.push(listener_epr);
+                });
+            }
+        }
+    }
+
     true
 }
 
@@ -592,7 +651,65 @@ unsafe extern "C" fn dispatch_event(
 ) -> bool {
     trace!("dispatch_event");
     //todo should call proxy.dispatch_event()
+
+    if argc >= 2 {
+        let args = CallArgs::from_vp(vp, argc);
+        let type_handle_val = args.index(0);
+        let evt_obj_handle_val = args.index(1);
+
+        let type_str = crate::es_utils::es_value_to_str(cx, &type_handle_val)
+            .ok()
+            .unwrap();
+
+        let thisv: mozjs::jsapi::Value = *args.thisv();
+
+        let obj_id = get_obj_id_for(cx, thisv.to_object());
+
+        if let Some(proxy) = get_proxy_for(cx, thisv.to_object()) {
+            if proxy.events.contains(&type_str.as_str()) {
+                let type_str = proxy.events.get(type_str.as_str()).unwrap().clone();
+
+                dispatch_event_for_proxy(cx, obj_id, type_str, evt_obj_handle_val);
+            }
+        }
+    }
     true
+}
+
+// proxy can call this from Proxy::dispatch_event with esvf.to_es_val()
+fn dispatch_event_for_proxy(
+    cx: *mut JSContext,
+    obj_id: i32,
+    evt_type: &str,
+    evt_obj: mozjs::jsapi::HandleValue,
+) {
+    PROXY_EVENT_LISTENERS.with(|pel_rc| {
+        let pel = &*pel_rc.borrow();
+        if let Some(obj_map) = pel.get(&obj_id) {
+            if let Some(listener_vec) = obj_map.get(evt_type) {
+                rooted!(in (cx) let mut ret_val = UndefinedValue());
+                // todo this_obj should be the proxy obj..
+                rooted!(in (cx) let this_obj = UndefinedValue().to_object_or_null());
+                // since evt_obj is already rooted here we don;t need the auto_root macro, we can just use call_method_value()
+
+                for listener_epr in listener_vec {
+                    let mut args_vec = vec![];
+                    args_vec.push(*evt_obj);
+                    let func_obj = listener_epr.get();
+                    // why do we only have a call_method by val and not by HandleObject?
+                    // the whole rooting func here could be avoided
+                    rooted!(in (cx) let function_val = ObjectValue(func_obj));
+                    crate::es_utils::functions::call_method_value(
+                        cx,
+                        this_obj.handle(),
+                        function_val.handle(),
+                        args_vec,
+                        ret_val.handle_mut(),
+                    );
+                }
+            }
+        }
+    });
 }
 
 unsafe extern "C" fn method(cx: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi::Value) -> bool {
