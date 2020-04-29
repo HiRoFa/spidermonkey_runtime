@@ -1,4 +1,5 @@
 use crate::es_utils::es_jsid_to_string;
+use crate::es_utils::rooting::EsPersistentRooted;
 use core::ptr;
 use log::trace;
 use mozjs::jsapi::CallArgs;
@@ -492,6 +493,28 @@ unsafe extern "C" fn getter(cx: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi
     true
 }
 
+fn get_obj_id_for(cx: *mut JSContext, obj: *mut JSObject) -> i32 {
+    let obj_handle = unsafe { mozjs::rust::HandleObject::from_marked_location(&obj) };
+    crate::es_utils::objects::get_es_obj_prop_val_as_i32(cx, obj_handle, PROXY_PROP_OBJ_ID)
+}
+
+fn get_proxy_for(cx: *mut JSContext, obj: *mut JSObject) -> Option<Arc<Proxy>> {
+    let obj_handle = unsafe { mozjs::rust::HandleObject::from_marked_location(&obj) };
+    let cn_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+        cx,
+        obj_handle,
+        PROXY_PROP_CLASS_NAME,
+    );
+    if let Some(class_name) = cn_res.ok() {
+        return PROXIES.with(|proxies_rc| {
+            let proxies = &*proxies_rc.borrow();
+            proxies.get(&class_name).cloned()
+        });
+    }
+
+    None
+}
+
 unsafe extern "C" fn setter(cx: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi::Value) -> bool {
     trace!("reflection::setter");
 
@@ -499,14 +522,8 @@ unsafe extern "C" fn setter(cx: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi
     let thisv: mozjs::jsapi::Value = *args.thisv();
 
     if thisv.is_object() {
-        let obj_handle = mozjs::rust::HandleObject::from_marked_location(&thisv.to_object());
-        let cn_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
-            cx,
-            obj_handle,
-            PROXY_PROP_CLASS_NAME,
-        );
-        if let Some(class_name) = cn_res.ok() {
-            trace!("reflection::setter get for cn:{}", class_name);
+        if let Some(proxy) = get_proxy_for(cx, thisv.to_object()) {
+            trace!("reflection::setter get for cn:{}", &proxy.class_name);
 
             let callee: *mut JSObject = args.callee();
             let prop_name_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
@@ -516,40 +533,36 @@ unsafe extern "C" fn setter(cx: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi
             );
             if let Some(prop_name) = prop_name_res.ok() {
                 // lovely the name here is "set [propname]"
-                trace!("reflection::setter set {} for cn:{}", prop_name, class_name);
+                trace!("reflection::setter set {}", prop_name);
 
                 // get obj id
-                let obj_id = crate::es_utils::objects::get_es_obj_prop_val_as_i32(
-                    cx,
-                    obj_handle,
-                    PROXY_PROP_OBJ_ID,
-                );
+                let obj_id = get_obj_id_for(cx, thisv.to_object());
 
                 trace!(
-                    "reflection::setter set {} for cn:{} for obj_id {}",
+                    "reflection::setter set {} for for obj_id {}",
                     prop_name,
-                    class_name,
                     obj_id
                 );
 
+                // strip "set " from propname
                 let p_name = &prop_name[4..];
 
-                PROXIES.with(|proxies_rc| {
-                    let proxies = &*proxies_rc.borrow();
-                    if let Some(proxy) = proxies.get(&class_name).cloned() {
-                        if let Some(prop) = proxy.properties.get(p_name) {
-                            let val = HandleValue::from_marked_location(&args.index(0).get());
+                if let Some(prop) = proxy.properties.get(p_name) {
+                    let val = HandleValue::from_marked_location(&args.index(0).get());
 
-                            trace!("reflection::setter setting val");
-                            prop.1(obj_id, val);
-                        }
-                    }
-                });
+                    trace!("reflection::setter setting val");
+                    prop.1(obj_id, val);
+                }
             }
         }
     }
 
     true
+}
+
+thread_local! {
+    // todo don't forget to clear in finalize
+    pub static PROXY_EVENT_LISTENERS: RefCell<HashMap<i32, HashMap<&'static str, Vec<EsPersistentRooted>>>> = RefCell::new(HashMap::new());
 }
 
 unsafe extern "C" fn add_event_listener(
@@ -578,7 +591,7 @@ unsafe extern "C" fn dispatch_event(
     vp: *mut mozjs::jsapi::Value,
 ) -> bool {
     trace!("dispatch_event");
-    //todo
+    //todo should call proxy.dispatch_event()
     true
 }
 
@@ -589,14 +602,10 @@ unsafe extern "C" fn method(cx: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi
     let thisv: mozjs::jsapi::Value = *args.thisv();
 
     if thisv.is_object() {
-        let obj_handle = mozjs::rust::HandleObject::from_marked_location(&thisv.to_object());
-        let cn_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
-            cx,
-            obj_handle,
-            PROXY_PROP_CLASS_NAME,
-        );
-        if let Some(class_name) = cn_res.ok() {
-            trace!("reflection::method for cn:{}", class_name);
+        if let Some(proxy) = get_proxy_for(cx, thisv.to_object()) {
+            let obj_handle = mozjs::rust::HandleObject::from_marked_location(&thisv.to_object());
+
+            trace!("reflection::method for cn:{}", &proxy.class_name);
 
             let callee: *mut JSObject = args.callee();
             let prop_name_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
@@ -606,34 +615,20 @@ unsafe extern "C" fn method(cx: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi
             );
             if let Some(prop_name) = prop_name_res.ok() {
                 // lovely the name here is "get [propname]"
-                trace!("reflection::method {} for cn:{}", prop_name, class_name);
+                trace!("reflection::method {}", prop_name);
 
                 // get obj id
-                let obj_id = crate::es_utils::objects::get_es_obj_prop_val_as_i32(
-                    cx,
-                    obj_handle,
-                    PROXY_PROP_OBJ_ID,
-                );
+                let obj_id = get_obj_id_for(cx, thisv.to_object());
 
-                trace!(
-                    "reflection::method {} for cn:{} for obj_id {}",
-                    prop_name,
-                    class_name,
-                    obj_id
-                );
+                trace!("reflection::method {} for for obj_id {}", prop_name, obj_id);
 
                 let p_name = prop_name.as_str();
 
-                PROXIES.with(|proxies_rc| {
-                    let proxies = &*proxies_rc.borrow();
-                    if let Some(proxy) = proxies.get(&class_name).cloned() {
-                        if let Some(prop) = proxy.methods.get(p_name) {
-                            trace!("got method for method");
-                            let js_val = prop(obj_id, &args); // todo pass Vec of HandleValue instead of callargs
-                            args.rval().set(js_val);
-                        }
-                    }
-                });
+                if let Some(prop) = proxy.methods.get(p_name) {
+                    trace!("got method for method");
+                    let js_val = prop(obj_id, &args); // todo pass Vec of HandleValue instead of callargs
+                    args.rval().set(js_val);
+                }
             }
         }
     }
@@ -659,11 +654,7 @@ unsafe extern "C" fn finalize(_fop: *mut JSFreeOp, object: *mut JSObject) {
             .unwrap();
 
         trace!("finalize id {} of type {}", id, cn);
-        let proxy_opt = PROXIES.with(|proxies_rc| {
-            let proxies = &*proxies_rc.borrow();
-            proxies.get(&cn).cloned()
-        });
-        if let Some(proxy) = proxy_opt {
+        if let Some(proxy) = get_proxy(cn.as_str()) {
             if let Some(finalizer) = &proxy.finalizer {
                 finalizer(&id);
             }
@@ -694,8 +685,7 @@ unsafe extern "C" fn construct(
     .unwrap();
     trace!("reflection::construct cn={}", class_name);
 
-    let proxy_opt = get_proxy(class_name.as_str());
-    if let Some(proxy) = proxy_opt {
+    if let Some(proxy) = get_proxy(class_name.as_str()) {
         trace!("constructing proxy {}", class_name);
         if let Some(constructor) = &proxy.constructor {
             trace!("constructing proxy constructor {}", class_name);
