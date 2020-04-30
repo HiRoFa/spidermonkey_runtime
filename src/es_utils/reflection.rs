@@ -123,7 +123,7 @@ impl Proxy {
         obj_id: i32,
         event_name: &str,
         cx: *mut JSContext,
-        event_obj: HandleObject,
+        event_obj: mozjs::jsapi::HandleValue,
     ) {
         dispatch_event_for_proxy(cx, obj_id, event_name, event_obj);
     }
