@@ -226,3 +226,12 @@ fn reg_op(rt: &EsRuntimeWrapper) {
 
 After that you can [call it from script](SCRIPT.md#calling-rust-ops).
 
+## Creating a Proxy object from rust
+
+A Proxy object can be used to create an object in script that calls rust for all it's operations
+
+```rust
+// todo
+```
+
+The object in script implements the [EventTarget](https://developer.mozilla.org/nl/docs/Web/API/EventTarget) interface so you can use it to add EventListeners and dispatch events from rust and from script.

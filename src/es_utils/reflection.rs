@@ -16,6 +16,7 @@ use mozjs::jsapi::JSCLASS_FOREGROUND_FINALIZE;
 use mozjs::jsval::{JSVal, NullValue, ObjectValue, UndefinedValue};
 use mozjs::rust::{HandleObject, HandleValue};
 
+use crate::esvaluefacade::EsValueFacade;
 use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -118,8 +119,13 @@ impl Proxy {
         panic!("NYI");
     }
 
-    pub fn dispatch_event(obj_id: i32, event_name: &str, event_obj: HandleObject) {
-        panic!("NYI");
+    pub fn dispatch_event(
+        obj_id: i32,
+        event_name: &str,
+        cx: *mut JSContext,
+        event_obj: HandleObject,
+    ) {
+        dispatch_event_for_proxy(cx, obj_id, event_name, event_obj);
     }
 
     pub fn dispatch_static_event(event_name: &str, event_obj: HandleObject) {
@@ -581,7 +587,7 @@ unsafe extern "C" fn setter(cx: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi
 }
 
 thread_local! {
-    // todo don't forget to clear in finalize
+    // todo key og top map should also contain proxy class name
     pub static PROXY_EVENT_LISTENERS: RefCell<HashMap<i32, HashMap<&'static str, Vec<EsPersistentRooted>>>> = RefCell::new(HashMap::new());
 }
 
@@ -591,7 +597,6 @@ unsafe extern "C" fn add_event_listener(
     vp: *mut mozjs::jsapi::Value,
 ) -> bool {
     trace!("add_event_listener");
-    // todo
 
     if argc >= 2 {
         let args = CallArgs::from_vp(vp, argc);
@@ -641,7 +646,47 @@ unsafe extern "C" fn remove_event_listener(
     vp: *mut mozjs::jsapi::Value,
 ) -> bool {
     trace!("remove_event_listener");
-    //todo
+    if argc >= 2 {
+        let args = CallArgs::from_vp(vp, argc);
+        let type_handle_val = args.index(0);
+        let listener_handle_val = *args.index(1);
+
+        let listener_obj: *mut JSObject = listener_handle_val.to_object();
+
+        let type_str = crate::es_utils::es_value_to_str(cx, &type_handle_val)
+            .ok()
+            .unwrap();
+
+        let thisv: mozjs::jsapi::Value = *args.thisv();
+
+        let obj_id = get_obj_id_for(cx, thisv.to_object());
+
+        if let Some(proxy) = get_proxy_for(cx, thisv.to_object()) {
+            if proxy.events.contains(&type_str.as_str()) {
+                // we need this so we can get a &'static str
+                let type_str = proxy.events.get(type_str.as_str()).unwrap().clone();
+
+                PROXY_EVENT_LISTENERS.with(|pel_rc| {
+                    let pel = &mut *pel_rc.borrow_mut();
+                    if pel.contains_key(&obj_id) {
+                        let obj_map = pel.get_mut(&obj_id).unwrap();
+
+                        if obj_map.contains_key(type_str) {
+                            let listener_vec = obj_map.get_mut(type_str).unwrap();
+                            for x in 0..listener_vec.len() {
+                                let epr = listener_vec.get(x).unwrap();
+                                if epr.get() == listener_obj {
+                                    trace!("remove event listener for {}", type_str);
+                                    listener_vec.remove(x);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    }
     true
 }
 
@@ -651,7 +696,6 @@ unsafe extern "C" fn dispatch_event(
     vp: *mut mozjs::jsapi::Value,
 ) -> bool {
     trace!("dispatch_event");
-    //todo should call proxy.dispatch_event()
 
     if argc >= 2 {
         let args = CallArgs::from_vp(vp, argc);
@@ -697,7 +741,7 @@ fn dispatch_event_for_proxy(
                     let mut args_vec = vec![];
                     args_vec.push(*evt_obj);
                     let func_obj = listener_epr.get();
-                    // why do we only have a call_method by val and not by HandleObject?
+                    // todo why do we only have a call_method by val and not by HandleObject?
                     // the whole rooting func here could be avoided
                     rooted!(in (cx) let function_val = ObjectValue(func_obj));
                     crate::es_utils::functions::call_method_value(
@@ -706,7 +750,9 @@ fn dispatch_event_for_proxy(
                         function_val.handle(),
                         args_vec,
                         ret_val.handle_mut(),
-                    );
+                    )
+                    .ok()
+                    .unwrap();
                 }
             }
         }
@@ -777,6 +823,12 @@ unsafe extern "C" fn finalize(_fop: *mut JSFreeOp, object: *mut JSObject) {
                 finalizer(&id);
             }
         }
+
+        PROXY_EVENT_LISTENERS.with(|pel_rc| {
+            // clear event listeners
+            let pel = &mut *pel_rc.borrow_mut();
+            pel.remove(&id);
+        });
     }
 }
 
