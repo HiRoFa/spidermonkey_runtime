@@ -1,6 +1,10 @@
+# 0.3.3
+
+* EsProxy class (EsValueFacade based)
+
 # 0.3.2 (work in progress)
 
-* 
+* Proxy class (JSAPI)
 
 # 0.3.1 
 
