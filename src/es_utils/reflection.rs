@@ -411,7 +411,7 @@ mod tests {
                                       // you can set props that are not proxied \n\
                                       tp_obj.abc = 1; console.log('tp_obj.abc = %s', tp_obj.abc); \n\
                                       // test you getter and setter\n\
-                                      let i = tp_obj.foo; tp_obj.foo = 987; \n\
+                                      let tp_i = tp_obj.foo; tp_obj.foo = 987; \n\
                                       // test your method\n\
                                       tp_obj.methodA(1, 2, 3);tp_obj.methodA(1, 2, 3);tp_obj.methodA(1, 2, 3); \n\
                                       tp_obj.methodB(true); \n\
@@ -420,7 +420,7 @@ mod tests {
                                       // dispatch an event from script\n\
                                       tp_obj.dispatchEvent('saved', {}); \n\
                                       // allow you object to be GCed\n\
-                                      tp_obj = null; i;",
+                                      tp_obj = null; tp_i;",
                             "test_proxy.es",
                         )
                         .ok()
@@ -467,14 +467,14 @@ mod tests {
                             "// you can set props that a re not proxied \n\
                                       TestClass2.abc = 1; console.log('TestClass2.abc = %s', TestClass2.abc); \n\
                                       // test you getter and setter\n\
-                                      let i = TestClass2.foo; TestClass2.foo = 987; \n\
+                                      let tsp_i = TestClass2.foo; TestClass2.foo = 987; \n\
                                       // test your method\n\
                                       TestClass2.methodA(1, 2, 3);TestClass2.methodA(1, 2, 3);TestClass2.methodA(1, 2, 3); \n\
                                       TestClass2.methodB(true); \n\
                                       // add an event listener\n\
                                       TestClass2.addEventListener('saved', (evt) => {console.log('TestClass2 was saved');}); \n\
                                       // dispatch an event from script\n\
-                                      TestClass2.dispatchEvent('saved', {}); i;",
+                                      TestClass2.dispatchEvent('saved', {}); tsp_i;",
                             "test_static_proxy.es",
                         )
                         .ok()
