@@ -9,15 +9,12 @@ use mozjs::jsapi::JSClassOps;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSFreeOp;
 use mozjs::jsapi::JSObject;
-use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_ReportErrorASCII;
-use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsapi::JSCLASS_FOREGROUND_FINALIZE;
 use mozjs::jsval::{JSVal, NullValue, ObjectValue, UndefinedValue};
 use mozjs::rust::{HandleObject, HandleValue};
 
-use crate::esvaluefacade::EsValueFacade;
-use std::borrow::{Borrow, BorrowMut};
+use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::ptr::replace;
@@ -156,7 +153,8 @@ impl Proxy {
         ret_arc
     }
 
-    pub fn new_instance(args: Vec<HandleValue>) -> *mut JSObject {
+    pub fn _new_instance(_args: Vec<HandleValue>) -> *mut JSObject {
+        // to be used for EsValueFacade::new_proxy()
         panic!("NYI");
     }
 
@@ -170,46 +168,13 @@ impl Proxy {
         dispatch_event_for_proxy(cx, self, obj_id, event_name, event_obj);
     }
 
-    pub fn dispatch_static_event(event_name: &str, event_obj: HandleObject) {
-        panic!("NYI");
-    }
-
-    pub fn invoke_method(obj_id: i32, method_name: &str, args: Vec<HandleValue>) {
-        panic!("NYI");
-    }
-
-    pub fn invoke_static_method(method_name: &str, args: Vec<HandleValue>) {
-        panic!("NYI");
-    }
-
-    fn static_get(prop_name: &str) -> JSVal {
-        // invoke this from C fn getter
-        panic!("NYI");
-    }
-
-    fn static_set(prop_name: &str, val: JSVal) -> () {
-        // invoke this from C fn setter
-        panic!("NYI");
-    }
-
-    fn add_event_listener(obj_id: i32, event_type: &str, listener: HandleObject) {
-        // assert that listener is a function?
-        panic!("NYI");
-    }
-
-    fn remove_event_listener(obj_id: i32, event_type: &str, listener: HandleObject) {
-        // assert that listener is a function?
-        panic!("NYI");
-    }
-
-    fn add_static_event_listener(event_type: &str, listener: HandleObject) {
-        // assert that listener is a function?
-        panic!("NYI");
-    }
-
-    fn remove_static_event_listener(event_type: &str, listener: HandleObject) {
-        // assert that listener is a function?
-        panic!("NYI");
+    pub fn dispatch_static_event(
+        &self,
+        event_name: &str,
+        cx: *mut JSContext,
+        event_obj: mozjs::jsapi::HandleValue,
+    ) {
+        dispatch_static_event_for_proxy(cx, self, event_name, event_obj);
     }
 
     fn init_static_properties(&self, cx: *mut JSContext, func: HandleObject) {
@@ -232,6 +197,7 @@ impl Proxy {
                         & mozjs::jsapi::JSPROP_SETTER) as u32,
                 )
             };
+            assert!(ok);
         }
     }
 
@@ -460,11 +426,11 @@ mod tests {
                             trace!("static_proxy.methodB called with {} args", args.argc_);
                             UndefinedValue()
                         })
-                        .event("saved")
+                        .static_event("saved")
                         .build(cx, global);
                     let esvf = sm_rt
                         .eval(
-                            "// you can set props that a re not proxied \n\
+                            "// you can set props that are not proxied \n\
                                       TestClass2.abc = 1; console.log('TestClass2.abc = %s', TestClass2.abc); \n\
                                       // test you getter and setter\n\
                                       let tsp_i = TestClass2.foo; TestClass2.foo = 987; \n\
@@ -695,8 +661,6 @@ unsafe extern "C" fn proxy_static_getter(
 
     if thisv.is_object() {
         if let Some(proxy) = get_static_proxy_for(cx, thisv.to_object()) {
-            let obj_handle = mozjs::rust::HandleObject::from_marked_location(&thisv.to_object());
-
             trace!("reflection::static_getter get for cn:{}", proxy.class_name);
 
             let callee: *mut JSObject = args.callee();
@@ -856,6 +820,46 @@ unsafe extern "C" fn proxy_static_add_event_listener(
     argc: u32,
     vp: *mut mozjs::jsapi::Value,
 ) -> bool {
+    trace!("add_static_event_listener");
+
+    if argc >= 2 {
+        let args = CallArgs::from_vp(vp, argc);
+        let type_handle_val = args.index(0);
+        let listener_handle_val = *args.index(1);
+
+        let listener_obj: *mut JSObject = listener_handle_val.to_object();
+
+        let listener_epr = EsPersistentRooted::new_from_obj(cx, listener_obj);
+        let type_str = crate::es_utils::es_value_to_str(cx, &type_handle_val)
+            .ok()
+            .unwrap();
+
+        let thisv: mozjs::jsapi::Value = *args.thisv();
+
+        if let Some(proxy) = get_static_proxy_for(cx, thisv.to_object()) {
+            if proxy.static_events.contains(&type_str.as_str()) {
+                // we need this so we can get a &'static str
+                let type_str = proxy.static_events.get(type_str.as_str()).unwrap().clone();
+
+                let obj_map = &mut *proxy.static_event_listeners.borrow_mut();
+
+                if !obj_map.contains_key(type_str) {
+                    obj_map.insert(type_str, vec![]);
+                }
+
+                let listener_vec = obj_map.get_mut(type_str).unwrap();
+                listener_vec.push(listener_epr);
+            } else {
+                trace!(
+                    "add_static_event_listener -> static event not defined: {}",
+                    type_str
+                );
+            }
+        } else {
+            trace!("add_static_event_listener -> no proxy found for obj");
+        }
+    }
+
     true
 }
 
@@ -864,6 +868,41 @@ unsafe extern "C" fn proxy_static_remove_event_listener(
     argc: u32,
     vp: *mut mozjs::jsapi::Value,
 ) -> bool {
+    trace!("remove_static_event_listener");
+    if argc >= 2 {
+        let args = CallArgs::from_vp(vp, argc);
+        let type_handle_val = args.index(0);
+        let listener_handle_val = *args.index(1);
+
+        let listener_obj: *mut JSObject = listener_handle_val.to_object();
+
+        let type_str = crate::es_utils::es_value_to_str(cx, &type_handle_val)
+            .ok()
+            .unwrap();
+
+        let thisv: mozjs::jsapi::Value = *args.thisv();
+
+        if let Some(proxy) = get_static_proxy_for(cx, thisv.to_object()) {
+            if proxy.static_events.contains(&type_str.as_str()) {
+                // we need this so we can get a &'static str
+                let type_str = proxy.static_events.get(type_str.as_str()).unwrap().clone();
+
+                let obj_map = &mut *proxy.static_event_listeners.borrow_mut();
+
+                if obj_map.contains_key(type_str) {
+                    let listener_vec = obj_map.get_mut(type_str).unwrap();
+                    for x in 0..listener_vec.len() {
+                        let epr = listener_vec.get(x).unwrap();
+                        if epr.get() == listener_obj {
+                            trace!("remove static event listener for {}", type_str);
+                            listener_vec.remove(x);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
     true
 }
 
@@ -872,6 +911,27 @@ unsafe extern "C" fn proxy_static_dispatch_event(
     argc: u32,
     vp: *mut mozjs::jsapi::Value,
 ) -> bool {
+    trace!("dispatch_static_event");
+
+    if argc >= 2 {
+        let args = CallArgs::from_vp(vp, argc);
+        let type_handle_val = args.index(0);
+        let evt_obj_handle_val = args.index(1);
+
+        let type_str = crate::es_utils::es_value_to_str(cx, &type_handle_val)
+            .ok()
+            .unwrap();
+
+        let thisv: mozjs::jsapi::Value = *args.thisv();
+
+        if let Some(proxy) = get_static_proxy_for(cx, thisv.to_object()) {
+            if proxy.static_events.contains(&type_str.as_str()) {
+                let type_str = proxy.static_events.get(type_str.as_str()).unwrap().clone();
+
+                dispatch_static_event_for_proxy(cx, proxy.borrow(), type_str, evt_obj_handle_val);
+            }
+        }
+    }
     true
 }
 
@@ -915,6 +975,8 @@ unsafe extern "C" fn proxy_instance_add_event_listener(
 
                 let listener_vec = obj_map.get_mut(type_str).unwrap();
                 listener_vec.push(listener_epr);
+            } else {
+                trace!("add_event_listener -> event not defined: {}", type_str);
             }
         }
     }
@@ -1039,6 +1101,40 @@ fn dispatch_event_for_proxy(
     }
 }
 
+fn dispatch_static_event_for_proxy(
+    cx: *mut JSContext,
+    proxy: &Proxy,
+    evt_type: &str,
+    evt_obj: mozjs::jsapi::HandleValue,
+) {
+    let obj_map = &*proxy.static_event_listeners.borrow();
+
+    if let Some(listener_vec) = obj_map.get(evt_type) {
+        rooted!(in (cx) let mut ret_val = UndefinedValue());
+        // todo this_obj should be the proxy obj..
+        rooted!(in (cx) let this_obj = NullValue().to_object_or_null());
+        // since evt_obj is already rooted here we don;t need the auto_root macro, we can just use call_method_value()
+
+        for listener_epr in listener_vec {
+            let mut args_vec = vec![];
+            args_vec.push(*evt_obj);
+            let func_obj = listener_epr.get();
+            // todo why do we only have a call_method by val and not by HandleObject?
+            // the whole rooting func here could be avoided
+            rooted!(in (cx) let function_val = ObjectValue(func_obj));
+            crate::es_utils::functions::call_method_value(
+                cx,
+                this_obj.handle(),
+                function_val.handle(),
+                args_vec,
+                ret_val.handle_mut(),
+            )
+            .ok()
+            .unwrap();
+        }
+    }
+}
+
 unsafe extern "C" fn proxy_instance_method(
     cx: *mut JSContext,
     argc: u32,
@@ -1051,8 +1147,6 @@ unsafe extern "C" fn proxy_instance_method(
 
     if thisv.is_object() {
         if let Some(proxy) = get_proxy_for(cx, thisv.to_object()) {
-            let obj_handle = mozjs::rust::HandleObject::from_marked_location(&thisv.to_object());
-
             trace!("reflection::method for cn:{}", &proxy.class_name);
 
             let callee: *mut JSObject = args.callee();
@@ -1096,8 +1190,6 @@ unsafe extern "C" fn proxy_static_method(
 
     if thisv.is_object() {
         if let Some(proxy) = get_static_proxy_for(cx, thisv.to_object()) {
-            let obj_handle = mozjs::rust::HandleObject::from_marked_location(&thisv.to_object());
-
             trace!("reflection::static_method for cn:{}", &proxy.class_name);
 
             let callee: *mut JSObject = args.callee();
