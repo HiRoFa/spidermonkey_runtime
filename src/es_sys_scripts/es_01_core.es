@@ -128,6 +128,3 @@ this.esses = new (class Esses {
 
 })();
 
-this._esses_cleanup = function() {
-    esses.cleanup();
-};

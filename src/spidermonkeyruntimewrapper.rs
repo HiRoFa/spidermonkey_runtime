@@ -228,18 +228,23 @@ impl SmRuntime {
             trace!("running gc cleanup / 1");
             {
                 rooted!(in (cx) let mut ret_val = UndefinedValue());
-                let cleanup_res = es_utils::functions::call_method_name(
+                // run esses.cleanup();
+                let cleanup_res = es_utils::functions::call_obj_method_name(
                     cx,
                     global,
-                    "_esses_cleanup",
+                    vec!["esses"],
+                    "cleanup",
                     vec![],
                     ret_val.handle_mut(),
                 );
                 if cleanup_res.is_err() {
                     let err = cleanup_res.err().unwrap();
-                    debug!(
+                    log::error!(
                         "cleanup failed: {}:{}:{} -> {}",
-                        err.filename, err.lineno, err.column, err.message
+                        err.filename,
+                        err.lineno,
+                        err.column,
+                        err.message
                     );
                 }
             }
