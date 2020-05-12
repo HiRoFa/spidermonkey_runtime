@@ -24,7 +24,7 @@ use std::sync::Arc;
 ///
 
 pub struct Proxy {
-    class_name: &'static str,
+    pub class_name: &'static str,
     constructor: Option<Box<dyn Fn(*mut JSContext, &CallArgs) -> Result<i32, String>>>,
     finalizer: Option<Box<dyn Fn(&i32) -> ()>>,
     properties: HashMap<
@@ -45,7 +45,7 @@ pub struct Proxy {
 }
 
 pub struct ProxyBuilder {
-    class_name: &'static str,
+    pub class_name: &'static str,
     constructor: Option<Box<dyn Fn(*mut JSContext, &CallArgs) -> Result<i32, String>>>,
     finalizer: Option<Box<dyn Fn(&i32) -> ()>>,
     properties: HashMap<
