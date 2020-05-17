@@ -25,7 +25,7 @@ use std::sync::Arc;
 
 pub struct Proxy {
     pub class_name: &'static str,
-    constructor: Option<Box<dyn Fn(*mut JSContext, &CallArgs) -> Result<i32, String>>>,
+    constructor: Option<Box<dyn Fn(*mut JSContext, &Vec<HandleValue>) -> Result<i32, String>>>,
     finalizer: Option<Box<dyn Fn(&i32) -> ()>>,
     properties: HashMap<
         &'static str,
@@ -34,19 +34,19 @@ pub struct Proxy {
             Box<dyn Fn(i32, HandleValue) -> ()>,
         ),
     >,
-    methods: HashMap<&'static str, Box<dyn Fn(i32, &CallArgs) -> JSVal>>,
+    methods: HashMap<&'static str, Box<dyn Fn(i32, &Vec<HandleValue>) -> JSVal>>,
     events: HashSet<&'static str>,
     event_listeners: RefCell<HashMap<i32, HashMap<&'static str, Vec<EsPersistentRooted>>>>,
     static_properties:
         HashMap<&'static str, (Box<dyn Fn() -> JSVal>, Box<dyn Fn(HandleValue) -> ()>)>,
-    static_methods: HashMap<&'static str, Box<dyn Fn(&CallArgs) -> JSVal>>,
+    static_methods: HashMap<&'static str, Box<dyn Fn(&Vec<HandleValue>) -> JSVal>>,
     static_events: HashSet<&'static str>,
     static_event_listeners: RefCell<HashMap<&'static str, Vec<EsPersistentRooted>>>,
 }
 
 pub struct ProxyBuilder {
     pub class_name: &'static str,
-    constructor: Option<Box<dyn Fn(*mut JSContext, &CallArgs) -> Result<i32, String>>>,
+    constructor: Option<Box<dyn Fn(*mut JSContext, &Vec<HandleValue>) -> Result<i32, String>>>,
     finalizer: Option<Box<dyn Fn(&i32) -> ()>>,
     properties: HashMap<
         &'static str,
@@ -55,11 +55,11 @@ pub struct ProxyBuilder {
             Box<dyn Fn(i32, HandleValue) -> ()>,
         ),
     >,
-    methods: HashMap<&'static str, Box<dyn Fn(i32, &CallArgs) -> JSVal>>,
+    methods: HashMap<&'static str, Box<dyn Fn(i32, &Vec<HandleValue>) -> JSVal>>,
     events: HashSet<&'static str>,
     static_properties:
         HashMap<&'static str, (Box<dyn Fn() -> JSVal>, Box<dyn Fn(HandleValue) -> ()>)>,
-    static_methods: HashMap<&'static str, Box<dyn Fn(&CallArgs) -> JSVal>>,
+    static_methods: HashMap<&'static str, Box<dyn Fn(&Vec<HandleValue>) -> JSVal>>,
     static_events: HashSet<&'static str>,
 }
 
@@ -153,7 +153,7 @@ impl Proxy {
         ret_arc
     }
 
-    pub fn _new_instance(_args: Vec<HandleValue>) -> *mut JSObject {
+    pub fn _new_instance(_args: &Vec<HandleValue>) -> *mut JSObject {
         // to be used for EsValueFacade::new_proxy()
         panic!("NYI");
     }
@@ -252,7 +252,7 @@ impl ProxyBuilder {
 
     pub fn constructor<C>(&mut self, constructor: C) -> &mut Self
     where
-        C: Fn(*mut JSContext, &CallArgs) -> Result<i32, String> + 'static,
+        C: Fn(*mut JSContext, &Vec<HandleValue>) -> Result<i32, String> + 'static,
     {
         self.constructor = Some(Box::new(constructor));
         self
@@ -288,7 +288,7 @@ impl ProxyBuilder {
 
     pub fn method<M>(&mut self, name: &'static str, method: M) -> &mut Self
     where
-        M: Fn(i32, &CallArgs) -> JSVal + 'static,
+        M: Fn(i32, &Vec<HandleValue>) -> JSVal + 'static,
     {
         self.methods.insert(name, Box::new(method));
         self
@@ -296,7 +296,7 @@ impl ProxyBuilder {
 
     pub fn static_method<M>(&mut self, name: &'static str, method: M) -> &mut Self
     where
-        M: Fn(&CallArgs) -> JSVal + 'static,
+        M: Fn(&Vec<HandleValue>) -> JSVal + 'static,
     {
         self.static_methods.insert(name, Box::new(method));
         self
@@ -323,7 +323,6 @@ mod tests {
     use crate::es_utils::reflection::*;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use log::debug;
-    use mozjs::jsapi::CallArgs;
     use mozjs::jsval::{Int32Value, UndefinedValue};
 
     #[test]
@@ -335,12 +334,12 @@ mod tests {
             inner.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
                 sm_rt.do_with_jsapi(|_rt, cx, global| {
                     let _proxy_arc = ProxyBuilder::new("TestClass1")
-                        .constructor(|cx: *mut JSContext, args: &CallArgs| {
+                        .constructor(|cx: *mut JSContext, args: &Vec<HandleValue>| {
                             // this will run in the sm_rt workerthread so global is rooted here
                             debug!("proxytest: construct");
                             let foo;
-                            if args.argc_ > 0 {
-                                let hv = args.index(0);
+                            if args.len() > 0 {
+                                let hv = args.get(0).unwrap();
                                 foo = es_value_to_str(cx, &*hv).ok().unwrap();
                             } else {
                                 foo = "NoName".to_string();
@@ -361,11 +360,11 @@ mod tests {
                             debug!("proxytest: finalize id {}", id);
                         })
                         .method("methodA", |obj_id, args| {
-                            trace!("proxy.methodA called for obj {} with {} args", obj_id, args.argc_);
+                            trace!("proxy.methodA called for obj {} with {} args", obj_id, args.len());
                             UndefinedValue()
                         })
                         .method("methodB", |obj_id, args| {
-                            trace!("proxy.methodB called for obj {} with {} args", obj_id, args.argc_);
+                            trace!("proxy.methodB called for obj {} with {} args", obj_id, args.len());
                             UndefinedValue()
                         })
                         .event("saved")
@@ -419,11 +418,11 @@ mod tests {
                             Int32Value(456)
                         }, |_val| {})
                         .static_method("methodA", |args| {
-                            trace!("static_proxy.methodA called with {} args", args.argc_);
+                            trace!("static_proxy.methodA called with {} args", args.len());
                             UndefinedValue()
                         })
                         .static_method("methodB", |args| {
-                            trace!("static_proxy.methodB called with {} args", args.argc_);
+                            trace!("static_proxy.methodB called with {} args", args.len());
                             UndefinedValue()
                         })
                         .static_event("saved")
@@ -1168,7 +1167,13 @@ unsafe extern "C" fn proxy_instance_method(
 
                 if let Some(prop) = proxy.methods.get(p_name) {
                     trace!("got method for method");
-                    let js_val = prop(obj_id, &args); // todo pass Vec of HandleValue instead of callargs
+
+                    let mut args_vec = vec![];
+                    for x in 0..args.argc_ {
+                        args_vec.push(HandleValue::from_marked_location(&*args.get(x)));
+                    }
+
+                    let js_val = prop(obj_id, &args_vec);
                     args.rval().set(js_val);
                 }
             }
@@ -1206,7 +1211,13 @@ unsafe extern "C" fn proxy_static_method(
 
                 if let Some(prop) = proxy.static_methods.get(p_name) {
                     trace!("got method for static_method");
-                    let js_val = prop(&args); // todo pass Vec of HandleValue instead of callargs
+
+                    let mut args_vec = vec![];
+                    for x in 0..args.argc_ {
+                        args_vec.push(HandleValue::from_marked_location(&*args.get(x)));
+                    }
+
+                    let js_val = prop(&args_vec);
                     args.rval().set(js_val);
                 }
             }
@@ -1273,7 +1284,13 @@ unsafe extern "C" fn proxy_construct(
         trace!("constructing proxy {}", class_name);
         if let Some(constructor) = &proxy.constructor {
             trace!("constructing proxy constructor {}", class_name);
-            let obj_id_res = constructor(cx, &args);
+
+            let mut args_vec = vec![];
+            for x in 0..args.argc_ {
+                args_vec.push(HandleValue::from_marked_location(&*args.get(x)));
+            }
+
+            let obj_id_res = constructor(cx, &args_vec);
 
             if obj_id_res.is_ok() {
                 let obj_id = obj_id_res.ok().unwrap();

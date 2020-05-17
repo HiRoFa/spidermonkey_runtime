@@ -4,6 +4,7 @@ use crate::esvaluefacade::EsValueFacade;
 use mozjs::jsval::JSVal;
 use mozjs::rust::HandleValue;
 use std::collections::{HashMap, HashSet};
+use std::ptr::replace;
 
 pub struct EsProxy {
     proxy_name: &'static str,
@@ -84,14 +85,38 @@ impl EsProxyBuilder {
             static_events: Default::default(),
         }
     }
+    pub fn constructor<C>(&mut self, constructor: C) -> &mut Self
+    where
+        C: Fn(Vec<EsValueFacade>) -> Result<i32, String> + Send + 'static,
+    {
+        self.constructor = Some(Box::new(constructor));
+        self
+    }
     pub fn build(&mut self, rt: &EsRuntimeWrapperInner) -> EsProxy {
         let cn = self.class_name;
+        let mut constructor_opt = unsafe { replace(&mut self.constructor, None) };
 
         rt.do_in_es_runtime_thread_sync(move |sm_rt| {
             sm_rt.do_with_jsapi(move |rt, cx, global| {
-                let mut proxy_builder = ProxyBuilder::new(cn);
+                let mut builder = ProxyBuilder::new(cn);
 
-                let _proxy = proxy_builder.build(cx, global);
+                if let Some(c) = constructor_opt {
+                    builder.constructor(
+                        move |cx: *mut mozjs::jsapi::JSContext, args: &mozjs::jsapi::CallArgs| {
+                            let mut es_args: Vec<EsValueFacade> = vec![];
+                            for x in 0..args.argc_ {
+                                let var_arg: mozjs::rust::HandleValue =
+                                    unsafe { mozjs::rust::Handle::from_raw(args.get(x)) };
+                                // todo need to get rt and glob from SM_RT here
+                                let esvf = EsValueFacade::new_v(rt, cx, global, var_arg);
+                                es_args.push(esvf);
+                            }
+                            c(es_args)
+                        },
+                    );
+                }
+
+                let _proxy = builder.build(cx, global);
             });
         });
         EsProxy {
