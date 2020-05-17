@@ -4,9 +4,9 @@ es_runtime is a crate aimed at making it possible for rust developers to integra
 
 The engine used is the Mozilla SpiderMonkey engine (https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey).
 
-This project was started as a hobby project for me to learn rust. I hope some of you find it useful to learn about using spidermonkey from rust.
+This project started as a hobby project for me to learn rust. I hope some of you find it useful to learn about using spidermonkey from rust.
 
-# status
+# Status
 
 Nowhere near production ready, it is untested...
 
@@ -25,25 +25,25 @@ The manner in which this is achieved is primarily focused on abstracting the wor
 
 So a second goal is to make implementing a fast and efficient integration doable for the uninitiated, the most common tasks you do with the engine should be doable with the utils in this package and working examples should be provided in the test modules.
 
-The reason I chose Spidermonkey as the engine is that I've been dealing with less modern engines in my java projects and not being able to use the latest and greatest ECMA-script features becomes quite disappointing at times.    
+The reason I chose SpiderMonkey as the engine is that I've been dealing with less modern engines in my java projects and not being able to use the latest and greatest ECMA-script features becomes quite disappointing at times.    
 
-## 0.1 goals
+## 0.1 Goals
 
 * [x] Get a grip on when to use rooted values (Handle) and when to use Values (JSVal) 
 * [x] Easy loading script files
 * [x] Error handling (get ES errors in rust with filename/linenumber etc)
-* [x] Adding rust function to the engine so they are callable from ECMA-Script
+* [x] Adding rust function to the engine, so they are callable from ECMA-Script
   * [x] Blocking
   * [x] Non-blocking (returns a Promise in script)
 * [x] Easy way to call ECMA-Script functions from rust
   * [x] By name (run_global_function())
   * [x] By object name and name (myObj.doSomething())
   * [x] Passing params from rust
-* [x] Getting data from engine as primitives or Vecs and Maps
+* [x] Getting data from the engine as primitives or Vecs and Maps
   * [x] Primitives
   * [x] Objects from and to Maps
   * [x] Arrays as Vecs
-* [x] Working console (logging)
+* [x] A working console (logging)
 * [x] Working Promises in Script
 * [x] Waiting for Promises from rust
 * [x] import/export statement support
@@ -56,7 +56,7 @@ The reason I chose Spidermonkey as the engine is that I've been dealing with les
 
 ## 0.2.1 goals
 
-* [x] Re-enable posibility to create multiple runtimes
+* [x] Re-enable possibility to create multiple runtimes
 
 ## 0.2.2 goals
 
@@ -98,7 +98,7 @@ These are in a very early testing stage and may become available later as a sepa
 
 I'dd like to hear what you would want to see in this project and or what you'd like to use it for, please drop me a line @ [my gitlab](mailto:incoming+drfos-es-runtime-17727229-issue-@incoming.gitlab.com).
 
-# examples
+# Examples
 
 Cargo.toml
 
@@ -170,11 +170,11 @@ my_app.rs
 
 ```
 
-# a word on compiling
+# A word on compiling
 
-Currently I have only compiled this on and for a 64 bit linux machine (I use openSUSE) 
+Currently, I have only compiled this on and for a 64 bit linux machine (I use openSUSE).
 
-Besides rust you'll need to install the following packages to compile the mozjs crate
+Besides rust, you'll need to install the following packages to compile the mozjs crate.
 
 * from 0.0.1
     * gcc-7
@@ -190,6 +190,6 @@ Besides rust you'll need to install the following packages to compile the mozjs 
 
 for more detailed info please visit https://github.com/servo/mozjs#building 
 
-# howtos
+# Howtos
 
 [HOWTO](docs/HOWTO.md)
