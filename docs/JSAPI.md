@@ -91,7 +91,7 @@ let proxy_arc = es_utils::reflection::ProxyBuilder::new("TestClass1")
     // if you want to create a proxy that can be constructed you need to pass a constructor
     // you need to generate an id here for your object
     // if you don't pass a constructor you can only use the static_* methods to create events, properties and methods
-    .constructor(|cx: *mut JSContext, args: &CallArgs| {
+    .constructor(|cx: *mut JSContext, args: &Vec<HandleValue>| {
         // this will run in the sm_rt workerthread so global is rooted here
         debug!("proxytest: construct");
         Ok(1)
@@ -109,7 +109,7 @@ let proxy_arc = es_utils::reflection::ProxyBuilder::new("TestClass1")
     })
     // a method for your instance
     .method("methodA", |obj_id, args| {
-        trace!("proxy.methodA called for obj {} with {} args", obj_id, args.argc_);
+        trace!("proxy.methodA called for obj {} with {} args", obj_id, args.len());
         UndefinedValue()
     })
     // and an event that may be dispatched
