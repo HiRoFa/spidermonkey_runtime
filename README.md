@@ -52,27 +52,28 @@ The reason I chose Spidermonkey as the engine is that I've been dealing with les
 
 ## 0.2 goals
 
-* [x] use newer mozjs
+* [x] Use newer mozjs
 
 ## 0.2.1 goals
 
-* [x] re-enable posibility to create multiple runtimes
+* [x] Re-enable posibility to create multiple runtimes
 
 ## 0.2.2 goals
 
-* [x] init a EsValueFacade as a promise from rust, #19
-* [x] more tests for e.g. error handling in module loading, error handling in promises
+* [x] Init a EsValueFacade as a promise from rust, #19
+* [x] More tests for e.g. error handling in module loading, error handling in promises
 
 ## 0.3.0 
 
-* [x] run rust-ops multithreaded, and return Promises from rust #8
+* [x] Run rust-ops multithreaded, and return Promises from rust #8
 
 ## 0.3.x
 
-* [x] pass functions as consumer argument to rust-ops
-* [ ] dynamic imports #20
-* [ ] typedArrays from and to Vecs
-* [ ] complete set of from/to primitives in EsValueFacade
+* [x] Pass functions as consumer argument to rust-ops
+* [x] Proxy class for rust objects
+* [ ] Dynamic imports #20
+* [ ] TypedArrays from and to Vecs
+* [ ] Complete set of from/to primitives in EsValueFacade
 
 ## 0.9 goals
 
@@ -87,7 +88,7 @@ The reason I chose Spidermonkey as the engine is that I've been dealing with les
 * [ ] TypeScript support
 * [ ] Interactive Debugging
 * [ ] Profiling
-* [ ] much more
+* [ ] Much more
 
 # Other plans
 
@@ -106,7 +107,7 @@ Cargo.toml
 # latest
 es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git"}
 # but you should check in the repo for the tag or branch you want to use and link to that
-# es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git", tag = "0.3.1"}
+# es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git", tag = "0.3.2"}
 ```
 
 my_app.rs
