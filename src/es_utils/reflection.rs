@@ -22,6 +22,10 @@ use std::sync::Arc;
 
 /// create a class def in the runtime which constructs and calls methods in a rust proxy
 ///
+///
+/// todo:
+/// method_native, add a JSNative directly
+/// static_method_native
 
 pub struct Proxy {
     pub class_name: &'static str,

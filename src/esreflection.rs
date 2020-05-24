@@ -21,6 +21,7 @@ pub struct EsProxyBuilder {
             Box<dyn Fn(i32, EsValueFacade) -> () + Send>,
         ),
     >,
+    // todo, if we go through with this alle methods should return a Promise so we can run methods in a seperate thread, should also go for events
     methods: HashMap<&'static str, Box<dyn Fn(i32, Vec<EsValueFacade>) -> EsValueFacade + Send>>,
     events: HashSet<&'static str>,
     static_properties: HashMap<
@@ -30,6 +31,7 @@ pub struct EsProxyBuilder {
             Box<dyn Fn(EsValueFacade) -> () + Send>,
         ),
     >,
+    // see methods, return a promise
     static_methods: HashMap<&'static str, Box<dyn Fn(Vec<EsValueFacade>) -> EsValueFacade + Send>>,
     static_events: HashSet<&'static str>,
 }
