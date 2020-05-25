@@ -1,3 +1,7 @@
+# 0.3.3
+
+* Support JSNative methods for proxy classes
+
 # 0.3.2
 
 * Proxy class (JSAPI)

@@ -104,10 +104,11 @@ Cargo.toml
 
 ```toml
 [dependencies]
-# latest
-es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git"}
-# but you should check in the repo for the tag or branch you want to use and link to that
-# es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git", tag = "0.3.2"}
+# latest tag
+es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git", tag = "0.3.3"}
+# or just get the latest
+# es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git"}
+
 ```
 
 my_app.rs

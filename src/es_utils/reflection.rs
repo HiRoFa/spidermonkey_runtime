@@ -8,6 +8,7 @@ use mozjs::jsapi::JSClass;
 use mozjs::jsapi::JSClassOps;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSFreeOp;
+use mozjs::jsapi::JSNative;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::JSCLASS_FOREGROUND_FINALIZE;
@@ -39,11 +40,13 @@ pub struct Proxy {
         ),
     >,
     methods: HashMap<&'static str, Box<dyn Fn(i32, &Vec<HandleValue>) -> JSVal>>,
+    native_methods: HashMap<&'static str, JSNative>,
     events: HashSet<&'static str>,
     event_listeners: RefCell<HashMap<i32, HashMap<&'static str, Vec<EsPersistentRooted>>>>,
     static_properties:
         HashMap<&'static str, (Box<dyn Fn() -> JSVal>, Box<dyn Fn(HandleValue) -> ()>)>,
     static_methods: HashMap<&'static str, Box<dyn Fn(&Vec<HandleValue>) -> JSVal>>,
+    static_native_methods: HashMap<&'static str, JSNative>,
     static_events: HashSet<&'static str>,
     static_event_listeners: RefCell<HashMap<&'static str, Vec<EsPersistentRooted>>>,
 }
@@ -60,10 +63,12 @@ pub struct ProxyBuilder {
         ),
     >,
     methods: HashMap<&'static str, Box<dyn Fn(i32, &Vec<HandleValue>) -> JSVal>>,
+    native_methods: HashMap<&'static str, JSNative>,
     events: HashSet<&'static str>,
     static_properties:
         HashMap<&'static str, (Box<dyn Fn() -> JSVal>, Box<dyn Fn(HandleValue) -> ()>)>,
     static_methods: HashMap<&'static str, Box<dyn Fn(&Vec<HandleValue>) -> JSVal>>,
+    static_native_methods: HashMap<&'static str, JSNative>,
     static_events: HashSet<&'static str>,
 }
 
@@ -89,10 +94,12 @@ impl Proxy {
             finalizer: unsafe { replace(&mut builder.finalizer, None) },
             properties: HashMap::new(),
             methods: HashMap::new(),
+            native_methods: HashMap::new(),
             events: HashSet::new(),
             event_listeners: RefCell::new(HashMap::new()),
             static_properties: HashMap::new(),
             static_methods: HashMap::new(),
+            static_native_methods: HashMap::new(),
             static_events: HashSet::new(),
             static_event_listeners: RefCell::new(HashMap::new()),
         };
@@ -104,6 +111,11 @@ impl Proxy {
 
         builder.methods.drain().all(|e| {
             ret.methods.insert(e.0, e.1);
+            true
+        });
+
+        builder.native_methods.drain().all(|e| {
+            ret.native_methods.insert(e.0, e.1);
             true
         });
 
@@ -119,6 +131,11 @@ impl Proxy {
 
         builder.static_methods.drain().all(|e| {
             ret.static_methods.insert(e.0, e.1);
+            true
+        });
+
+        builder.static_native_methods.drain().all(|e| {
+            ret.static_native_methods.insert(e.0, e.1);
             true
         });
 
@@ -216,6 +233,24 @@ impl Proxy {
                 Some(proxy_static_method),
             );
         }
+        for native_method_name in self.static_native_methods.keys() {
+            trace!(
+                "init static method {} for {}",
+                native_method_name,
+                self.class_name
+            );
+            let method: JSNative = self
+                .static_native_methods
+                .get(native_method_name)
+                .cloned()
+                .unwrap();
+            crate::es_utils::functions::define_native_function(
+                cx,
+                func,
+                native_method_name,
+                method,
+            );
+        }
     }
     fn init_static_events(&self, cx: *mut JSContext, func: HandleObject) {
         crate::es_utils::functions::define_native_function(
@@ -247,9 +282,11 @@ impl ProxyBuilder {
             finalizer: None,
             properties: HashMap::new(),
             methods: HashMap::new(),
+            native_methods: HashMap::new(),
             events: HashSet::new(),
             static_properties: HashMap::new(),
             static_methods: HashMap::new(),
+            static_native_methods: HashMap::new(),
             static_events: HashSet::new(),
         }
     }
@@ -298,11 +335,21 @@ impl ProxyBuilder {
         self
     }
 
+    pub fn native_method<M>(&mut self, name: &'static str, method: JSNative) -> &mut Self {
+        self.native_methods.insert(name, method);
+        self
+    }
+
     pub fn static_method<M>(&mut self, name: &'static str, method: M) -> &mut Self
     where
         M: Fn(&Vec<HandleValue>) -> JSVal + 'static,
     {
         self.static_methods.insert(name, Box::new(method));
+        self
+    }
+
+    pub fn static_native_method(&mut self, name: &'static str, method: JSNative) -> &mut Self {
+        self.static_native_methods.insert(name, method);
         self
     }
 
@@ -586,6 +633,30 @@ unsafe extern "C" fn proxy_instance_resolve(
 
                     *resolved = true;
                     trace!("resolved method {}", prop_name);
+                } else if proxy.native_methods.contains_key(prop_name.as_str()) {
+                    trace!(
+                        "define native method for proxy {} for name {}",
+                        class_name,
+                        prop_name
+                    );
+
+                    let robj = mozjs::rust::HandleObject::from_marked_location(&obj.get());
+
+                    let method: JSNative = proxy
+                        .native_methods
+                        .get(prop_name.as_str())
+                        .cloned()
+                        .unwrap();
+
+                    crate::es_utils::functions::define_native_function(
+                        cx,
+                        robj,
+                        prop_name.as_str(),
+                        method,
+                    );
+
+                    *resolved = true;
+                    trace!("resolved native method {}", prop_name);
                 }
             }
         });
