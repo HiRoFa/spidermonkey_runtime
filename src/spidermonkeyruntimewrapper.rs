@@ -61,7 +61,7 @@ pub struct SmRuntime {
 thread_local! {
     /// the thread-local SpiderMonkeyRuntime
     /// this only exists for the worker thread of the MicroTaskManager
-    pub(crate) static SM_RT: RefCell<SmRuntime> = RefCell::new(SmRuntime::new());
+    pub static SM_RT: RefCell<SmRuntime> = RefCell::new(SmRuntime::new());
 }
 
 impl SmRuntime {

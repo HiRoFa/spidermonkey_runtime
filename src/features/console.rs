@@ -13,7 +13,7 @@ use std::str::FromStr;
 pub(crate) fn init(rt: &EsRuntimeWrapper) {
     rt.do_in_es_runtime_thread_mut_sync(Box::new(|sm_rt: &mut SmRuntime| {
         // todo move this to a new_object_in_global method in sm_rt
-        // that should return a periststenrooted
+        // that should return a persistentrooted
         // then also create a add_property method
 
         sm_rt.do_with_jsapi(|_rt, context, global| {
