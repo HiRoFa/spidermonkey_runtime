@@ -61,7 +61,7 @@ pub struct SmRuntime {
 thread_local! {
     /// the thread-local SpiderMonkeyRuntime
     /// this only exists for the worker thread of the MicroTaskManager
-    pub static SM_RT: RefCell<SmRuntime> = RefCell::new(SmRuntime::new());
+    pub(crate) static SM_RT: RefCell<SmRuntime> = RefCell::new(SmRuntime::new());
 }
 
 impl SmRuntime {
@@ -71,6 +71,13 @@ impl SmRuntime {
             .expect("not initted yet")
             .upgrade()
             .expect("parent EsRuntimeWrapperInner was dropped")
+    }
+
+    pub fn clone_current_rtwi_arc() -> Arc<EsRuntimeWrapperInner> {
+        SM_RT.with(|sm_rt_rc| {
+            let sm_rt = &*sm_rt_rc.borrow();
+            sm_rt.clone_rtw_inner()
+        })
     }
 
     /// construct a new SmRuntime, this should only be called from the workerthread of the MicroTaskManager
