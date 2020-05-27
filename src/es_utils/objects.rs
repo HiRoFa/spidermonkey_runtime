@@ -1,4 +1,5 @@
 use crate::es_utils::{es_jsstring_to_string, es_value_to_str, report_es_ex, EsErrorInfo};
+use log::trace;
 use mozjs::glue::RUST_JSID_IS_STRING;
 use mozjs::glue::RUST_JSID_TO_STRING;
 use mozjs::jsapi::HandleValueArray;
@@ -11,13 +12,55 @@ use mozjs::jsapi::JS_GetPrototype;
 use mozjs::jsapi::JS_NewObjectWithGivenProto;
 use mozjs::jsapi::JS_NewPlainObject;
 use mozjs::jsapi::JSITER_OWNONLY;
-use mozjs::jsval::{JSVal, UndefinedValue};
+use mozjs::jsval::{JSVal, ObjectValue, UndefinedValue};
 use mozjs::rust::jsapi_wrapped::GetPropertyKeys;
 use mozjs::rust::wrappers::JS_DefineProperty;
 use mozjs::rust::{
     HandleObject, HandleValue, IdVector, IntoHandle, MutableHandleObject, MutableHandleValue,
 };
 use std::ptr;
+
+pub fn get_or_define_package(
+    context: *mut JSContext,
+    obj: HandleObject,
+    path: Vec<&str>,
+) -> *mut JSObject {
+    trace!("get_or_define_package");
+
+    let mut cur_obj = *obj;
+    for name in path {
+        trace!("get_or_define_package, loop step: {}", name);
+
+        rooted!(in(context) let mut cur_root = cur_obj);
+
+        rooted!(in(context) let mut sub_root = UndefinedValue());
+        get_es_obj_prop_val(context, cur_root.handle(), name, sub_root.handle_mut())
+            .ok()
+            .unwrap();
+
+        if sub_root.is_null_or_undefined() {
+            trace!("get_or_define_package, loop step: {} is null, create", name);
+            // create
+            let new_obj = new_object(context);
+            trace!(
+                "get_or_define_package, loop step: {} is null, created",
+                name
+            );
+            rooted!(in(context) let mut new_obj_val_root = ObjectValue(new_obj));
+            set_es_obj_prop_val(context, cur_root.handle(), name, new_obj_val_root.handle());
+            trace!(
+                "get_or_define_package, loop step: {} is null, prop_set",
+                name
+            );
+            cur_obj = new_obj;
+        } else {
+            trace!("get_or_define_package, loop step: {} exists", name);
+            cur_obj = sub_root.to_object();
+        }
+    }
+
+    cur_obj
+}
 
 /// get a single member of a JSObject
 #[allow(dead_code)]
@@ -232,7 +275,9 @@ pub fn set_es_obj_prop_val_permanent(
 #[cfg(test)]
 mod tests {
     use crate::es_utils;
-    use crate::es_utils::objects::{get_es_obj_prop_val, get_js_obj_prop_names};
+    use crate::es_utils::objects::{
+        get_es_obj_prop_val, get_js_obj_prop_names, get_or_define_package,
+    };
     use crate::es_utils::{es_value_to_str, report_es_ex};
     use crate::esruntimewrapper::EsRuntimeWrapper;
     use crate::esvaluefacade::EsValueFacade;
@@ -354,6 +399,34 @@ mod tests {
         assert_eq!(test_vec.get(0).unwrap(), &"a".to_string());
         assert_eq!(test_vec.get(1).unwrap(), &"b".to_string());
         assert_eq!(test_vec.get(2).unwrap(), &"c".to_string());
+    }
+
+    #[test]
+    fn test_get_or_define_package() {
+        log::info!("test: test_get_or_define_package");
+        let rt_arc: Arc<EsRuntimeWrapper> = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt: &EsRuntimeWrapper = rt_arc.borrow();
+        let res = rt.do_in_es_runtime_thread_sync(|sm_rt| {
+            sm_rt.do_with_jsapi(|_rt, cx, global| {
+                get_or_define_package(cx, global, vec!["test_get_or_define_package", "a", "b"]);
+                get_or_define_package(cx, global, vec!["test_get_or_define_package", "a", "c"]);
+            });
+
+            true
+        });
+        assert_eq!(res, true);
+
+        let res = rt
+            .eval_sync(
+                "JSON.stringify(test_get_or_define_package);",
+                "test_get_or_define_package.es",
+            )
+            .ok()
+            .unwrap();
+
+        let json = res.get_string();
+        let expect = "{\"a\":{\"b\":{},\"c\":{}}}";
+        assert_eq!(json, expect);
     }
 
     #[test]
