@@ -1,5 +1,6 @@
 use crate::es_utils::{report_es_ex, EsErrorInfo};
 
+use log::trace;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::rust::transform_u16_to_source_text;
@@ -12,6 +13,9 @@ pub fn compile_module(
 ) -> Result<*mut JSObject, EsErrorInfo> {
     // use mozjs::jsapi::CompileModule; todo, how are the wrapped ones different?
     // https://doc.servo.org/mozjs/jsapi/fn.CompileModule.html
+
+    trace!("compile_module: {}", file_name);
+    trace!("{}", src);
 
     let src_vec: Vec<u16> = src.encode_utf16().collect();
     let file_name_cstr = CString::new(file_name).unwrap();

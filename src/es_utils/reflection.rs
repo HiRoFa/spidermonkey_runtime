@@ -39,6 +39,8 @@ pub struct Proxy {
             Box<dyn Fn(i32, HandleValue) -> ()>,
         ),
     >,
+
+    // todo add cx as second arg to methods
     methods: HashMap<&'static str, Box<dyn Fn(i32, &Vec<HandleValue>) -> JSVal>>,
     native_methods: HashMap<&'static str, JSNative>,
     events: HashSet<&'static str>,
@@ -765,12 +767,12 @@ unsafe extern "C" fn proxy_static_getter(
     true
 }
 
-fn get_obj_id_for(cx: *mut JSContext, obj: *mut JSObject) -> i32 {
+pub fn get_obj_id_for(cx: *mut JSContext, obj: *mut JSObject) -> i32 {
     let obj_handle = unsafe { mozjs::rust::HandleObject::from_marked_location(&obj) };
     crate::es_utils::objects::get_es_obj_prop_val_as_i32(cx, obj_handle, PROXY_PROP_OBJ_ID)
 }
 
-fn get_proxy_for(cx: *mut JSContext, obj: *mut JSObject) -> Option<Arc<Proxy>> {
+pub fn get_proxy_for(cx: *mut JSContext, obj: *mut JSObject) -> Option<Arc<Proxy>> {
     let obj_handle = unsafe { mozjs::rust::HandleObject::from_marked_location(&obj) };
     let cn_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
         cx,

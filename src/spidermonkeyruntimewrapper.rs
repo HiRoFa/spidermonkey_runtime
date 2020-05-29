@@ -500,6 +500,7 @@ unsafe extern "C" fn import_module(
             err.filename, err.lineno, err.column, err.message
         );
         JS_ReportErrorASCII(cx, err_str.as_ptr() as *const libc::c_char);
+        debug!("error loading module, returning null: {}", &err_str);
         return *ptr::null_mut::<*mut JSObject>();
     }
 
