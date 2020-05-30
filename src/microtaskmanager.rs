@@ -42,8 +42,8 @@ impl MicroTaskManager {
             .name(uuid)
             .spawn(move || loop {
                 let rcc = wrc.upgrade();
-                if rcc.is_some() {
-                    rcc.unwrap().worker_loop();
+                if let Some(rc) = rcc {
+                    rc.worker_loop();
                 } else {
                     trace!("Arc to MicroTaskManager was dropped, stopping worker thread");
                     break;
@@ -55,7 +55,7 @@ impl MicroTaskManager {
     }
 
     /// add a task which will run asynchronously
-    pub fn add_task<T: FnOnce() -> () + Send + 'static>(&self, task: T) -> () {
+    pub fn add_task<T: FnOnce() -> () + Send + 'static>(&self, task: T) {
         trace!("MicroTaskManager::add_task");
         {
             let mut lck = self.jobs.lock("add_task").unwrap();
@@ -97,7 +97,7 @@ impl MicroTaskManager {
 
     /// method for adding tasks from worker, these do not need to impl Send
     /// also there is no locks we need to wait for
-    pub fn add_task_from_worker<T: FnOnce() -> () + 'static>(&self, task: T) -> () {
+    pub fn add_task_from_worker<T: FnOnce() -> () + 'static>(&self, task: T) {
         // assert current thread is worker thread
         // add to a thread_local st_tasks list
         // plan a job to run a single task from that list
@@ -112,7 +112,7 @@ impl MicroTaskManager {
     }
 
     pub fn is_empty(&self) -> bool {
-        return !self.has_local_jobs() && !self.has_jobs();
+        !self.has_local_jobs() && !self.has_jobs()
     }
 
     fn has_jobs(&self) -> bool {

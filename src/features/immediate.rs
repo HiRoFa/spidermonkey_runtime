@@ -16,7 +16,7 @@ pub(crate) fn init(rt: &EsRuntimeWrapper) {
 
             let id_arg = args.get(0).expect("did not get enough args");
 
-            let id = id_arg.get_i32().clone();
+            let id = *id_arg.get_i32();
 
             debug!(
                 "running op sched_immediate in rust with rt with {} args. id={}",

@@ -18,7 +18,7 @@ pub(crate) fn init(rt: &EsRuntimeWrapper) {
             let result_arg = args.remove(1);
             let id_arg = args.get(0).expect("did not get enough args");
 
-            let man_obj_id: i32 = id_arg.get_i32().clone();
+            let man_obj_id: i32 = *id_arg.get_i32();
 
             trace!(
                 "resolving future from promise from esvf man_obj_id:{}",
@@ -44,7 +44,7 @@ pub(crate) fn init(rt: &EsRuntimeWrapper) {
             let result_arg = args.remove(1);
             let id_arg = args.get(0).expect("did not get enough args");
 
-            let man_obj_id: i32 = id_arg.get_i32().clone();
+            let man_obj_id: i32 = *id_arg.get_i32();
 
             trace!(
                 "rejecting future from promise from esvf man_obj_id:{}",

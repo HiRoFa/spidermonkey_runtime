@@ -2,6 +2,7 @@ use crate::esruntimewrapper::{EsRuntimeWrapper, ModuleCodeLoader};
 use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
 use std::time::Duration;
 
+#[derive(Default)]
 pub struct EsRuntimeWrapperBuilder {
     gc_interval: Option<Duration>,
     pub(crate) module_code_loader: Option<Box<ModuleCodeLoader>>,
@@ -43,12 +44,11 @@ impl EsRuntimeWrapperBuilder {
 
         // consume opts
 
-        let mut mcl_opt: Option<Box<ModuleCodeLoader>> = None;
-        if self.module_code_loader.is_some() {
-            let cl: Option<Box<ModuleCodeLoader>> =
-                std::mem::replace(&mut self.module_code_loader, None);
-            mcl_opt = cl;
-        }
+        let mcl_opt: Option<Box<ModuleCodeLoader>> = if self.module_code_loader.is_some() {
+            std::mem::replace(&mut self.module_code_loader, None)
+        } else {
+            None
+        };
 
         let inner = EsRuntimeWrapperInner::build(mcl_opt, self.module_cache_size);
         let wrapper = EsRuntimeWrapper::new_inner(inner);

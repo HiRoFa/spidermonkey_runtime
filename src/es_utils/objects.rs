@@ -100,7 +100,7 @@ pub fn get_es_obj_prop_val_as_string(
         panic!(res.err().unwrap().message);
     }
 
-    es_value_to_str(context, &*rval)
+    es_value_to_str(context, *rval)
 }
 
 pub fn get_es_obj_prop_val_as_i32(
@@ -134,8 +134,8 @@ pub fn new_object_from_prototype(
         unsafe { JS_NewObjectWithGivenProto(context, &CLASS as *const _, prototype.into_handle()) };
     if ret.is_null() {
         let err_opt = report_es_ex(context);
-        if err_opt.is_some() {
-            Err(err_opt.unwrap())
+        if let Some(err) = err_opt {
+            Err(err)
         } else {
             Ok(ret)
         }
@@ -181,8 +181,8 @@ pub fn get_prototype(
 
     if !ok {
         let err_opt = report_es_ex(context);
-        if err_opt.is_some() {
-            Err(err_opt.unwrap())
+        if let Some(err) = err_opt {
+            Err(err)
         } else {
             Ok(())
         }
@@ -203,8 +203,8 @@ pub fn get_constructor(
 
     if ret.is_null() {
         let err_opt = report_es_ex(context);
-        if err_opt.is_some() {
-            Err(err_opt.unwrap())
+        if let Some(err) = err_opt {
+            Err(err)
         } else {
             Ok(ret)
         }
@@ -218,7 +218,7 @@ pub fn get_constructor(
 pub fn get_js_obj_prop_names(context: *mut JSContext, obj: HandleObject) -> Vec<String> {
     let mut ids = unsafe { IdVector::new(context) };
 
-    assert!(unsafe { GetPropertyKeys(context, obj.into(), JSITER_OWNONLY, ids.handle_mut()) });
+    assert!(unsafe { GetPropertyKeys(context, obj, JSITER_OWNONLY, ids.handle_mut()) });
 
     let mut ret: Vec<String> = vec![];
 
@@ -337,7 +337,7 @@ mod tests {
                             rval.handle_mut(),
                         );
 
-                        test_vec.push(es_value_to_str(cx, &*rval).ok().unwrap());
+                        test_vec.push(es_value_to_str(cx, *rval).ok().unwrap());
 
                         trace!("9 {}", prop_name);
                     }

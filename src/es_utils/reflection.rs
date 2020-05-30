@@ -176,7 +176,7 @@ impl Proxy {
         ret_arc
     }
 
-    pub fn _new_instance(_args: &Vec<HandleValue>) -> *mut JSObject {
+    pub fn _new_instance(_args: &[HandleValue]) -> *mut JSObject {
         // to be used for EsValueFacade::new_proxy()
         panic!("NYI");
     }
@@ -279,7 +279,7 @@ impl Proxy {
 impl ProxyBuilder {
     pub fn new(class_name: &'static str) -> Self {
         ProxyBuilder {
-            class_name: class_name,
+            class_name,
             constructor: None,
             finalizer: None,
             properties: HashMap::new(),
@@ -390,13 +390,12 @@ mod tests {
                         .constructor(|cx: *mut JSContext, args: &Vec<HandleValue>| {
                             // this will run in the sm_rt workerthread so global is rooted here
                             debug!("proxytest: construct");
-                            let foo;
-                            if args.len() > 0 {
+                            let foo = if !args.is_empty() {
                                 let hv = args.get(0).unwrap();
-                                foo = es_value_to_str(cx, &*hv).ok().unwrap();
+                                es_value_to_str(cx, **hv).ok().unwrap()
                             } else {
-                                foo = "NoName".to_string();
-                            }
+                                "NoName".to_string()
+                            };
                             debug!("proxytest: construct with name {}", foo);
                             Ok(1)
                         })
@@ -546,7 +545,7 @@ unsafe extern "C" fn proxy_instance_resolve(
     let rhandle = mozjs::rust::HandleObject::from_marked_location(&obj.get());
     let class_name_res =
         crate::es_utils::objects::get_es_obj_prop_val_as_string(cx, rhandle, PROXY_PROP_CLASS_NAME);
-    if let Some(class_name) = class_name_res.ok() {
+    if let Ok(class_name) = class_name_res {
         PROXIES.with(|proxies_rc| {
             let proxies = &*proxies_rc.borrow();
             if let Some(proxy) = proxies.get(class_name.as_str()) {
@@ -689,7 +688,7 @@ unsafe extern "C" fn proxy_instance_getter(
                 HandleObject::from_marked_location(&callee),
                 "name",
             );
-            if let Some(prop_name) = prop_name_res.ok() {
+            if let Ok(prop_name) = prop_name_res {
                 // lovely the name here is "get [propname]"
                 trace!(
                     "reflection::getter get {} for cn:{}",
@@ -745,7 +744,7 @@ unsafe extern "C" fn proxy_static_getter(
                 HandleObject::from_marked_location(&callee),
                 "name",
             );
-            if let Some(prop_name) = prop_name_res.ok() {
+            if let Ok(prop_name) = prop_name_res {
                 // lovely the name here is "get [propname]"
                 trace!(
                     "reflection::static_getter get {} for cn:{}",
@@ -779,7 +778,7 @@ pub fn get_proxy_for(cx: *mut JSContext, obj: *mut JSObject) -> Option<Arc<Proxy
         obj_handle,
         PROXY_PROP_CLASS_NAME,
     );
-    if let Some(class_name) = cn_res.ok() {
+    if let Ok(class_name) = cn_res {
         return PROXIES.with(|proxies_rc| {
             let proxies = &*proxies_rc.borrow();
             proxies.get(class_name.as_str()).cloned()
@@ -792,7 +791,7 @@ pub fn get_proxy_for(cx: *mut JSContext, obj: *mut JSObject) -> Option<Arc<Proxy
 fn get_static_proxy_for(cx: *mut JSContext, obj: *mut JSObject) -> Option<Arc<Proxy>> {
     let obj_handle = unsafe { mozjs::rust::HandleObject::from_marked_location(&obj) };
     let cn_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(cx, obj_handle, "name");
-    if let Some(class_name) = cn_res.ok() {
+    if let Ok(class_name) = cn_res {
         return PROXIES.with(|proxies_rc| {
             let proxies = &*proxies_rc.borrow();
             proxies.get(class_name.as_str()).cloned()
@@ -822,7 +821,7 @@ unsafe extern "C" fn proxy_instance_setter(
                 HandleObject::from_marked_location(&callee),
                 "name",
             );
-            if let Some(prop_name) = prop_name_res.ok() {
+            if let Ok(prop_name) = prop_name_res {
                 // lovely the name here is "set [propname]"
                 trace!("reflection::setter set {}", prop_name);
 
@@ -871,7 +870,7 @@ unsafe extern "C" fn proxy_static_setter(
                 HandleObject::from_marked_location(&callee),
                 "name",
             );
-            if let Some(prop_name) = prop_name_res.ok() {
+            if let Ok(prop_name) = prop_name_res {
                 // lovely the name here is "set [propname]"
                 trace!("reflection::static_setter set {}", prop_name);
 
@@ -906,7 +905,7 @@ unsafe extern "C" fn proxy_static_add_event_listener(
         let listener_obj: *mut JSObject = listener_handle_val.to_object();
 
         let listener_epr = EsPersistentRooted::new_from_obj(cx, listener_obj);
-        let type_str = crate::es_utils::es_value_to_str(cx, &type_handle_val)
+        let type_str = crate::es_utils::es_value_to_str(cx, *type_handle_val)
             .ok()
             .unwrap();
 
@@ -915,7 +914,7 @@ unsafe extern "C" fn proxy_static_add_event_listener(
         if let Some(proxy) = get_static_proxy_for(cx, thisv.to_object()) {
             if proxy.static_events.contains(&type_str.as_str()) {
                 // we need this so we can get a &'static str
-                let type_str = proxy.static_events.get(type_str.as_str()).unwrap().clone();
+                let type_str = &&(*(*proxy.static_events.get(type_str.as_str()).unwrap()));
 
                 let obj_map = &mut *proxy.static_event_listeners.borrow_mut();
 
@@ -952,7 +951,7 @@ unsafe extern "C" fn proxy_static_remove_event_listener(
 
         let listener_obj: *mut JSObject = listener_handle_val.to_object();
 
-        let type_str = crate::es_utils::es_value_to_str(cx, &type_handle_val)
+        let type_str = crate::es_utils::es_value_to_str(cx, *type_handle_val)
             .ok()
             .unwrap();
 
@@ -961,7 +960,7 @@ unsafe extern "C" fn proxy_static_remove_event_listener(
         if let Some(proxy) = get_static_proxy_for(cx, thisv.to_object()) {
             if proxy.static_events.contains(&type_str.as_str()) {
                 // we need this so we can get a &'static str
-                let type_str = proxy.static_events.get(type_str.as_str()).unwrap().clone();
+                let type_str = &&(*(*proxy.static_events.get(type_str.as_str()).unwrap()));
 
                 let obj_map = &mut *proxy.static_event_listeners.borrow_mut();
 
@@ -994,7 +993,7 @@ unsafe extern "C" fn proxy_static_dispatch_event(
         let type_handle_val = args.index(0);
         let evt_obj_handle_val = args.index(1);
 
-        let type_str = crate::es_utils::es_value_to_str(cx, &type_handle_val)
+        let type_str = crate::es_utils::es_value_to_str(cx, *type_handle_val)
             .ok()
             .unwrap();
 
@@ -1002,7 +1001,7 @@ unsafe extern "C" fn proxy_static_dispatch_event(
 
         if let Some(proxy) = get_static_proxy_for(cx, thisv.to_object()) {
             if proxy.static_events.contains(&type_str.as_str()) {
-                let type_str = proxy.static_events.get(type_str.as_str()).unwrap().clone();
+                let type_str = &&(*(*proxy.static_events.get(type_str.as_str()).unwrap()));
 
                 dispatch_static_event_for_proxy(cx, proxy.borrow(), type_str, evt_obj_handle_val);
             }
@@ -1026,7 +1025,7 @@ unsafe extern "C" fn proxy_instance_add_event_listener(
         let listener_obj: *mut JSObject = listener_handle_val.to_object();
 
         let listener_epr = EsPersistentRooted::new_from_obj(cx, listener_obj);
-        let type_str = crate::es_utils::es_value_to_str(cx, &type_handle_val)
+        let type_str = crate::es_utils::es_value_to_str(cx, *type_handle_val)
             .ok()
             .unwrap();
 
@@ -1037,12 +1036,10 @@ unsafe extern "C" fn proxy_instance_add_event_listener(
         if let Some(proxy) = get_proxy_for(cx, thisv.to_object()) {
             if proxy.events.contains(&type_str.as_str()) {
                 // we need this so we can get a &'static str
-                let type_str = proxy.events.get(type_str.as_str()).unwrap().clone();
+                let type_str = &&(*(*proxy.events.get(type_str.as_str()).unwrap()));
 
                 let pel = &mut *proxy.event_listeners.borrow_mut();
-                if !pel.contains_key(&obj_id) {
-                    pel.insert(obj_id, HashMap::new());
-                }
+                pel.entry(obj_id).or_insert_with(HashMap::new);
                 let obj_map = pel.get_mut(&obj_id).unwrap();
 
                 if !obj_map.contains_key(type_str) {
@@ -1073,7 +1070,7 @@ unsafe extern "C" fn proxy_instance_remove_event_listener(
 
         let listener_obj: *mut JSObject = listener_handle_val.to_object();
 
-        let type_str = crate::es_utils::es_value_to_str(cx, &type_handle_val)
+        let type_str = crate::es_utils::es_value_to_str(cx, *type_handle_val)
             .ok()
             .unwrap();
 
@@ -1084,7 +1081,7 @@ unsafe extern "C" fn proxy_instance_remove_event_listener(
         if let Some(proxy) = get_proxy_for(cx, thisv.to_object()) {
             if proxy.events.contains(&type_str.as_str()) {
                 // we need this so we can get a &'static str
-                let type_str = proxy.events.get(type_str.as_str()).unwrap().clone();
+                let type_str = &&(*(*proxy.events.get(type_str.as_str()).unwrap()));
 
                 let pel = &mut *proxy.event_listeners.borrow_mut();
 
@@ -1121,7 +1118,7 @@ unsafe extern "C" fn proxy_instance_dispatch_event(
         let type_handle_val = args.index(0);
         let evt_obj_handle_val = args.index(1);
 
-        let type_str = crate::es_utils::es_value_to_str(cx, &type_handle_val)
+        let type_str = crate::es_utils::es_value_to_str(cx, *type_handle_val)
             .ok()
             .unwrap();
 
@@ -1131,7 +1128,7 @@ unsafe extern "C" fn proxy_instance_dispatch_event(
 
         if let Some(proxy) = get_proxy_for(cx, thisv.to_object()) {
             if proxy.events.contains(&type_str.as_str()) {
-                let type_str = proxy.events.get(type_str.as_str()).unwrap().clone();
+                let type_str = &&(*(*proxy.events.get(type_str.as_str()).unwrap()));
 
                 dispatch_event_for_proxy(cx, proxy.borrow(), obj_id, type_str, evt_obj_handle_val);
             }
@@ -1231,7 +1228,7 @@ unsafe extern "C" fn proxy_instance_method(
                 HandleObject::from_marked_location(&callee),
                 "name",
             );
-            if let Some(prop_name) = prop_name_res.ok() {
+            if let Ok(prop_name) = prop_name_res {
                 // lovely the name here is "get [propname]"
                 trace!("reflection::method {}", prop_name);
 
@@ -1280,7 +1277,7 @@ unsafe extern "C" fn proxy_static_method(
                 HandleObject::from_marked_location(&callee),
                 "name",
             );
-            if let Some(prop_name) = prop_name_res.ok() {
+            if let Ok(prop_name) = prop_name_res {
                 // lovely the name here is "get [propname]"
                 trace!("reflection::static_method {}", prop_name);
 
@@ -1412,5 +1409,5 @@ unsafe extern "C" fn proxy_construct(
 
     JS_ReportErrorASCII(cx, b"no such class found\0".as_ptr() as *const libc::c_char);
 
-    return false;
+    false
 }

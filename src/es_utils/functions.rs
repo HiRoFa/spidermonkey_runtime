@@ -62,17 +62,15 @@ pub fn call_method_name2(
         )
     } {
         Ok(())
+    } else if let Some(err) = report_es_ex(context) {
+        Err(err)
     } else {
-        if let Some(err) = report_es_ex(context) {
-            Err(err)
-        } else {
-            Err(EsErrorInfo {
-                message: "unknown error".to_string(),
-                filename: "".to_string(),
-                lineno: 0,
-                column: 0,
-            })
-        }
+        Err(EsErrorInfo {
+            message: "unknown error".to_string(),
+            filename: "".to_string(),
+            lineno: 0,
+            column: 0,
+        })
     }
 }
 
@@ -116,17 +114,15 @@ pub fn call_method_value2(
         )
     } {
         Ok(())
+    } else if let Some(err) = report_es_ex(context) {
+        Err(err)
     } else {
-        if let Some(err) = report_es_ex(context) {
-            Err(err)
-        } else {
-            Err(EsErrorInfo {
-                message: "unknown error".to_string(),
-                filename: "".to_string(),
-                lineno: 0,
-                column: 0,
-            })
-        }
+        Err(EsErrorInfo {
+            message: "unknown error".to_string(),
+            filename: "".to_string(),
+            lineno: 0,
+            column: 0,
+        })
     }
 }
 
@@ -337,7 +333,7 @@ mod tests {
                     "test_instance_of_function.es",
                     rval.handle_mut(),
                 );
-                if !res.is_ok() {
+                if res.is_err() {
                     if let Some(err) = report_es_ex(cx) {
                         println!("err: {}", err.message);
                     }

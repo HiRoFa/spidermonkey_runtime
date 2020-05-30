@@ -122,7 +122,7 @@ impl EsRuntimeWrapper {
     }
 
     /// eval a script and don't wait for it to complete
-    pub fn eval(&self, eval_code: &str, file_name: &str) -> () {
+    pub fn eval(&self, eval_code: &str, file_name: &str) {
         self.do_with_inner(move |inner| inner.eval(eval_code, file_name))
     }
 
@@ -132,7 +132,7 @@ impl EsRuntimeWrapper {
         obj_names: Vec<&'static str>,
         function_name: &str,
         args: Vec<EsValueFacade>,
-    ) -> () {
+    ) {
         self.do_with_inner(move |inner| inner.call(obj_names, function_name, args))
     }
 
@@ -141,7 +141,7 @@ impl EsRuntimeWrapper {
         f(&*inner)
     }
 
-    pub fn do_in_es_runtime_thread<R: Send + 'static, J>(&self, immutable_job: J) -> ()
+    pub fn do_in_es_runtime_thread<R: Send + 'static, J>(&self, immutable_job: J)
     where
         J: FnOnce(&SmRuntime) -> () + Send + 'static,
     {
