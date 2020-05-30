@@ -96,7 +96,6 @@ I'm also working on a more feature rich runtime with a commandline tool, and an 
 
 These are in a very early testing stage and may become available later as a separate project.
 
-I'dd like to hear what you would want to see in this project and or what you'd like to use it for, please drop me a line @ [my gitlab](mailto:incoming+drfos-es-runtime-17727229-issue-@incoming.gitlab.com).
 
 # Examples
 
@@ -105,9 +104,9 @@ Cargo.toml
 ```toml
 [dependencies]
 # latest tag
-es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git", tag = "0.3.3"}
+es_runtime = {git = "https://github.com/DRFos/es_runtime", tag = "0.3.3"}
 # or just get the latest
-# es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git"}
+# es_runtime = {git = "https://github.com/DRFos/es_runtime"}
 
 ```
 
