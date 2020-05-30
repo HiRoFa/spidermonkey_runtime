@@ -17,7 +17,7 @@ pub fn object_is_promise(context: *mut JSContext, obj: HandleObject) -> bool {
         rooted!(in (context) let constr_root = constr);
         if !constr.is_null() {
             let name_prop = get_es_obj_prop_val_as_string(context, constr_root.handle(), "name");
-            if let Some(name) = name_prop.ok() {
+            if let Ok(name) = name_prop {
                 return name.as_str().eq("Promise");
             }
         }
@@ -46,17 +46,15 @@ pub fn resolve_promise(
     let ok = unsafe { ResolvePromise(context, promise, resolution_value) };
     if ok {
         Ok(())
+    } else if let Some(err) = report_es_ex(context) {
+        Err(err)
     } else {
-        if let Some(err) = report_es_ex(context) {
-            Err(err)
-        } else {
-            Err(EsErrorInfo {
-                message: "unknown error resolving promise".to_string(),
-                filename: "".to_string(),
-                lineno: 0,
-                column: 0,
-            })
-        }
+        Err(EsErrorInfo {
+            message: "unknown error resolving promise".to_string(),
+            filename: "".to_string(),
+            lineno: 0,
+            column: 0,
+        })
     }
 }
 
@@ -68,17 +66,15 @@ pub fn reject_promise(
     let ok = unsafe { RejectPromise(context, promise, rejection_value) };
     if ok {
         Ok(())
+    } else if let Some(err) = report_es_ex(context) {
+        Err(err)
     } else {
-        if let Some(err) = report_es_ex(context) {
-            Err(err)
-        } else {
-            Err(EsErrorInfo {
-                message: "unknown error rejecting promise".to_string(),
-                filename: "".to_string(),
-                lineno: 0,
-                column: 0,
-            })
-        }
+        Err(EsErrorInfo {
+            message: "unknown error rejecting promise".to_string(),
+            filename: "".to_string(),
+            lineno: 0,
+            column: 0,
+        })
     }
 }
 
@@ -113,7 +109,7 @@ mod tests {
                     "test_instance_of_promise.es",
                     rval.handle_mut(),
                 );
-                if !res.is_ok() {
+                if res.is_err() {
                     if let Some(err) = report_es_ex(cx) {
                         trace!("err: {}", err.message);
                     }
@@ -146,7 +142,7 @@ mod tests {
                     "test_not_instance_of_promise.es",
                     rval.handle_mut(),
                 );
-                if !res.is_ok() {
+                if res.is_err() {
                     if let Some(err) = report_es_ex(cx) {
                         trace!("err: {}", err.message);
                     }

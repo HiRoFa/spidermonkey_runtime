@@ -22,7 +22,7 @@ pub(crate) fn init_es(rt: &EsRuntimeWrapper) {
 
 fn init_file(runtime: &EsRuntimeWrapper, file_name: &str, es_code: &str) {
     let init_res = runtime.eval_void_sync(es_code, file_name);
-    if !init_res.is_ok() {
+    if init_res.is_err() {
         let esei = init_res.err().unwrap();
         panic!(
             "could not init file: {} at {}:{}:{} ",

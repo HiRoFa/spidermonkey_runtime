@@ -255,7 +255,7 @@ mod tests {
                 .unwrap();
                 */
 
-                let stringify_res_str = es_value_to_str(context, &*stringify_res_root.handle());
+                let stringify_res_str = es_value_to_str(context, *stringify_res_root.handle());
                 assert_eq!(stringify_res_str.ok().unwrap().as_str(), "[12,15,7,21,21,21,21,21,21,21,21,21,21,21]");
 
                 true

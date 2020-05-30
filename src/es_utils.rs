@@ -1,3 +1,4 @@
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
 use crate::es_utils::objects::{get_es_obj_prop_val_as_i32, get_es_obj_prop_val_as_string};
 use log::{debug, trace};
 use mozjs::conversions::jsstr_to_string;
@@ -119,8 +120,8 @@ impl Clone for EsErrorInfo {
         EsErrorInfo {
             message: self.message.clone(),
             filename: self.filename.clone(),
-            lineno: self.lineno.clone(),
-            column: self.column.clone(),
+            lineno: self.lineno,
+            column: self.column,
         }
     }
 }
@@ -160,14 +161,14 @@ pub fn new_es_value_from_str(context: *mut JSContext, s: &str) -> mozjs::jsapi::
     let js_string: *mut JSString =
         unsafe { JS_NewStringCopyN(context, s.as_ptr() as *const libc::c_char, s.len()) };
     //mozjs::jsapi::JS_NewStringCopyZ(context, s.as_ptr() as *const libc::c_char);
-    return StringValue(unsafe { &*js_string });
+    StringValue(unsafe { &*js_string })
 }
 
 /// convert a StringValue to a rust string
 #[allow(dead_code)]
 pub fn es_value_to_str(
     context: *mut JSContext,
-    val: &mozjs::jsapi::Value,
+    val: mozjs::jsapi::Value,
 ) -> Result<String, &'static str> {
     if val.is_string() {
         let jsa: *mut mozjs::jsapi::JSString = val.to_string();
@@ -182,15 +183,13 @@ pub fn es_jsstring_to_string(
     context: *mut JSContext,
     js_string: *mut mozjs::jsapi::JSString,
 ) -> String {
-    unsafe {
-        return jsstr_to_string(context, js_string);
-    }
+    unsafe { jsstr_to_string(context, js_string) }
 }
 
 // convert a PropertyKey or JSID to String
 pub fn es_jsid_to_string(context: *mut JSContext, id: mozjs::jsapi::HandleId) -> String {
-    assert!(unsafe { RUST_JSID_IS_STRING(id.into()) });
-    rooted!(in(context) let id_str = unsafe{RUST_JSID_TO_STRING(id.into())});
+    assert!(unsafe { RUST_JSID_IS_STRING(id) });
+    rooted!(in(context) let id_str = unsafe{RUST_JSID_TO_STRING(id)});
     es_jsstring_to_string(context, *id_str)
 }
 
@@ -238,7 +237,7 @@ mod tests {
                     let e_opt = report_es_ex(cx);
                     assert!(e_opt.is_none());
 
-                    es_value_to_str(cx, &rval).ok().unwrap()
+                    es_value_to_str(cx, *rval).ok().unwrap()
                 })
             }))
         });
@@ -260,8 +259,7 @@ mod tests {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
                 let res: Result<EsValueFacade, EsErrorInfo> =
                     sm_rt.eval("let a = 'i am eval'; a", "test_eval.es");
-                let str = res.ok().unwrap().get_string().clone();
-                str
+                res.ok().unwrap().get_string().clone()
             }))
         });
 

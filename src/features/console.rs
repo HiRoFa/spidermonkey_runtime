@@ -132,7 +132,7 @@ fn parse_field(context: *mut JSContext, field: String, value: JSVal) -> String {
     let str_val = es_utils::es_jsstring_to_string(context, js_str);
 
     // return string
-    return parse_field_value(field, str_val);
+    parse_field_value(field, str_val)
 }
 
 fn parse_field_value(field: String, value: String) -> String {
@@ -146,25 +146,25 @@ fn parse_field_value(field: String, value: String) -> String {
         return parse_field_value("%i".to_string(), value);
     }
 
-    if field.ends_with("d") || field.ends_with("i") {
-        let mut i_val = value.clone();
+    if field.ends_with('d') || field.ends_with('i') {
+        let mut i_val = value;
 
         // remove chars behind .
-        if let Some(i) = i_val.find(".") {
+        if let Some(i) = i_val.find('.') {
             i_val.split_off(i);
         }
 
-        if let Some(dot_in_field_idx) = field.find(".") {
+        if let Some(dot_in_field_idx) = field.find('.') {
             let mut m_field = field.clone();
             // get part behind dot
             let mut num_decimals_str = m_field.split_off(dot_in_field_idx + 1);
             // remove d or i at end
             num_decimals_str.split_off(num_decimals_str.len() - 1);
             // see if we have a number
-            if num_decimals_str.len() > 0 {
+            if !num_decimals_str.is_empty() {
                 let ct_res = usize::from_str(num_decimals_str.as_str());
                 // check if we can parse the number to a usize
-                if let Some(ct) = ct_res.ok() {
+                if let Ok(ct) = ct_res {
                     // and if so, make i_val longer
                     while i_val.len() < ct {
                         i_val = format!("0{}", i_val);
@@ -174,27 +174,27 @@ fn parse_field_value(field: String, value: String) -> String {
         }
 
         return i_val;
-    } else if field.ends_with("f") {
-        let mut f_val = value.clone();
+    } else if field.ends_with('f') {
+        let mut f_val = value;
 
-        if let Some(dot_in_field_idx) = field.find(".") {
+        if let Some(dot_in_field_idx) = field.find('.') {
             let mut m_field = field.clone();
             // get part behind dot
             let mut num_decimals_str = m_field.split_off(dot_in_field_idx + 1);
             // remove d or i at end
             num_decimals_str.split_off(num_decimals_str.len() - 1);
             // see if we have a number
-            if num_decimals_str.len() > 0 {
+            if !num_decimals_str.is_empty() {
                 let ct_res = usize::from_str(num_decimals_str.as_str());
                 // check if we can parse the number to a usize
-                if let Some(ct) = ct_res.ok() {
+                if let Ok(ct) = ct_res {
                     // and if so, make i_val longer
                     if ct > 0 {
-                        if !f_val.contains(".") {
+                        if !f_val.contains('.') {
                             f_val.push('.');
                         }
 
-                        let dot_idx = f_val.find(".").unwrap();
+                        let dot_idx = f_val.find('.').unwrap();
 
                         while f_val.len() - dot_idx <= ct {
                             f_val.push('0');
@@ -209,7 +209,7 @@ fn parse_field_value(field: String, value: String) -> String {
 
         return f_val;
     }
-    return value;
+    value
 }
 
 // todo add an extra format_field_value method which does NOT require a context so we can unit test that independantly
@@ -230,12 +230,12 @@ fn parse_line(context: *mut JSContext, argc: u32, vp: *mut mozjs::jsapi::Value) 
 }
 
 fn parse_line2(context: *mut JSContext, args: Vec<JSVal>) -> String {
-    if args.len() == 0 {
+    if args.is_empty() {
         return "".to_string();
     }
     let mut args = args;
     let arg1: JSVal = args.remove(0);
-    let message = es_utils::es_value_to_str(context, &arg1).ok().unwrap();
+    let message = es_utils::es_value_to_str(context, arg1).ok().unwrap();
 
     let mut output = String::new();
     let mut field_code = String::new();
@@ -260,7 +260,7 @@ fn parse_line2(context: *mut JSContext, args: Vec<JSVal>) -> String {
         }
     }
 
-    return output;
+    output
 }
 
 unsafe extern "C" fn console_log(

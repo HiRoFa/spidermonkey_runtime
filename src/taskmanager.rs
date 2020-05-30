@@ -19,7 +19,7 @@ impl TaskManager {
         TaskManager { thread_pool }
     }
 
-    pub fn add_task<T: FnOnce() -> () + Send + 'static>(&self, task: T) -> () {
+    pub fn add_task<T: FnOnce() -> () + Send + 'static>(&self, task: T) {
         trace!("adding a task");
 
         self.thread_pool.spawn(task);

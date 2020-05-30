@@ -31,7 +31,7 @@ impl EsRuntimeWrapperInner {
         obj_names: Vec<&'static str>,
         function_name: &str,
         args: Vec<EsValueFacade>,
-    ) -> () {
+    ) {
         debug!("call {} in thread {}", function_name, thread_id::get());
         let f_n = function_name.to_string();
 
@@ -56,7 +56,7 @@ impl EsRuntimeWrapperInner {
         }))
     }
 
-    pub fn eval(&self, eval_code: &str, file_name: &str) -> () {
+    pub fn eval(&self, eval_code: &str, file_name: &str) {
         debug!("eval {} in thread {}", eval_code, thread_id::get());
 
         let eval_code = eval_code.to_string();
@@ -120,12 +120,10 @@ impl EsRuntimeWrapperInner {
         // this is executed in the single thread in the Threadpool, therefore Runtime and global are stored in a thread_local
 
         let async_job = || {
-            let ret = crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt| {
+            crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt| {
                 debug!("got rt from thread_local");
                 job(&mut sm_rt.borrow())
-            });
-
-            return ret;
+            })
         };
 
         self.task_manager.add_task(async_job);
@@ -139,12 +137,10 @@ impl EsRuntimeWrapperInner {
         // this is executed in the single thread in the Threadpool, therefore Runtime and global are stored in a thread_local
 
         let job = || {
-            let ret = crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt| {
+            crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt| {
                 debug!("got rt from thread_local");
                 job(&mut sm_rt.borrow())
-            });
-
-            ret
+            })
         };
 
         self.task_manager.exe_task(job)
@@ -158,12 +154,10 @@ impl EsRuntimeWrapperInner {
         // this is executed in the single thread in the Threadpool, therefore Runtime and global are stored in a thread_local
 
         let job = || {
-            let ret = crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt| {
+            crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt| {
                 debug!("got rt from thread_local");
                 mutable_job(&mut sm_rt.borrow_mut())
-            });
-
-            return ret;
+            })
         };
 
         self.task_manager.exe_task(job)

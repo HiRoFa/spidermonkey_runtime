@@ -37,7 +37,7 @@ use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::os::raw::c_void;
-use std::panic::AssertUnwindSafe;
+
 use std::ptr;
 use std::rc::Rc;
 use std::str;
@@ -186,7 +186,7 @@ impl SmRuntime {
                 return Err(err);
             }
 
-            return Ok(());
+            Ok(())
         })
     }
 
@@ -278,9 +278,7 @@ impl SmRuntime {
         let op = op_map.get(&name).expect("no such op");
 
         let rt = self.clone_rtw_inner();
-        let ret = op(rt.borrow(), args);
-
-        return ret;
+        op(rt.borrow(), args)
     }
 
     /// call a method by name on an object by name
@@ -402,6 +400,7 @@ where
     consumer(arguments_value_array)
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn register_cached_object(context: *mut JSContext, obj: *mut JSObject) -> i32 {
     let mut epr = EsPersistentRooted::default();
     unsafe { epr.init(context, obj) };
@@ -421,13 +420,13 @@ pub fn register_cached_object(context: *mut JSContext, obj: *mut JSObject) -> i3
     })
 }
 
-pub fn do_with_cached_object<C, R>(id: &i32, consumer: C) -> R
+pub fn do_with_cached_object<C, R>(id: i32, consumer: C) -> R
 where
     C: Fn(&EsPersistentRooted) -> R,
 {
     OBJECT_CACHE.with(|object_cache_rc| {
         let map = &mut *object_cache_rc.borrow_mut();
-        if let Some(epr) = map.get(id) {
+        if let Some(epr) = map.get(&id) {
             consumer(epr)
         } else {
             panic!("no such id");
@@ -439,8 +438,7 @@ pub fn consume_cached_object(id: i32) -> EsPersistentRooted {
     trace!("consume cached obj with id {}", id);
     OBJECT_CACHE.with(|object_cache_rc| {
         let map = &mut *object_cache_rc.borrow_mut();
-        let epr = map.remove(&id).expect("no such id");
-        epr
+        map.remove(&id).expect("no such id")
     })
 }
 
@@ -452,7 +450,7 @@ thread_local! {
 fn init_cache() -> LruCache<String, EsPersistentRooted> {
     let ct = SM_RT.with(|sm_rt_rc| {
         let sm_rt = &*sm_rt_rc.borrow();
-        sm_rt.clone_rtw_inner().module_cache_size.clone()
+        sm_rt.clone_rtw_inner().module_cache_size
     });
 
     LruCache::new(ct)
@@ -476,9 +474,9 @@ unsafe extern "C" fn import_module(
         }
         None
     });
-    if cached.is_some() {
-        return cached.unwrap();
-    }
+    if let Some(c) = cached {
+        return c;
+    };
 
     // see if we got a module code loader
     let module_src = SM_RT.with(|sm_rt_rc| {
@@ -514,7 +512,7 @@ unsafe extern "C" fn import_module(
         cache.put(file_name, mpr);
     });
 
-    return compiled_module;
+    compiled_module
 }
 
 /// this function is called from script when the script invokes esses.invoke_rust_op
@@ -538,7 +536,7 @@ unsafe extern "C" fn invoke_rust_op(
         debug!("op failed with {}", op_res.err().unwrap());
         JS_ReportErrorASCII(context, b"op failed\0".as_ptr() as *const libc::c_char);
     }
-    return true;
+    true
 }
 
 /// this function is called from script when the script invokes esses.invoke_rust_op
@@ -562,7 +560,7 @@ unsafe extern "C" fn invoke_rust_op_sync(
         debug!("op failed with {}", op_res.err().unwrap());
         JS_ReportErrorASCII(context, b"op failed\0".as_ptr() as *const libc::c_char);
     }
-    return true;
+    true
 }
 
 /// this function is called from script when the script invokes esses.invoke_rust_op
@@ -581,7 +579,7 @@ fn invoke_rust_op_esvf(
 
     let op_name_arg: mozjs::rust::HandleValue =
         unsafe { mozjs::rust::Handle::from_raw(args.get(0)) };
-    let op_name = es_utils::es_value_to_str(context, &op_name_arg.get())
+    let op_name = es_utils::es_value_to_str(context, op_name_arg.get())
         .ok()
         .unwrap();
 
@@ -644,51 +642,49 @@ unsafe extern "C" fn enqueue_promise_job(
     _allocation_site: mozjs::jsapi::HandleObject,
     _incumbent_global: mozjs::jsapi::HandleObject,
 ) -> bool {
-    wrap_panic(
-        AssertUnwindSafe(move || {
-            trace!("enqueue a job");
+    let mut result = false;
+    wrap_panic(&mut || {
+        trace!("enqueue a job");
 
-            let cb = PromiseJobCallback::new(cx, job.get());
+        let cb = PromiseJobCallback::new(cx, job.get());
 
-            let task = move || {
-                SM_RT.with(move |rc| {
-                    trace!("running a job");
+        let task = move || {
+            SM_RT.with(move |rc| {
+                trace!("running a job");
 
-                    let sm_rt = &*rc.borrow();
+                let sm_rt = &*rc.borrow();
 
-                    sm_rt.do_with_jsapi(|_rt, cx, _global| {
-                        trace!("rooting null");
-                        rooted!(in (cx) let null_root = NullValue().to_object_or_null());
+                sm_rt.do_with_jsapi(|_rt, cx, _global| {
+                    trace!("rooting null");
+                    rooted!(in (cx) let null_root = NullValue().to_object_or_null());
 
-                        trace!("calling cb.call");
-                        let call_res = cb.call(cx, null_root.handle());
-                        trace!("checking cb.call res");
-                        if call_res.is_err() {
-                            debug!("job failed");
-                            if let Some(err) = es_utils::report_es_ex(cx) {
-                                panic!(
-                                    "job failed {}:{}:{} -> {}",
-                                    err.filename, err.lineno, err.column, err.message
-                                );
-                            }
+                    trace!("calling cb.call");
+                    let call_res = cb.call(cx, null_root.handle());
+                    trace!("checking cb.call res");
+                    if call_res.is_err() {
+                        debug!("job failed");
+                        if let Some(err) = es_utils::report_es_ex(cx) {
+                            panic!(
+                                "job failed {}:{}:{} -> {}",
+                                err.filename, err.lineno, err.column, err.message
+                            );
                         }
-                    });
-                    trace!("job ran ok");
+                    }
                 });
-            };
-
-            SM_RT.with(move |sm_rt_rc| {
-                let sm_rt = &*sm_rt_rc.borrow();
-                let esrtwi_opt = sm_rt.opt_es_rt_inner.as_ref().unwrap().upgrade();
-                let esrtwi: Arc<EsRuntimeWrapperInner> = esrtwi_opt.unwrap();
-                let tm = esrtwi.task_manager.clone();
-                tm.add_task_from_worker(task);
+                trace!("job ran ok");
             });
+        };
 
-            true
-        }),
-        false,
-    )
+        SM_RT.with(move |sm_rt_rc| {
+            let sm_rt = &*sm_rt_rc.borrow();
+            let esrtwi_opt = sm_rt.opt_es_rt_inner.as_ref().unwrap().upgrade();
+            let esrtwi: Arc<EsRuntimeWrapperInner> = esrtwi_opt.unwrap();
+            let tm = esrtwi.task_manager.clone();
+            tm.add_task_from_worker(task);
+        });
+        result = true
+    });
+    result
 }
 
 /// the code below was copied and altered from the servo project
@@ -698,32 +694,30 @@ unsafe extern "C" fn enqueue_promise_job(
 ///
 #[allow(unsafe_code)]
 unsafe extern "C" fn get_incumbent_global(_: *const c_void, _: *mut JSContext) -> *mut JSObject {
+    let mut result = ptr::null_mut();
     trace!("get_incumbent_global called");
-    wrap_panic(
-        AssertUnwindSafe(|| {
-            // todo what to do here
+    wrap_panic(&mut || {
+        // todo what to do here
 
-            SM_RT.with(|sm_rt_rc| {
-                let sm_rt = &*sm_rt_rc.borrow();
-                sm_rt.global_obj
-            })
-        }),
-        ptr::null_mut(),
-    )
+        result = SM_RT.with(|sm_rt_rc| {
+            let sm_rt = &*sm_rt_rc.borrow();
+            sm_rt.global_obj
+        });
+    });
+    result
 }
 
 #[allow(unsafe_code)]
 unsafe extern "C" fn empty(_extra: *const c_void) -> bool {
     trace!("empty called");
-    wrap_panic(
-        AssertUnwindSafe(|| {
-            SM_RT.with(|sm_rt_rc| {
-                let sm_rt = &*sm_rt_rc.borrow();
-                sm_rt.clone_rtw_inner().task_manager.is_empty()
-            })
-        }),
-        false,
-    )
+    let mut result = false;
+    wrap_panic(&mut || {
+        result = SM_RT.with(|sm_rt_rc| {
+            let sm_rt = &*sm_rt_rc.borrow();
+            sm_rt.clone_rtw_inner().task_manager.is_empty()
+        })
+    });
+    result
 }
 
 static JOB_QUEUE_TRAPS: JobQueueTraps = JobQueueTraps {
@@ -843,7 +837,7 @@ mod tests {
 
                         if res.is_ok() {
                             let esvf = res.ok().unwrap();
-                            return esvf.get_string().to_string();
+                            esvf.get_string().to_string()
                         } else {
                             let err = res.err().unwrap();
                             panic!("err {}", err.message);
@@ -924,7 +918,7 @@ mod tests {
 
                         if res.is_ok() {
                             let esvf = res.ok().unwrap();
-                            return esvf.get_string().to_string();
+                            esvf.get_string().to_string()
                         } else {
                             let err = res.err().unwrap();
                             panic!("err {}", err.message);
@@ -997,9 +991,7 @@ mod tests {
                         )
                         .ok()
                         .unwrap();
-                        let res_str = es_utils::es_value_to_str(cx, &*rval).ok().unwrap();
-
-                        res_str
+                        es_utils::es_value_to_str(cx, *rval).ok().unwrap()
                     });
                     trace!("test_hva_loop / 3");
                 }

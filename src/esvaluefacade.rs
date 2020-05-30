@@ -62,8 +62,8 @@ impl EsValueFacade {
             let map: &mut HashMap<i32, Sender<Result<EsValueFacade, EsValueFacade>>> =
                 &mut *rc.borrow_mut();
             let opt: Option<Sender<Result<EsValueFacade, EsValueFacade>>> = map.remove(&man_obj_id);
-            if opt.is_some() {
-                opt.unwrap().send(res).expect("could not send res");
+            if let Some(opt_c) = opt {
+                opt_c.send(res).expect("could not send res");
             } else {
                 panic!("no transmitter found {}", man_obj_id);
             }
@@ -215,9 +215,7 @@ impl EsValueFacade {
                     trace!("found promise with id {} in right", prom_regged_id);
 
                     let rt_opt = weak_rt_ref.upgrade();
-                    if !rt_opt.is_none() {
-                        let rti = rt_opt.unwrap().clone();
-
+                    if let Some(rti) = rt_opt {
                         rti.do_in_es_runtime_thread_sync(Box::new(move |sm_rt: &SmRuntime| {
                             // resolve or reject promise
                             sm_rt.do_with_jsapi(move|_rt, cx, _global| {
@@ -306,7 +304,7 @@ impl EsValueFacade {
         } else if rval.is_double() {
             val_f64 = Some(rval.to_number());
         } else if rval.is_string() {
-            let es_str = es_utils::es_value_to_str(context, &rval).ok().unwrap();
+            let es_str = es_utils::es_value_to_str(context, rval).ok().unwrap();
 
             trace!("EsValueFacade::new got string {}", es_str);
 
@@ -378,7 +376,7 @@ impl EsValueFacade {
                     });
 
                     let rmev: RustManagedEsVar = RustManagedEsVar {
-                        obj_id: obj_id.clone(),
+                        obj_id,
                         opt_receiver,
                     };
 
@@ -423,7 +421,7 @@ impl EsValueFacade {
             val_object = Some(map);
         }
 
-        let ret = EsValueFacade {
+        EsValueFacade {
             val_string,
             val_i32,
             val_f64,
@@ -433,9 +431,7 @@ impl EsValueFacade {
             val_array,
             val_promise: None,
             val_js_function,
-        };
-
-        ret
+        }
     }
 
     pub fn get_string(&self) -> &String {
@@ -452,7 +448,7 @@ impl EsValueFacade {
     }
     pub fn get_managed_object_id(&self) -> i32 {
         let rmev: &RustManagedEsVar = self.val_managed_var.as_ref().expect("not a managed var");
-        rmev.obj_id.clone()
+        rmev.obj_id
     }
 
     pub fn is_promise(&self) -> bool {
@@ -475,18 +471,15 @@ impl EsValueFacade {
 
         let rmev: &RustManagedEsVar = self.val_managed_var.as_ref().expect("not a managed var");
         let rx = rmev.opt_receiver.as_ref().expect("not a waiting promise");
-
-        let rx_result = rx.recv_timeout(timeout);
-
-        return rx_result;
+        rx.recv_timeout(timeout)
     }
 
     pub fn get_object(&self) -> &HashMap<String, EsValueFacade> {
-        return self.val_object.as_ref().unwrap();
+        self.val_object.as_ref().unwrap()
     }
 
     pub fn get_array(&self) -> &Vec<EsValueFacade> {
-        return self.val_array.as_ref().unwrap();
+        self.val_array.as_ref().unwrap()
     }
 
     pub fn invoke_function(&self, args: Vec<EsValueFacade>) -> Result<EsValueFacade, EsErrorInfo> {
@@ -518,7 +511,7 @@ impl EsValueFacade {
     ) -> Result<EsValueFacade, EsErrorInfo> {
         trace!("EsValueFacade.invoke_function3()");
         crate::spidermonkeyruntimewrapper::do_with_cached_object(
-            &cached_id,
+            cached_id,
             |epr: &EsPersistentRooted| {
                 let mut arguments_value_vec: Vec<JSVal> = vec![];
                 for arg_vf in &args {
@@ -589,7 +582,7 @@ impl EsValueFacade {
             format!("/* Future {} */", self.get_managed_object_id())
         } else if self.is_array() {
             // todo
-            format!("[]")
+            "[]".to_string()
         } else if self.is_object() {
             let mut res: String = String::new();
             let map = self.get_object();
@@ -617,16 +610,16 @@ impl EsValueFacade {
 
         if self.is_i32() {
             trace!("to_es_value.2");
-            return Int32Value(self.get_i32().clone());
+            Int32Value(*self.get_i32())
         } else if self.is_f64() {
             trace!("to_es_value.3");
-            return DoubleValue(self.get_f64().clone());
+            DoubleValue(*self.get_f64())
         } else if self.is_boolean() {
             trace!("to_es_value.4");
-            return BooleanValue(self.get_boolean());
+            BooleanValue(self.get_boolean())
         } else if self.is_string() {
             trace!("to_es_value.5");
-            return es_utils::new_es_value_from_str(context, self.get_string());
+            es_utils::new_es_value_from_str(context, self.get_string())
         } else if self.is_array() {
             let mut items = vec![];
             for item in self.val_array.as_ref().unwrap() {
@@ -656,7 +649,7 @@ impl EsValueFacade {
                 );
             }
 
-            return ObjectValue(obj);
+            ObjectValue(obj)
         } else if self.is_prepped_promise() {
             trace!("to_es_value.7 prepped_promise");
             let map: &mut HashMap<
@@ -731,7 +724,7 @@ impl EsValueFacade {
                         panic!("eith had unexpected right for id {}", id);
                     }
                 }
-                return ObjectValue(prom);
+                ObjectValue(prom)
             } else {
                 panic!("PROMISE_ANSWERS had no val for id {}", id);
             }
@@ -740,7 +733,7 @@ impl EsValueFacade {
         } else {
             // todo, other val types
             trace!("to_es_value.7");
-            return UndefinedValue();
+            UndefinedValue()
         }
     }
 }
@@ -782,6 +775,7 @@ mod tests {
     use std::time::Duration;
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn in_and_output_vars() {
         log::info!("test: in_and_output_vars");
 
@@ -793,10 +787,10 @@ mod tests {
                     let args1 = args.get(0).expect("did not get a first arg");
                     let args2 = args.get(1).expect("did not get a second arg");
 
-                    let x = args1.get_i32().clone() as f64;
-                    let y = args2.get_i32().clone() as f64;
+                    let x = *args1.get_i32() as f64;
+                    let y = *args2.get_i32() as f64;
 
-                    return Ok(EsValueFacade::new_f64(x / y));
+                    Ok(EsValueFacade::new_f64(x / y))
                 }),
             );
             inner.register_op(
@@ -808,7 +802,7 @@ mod tests {
                     let x = args1.get_i32();
                     let y = args2.get_i32();
 
-                    return Ok(EsValueFacade::new_i32(x * y));
+                    Ok(EsValueFacade::new_i32(x * y))
                 }),
             );
 
@@ -821,7 +815,7 @@ mod tests {
                     let x = args1.get_i32();
                     let y = args2.get_i32();
 
-                    return Ok(EsValueFacade::new_bool(x > y));
+                    Ok(EsValueFacade::new_bool(x > y))
                 }),
             );
 
@@ -835,7 +829,7 @@ mod tests {
                     let y = args2.get_i32();
 
                     let res_str = format!("{}", x * y);
-                    return Ok(EsValueFacade::new_str(res_str));
+                    Ok(EsValueFacade::new_str(res_str))
                 }),
             );
 
@@ -860,7 +854,7 @@ mod tests {
             let esvf2 = res2.ok().expect("2 did not get a result");
             let esvf3 = res3.ok().expect("3 did not get a result");
 
-            assert_eq!(esvf0.get_f64().clone(), (13 as f64 / 17 as f64));
+            assert_eq!(*esvf0.get_f64(), (13_f64 / 17_f64));
             assert_eq!(esvf1.get_i32().clone(), (13 * 17) as i32);
             assert_eq!(esvf2.get_boolean(), false);
             assert_eq!(esvf3.get_string(), format!("{}", 13 * 17).as_str());
@@ -1082,12 +1076,12 @@ mod tests {
 
         let my_prep_func = || {
             std::thread::sleep(Duration::from_secs(5));
-            return Ok(EsValueFacade::new_i32(123));
+            Ok(EsValueFacade::new_i32(123))
         };
 
         let my_bad_prep_func = || {
             std::thread::sleep(Duration::from_secs(5));
-            return Err("456".to_string());
+            Err("456".to_string())
         };
 
         let prom_esvf = EsValueFacade::new_promise(my_prep_func);
@@ -1132,7 +1126,7 @@ mod tests {
 
         let my_prep_func = || {
             std::thread::sleep(Duration::from_secs(5));
-            return Ok(EsValueFacade::new_i32(123));
+            Ok(EsValueFacade::new_i32(123))
         };
 
         let prom_esvf = EsValueFacade::new_promise(my_prep_func);
