@@ -16,6 +16,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Prepare
+      run: |
+        sudo apt update
+        sudo apt install gcc-7 llvm autoconf2.13 automake clang python -y
     - name: Build
       run: cargo build --verbose
     - name: Run tests
