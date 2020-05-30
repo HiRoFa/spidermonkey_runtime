@@ -20,6 +20,7 @@ jobs:
       run: |
         sudo apt update
         sudo apt install gcc-7 llvm autoconf2.13 automake clang python -y
+        export SHELL=/usr/bin/bash
     - name: Build
       run: cargo build --verbose
     - name: Run tests
