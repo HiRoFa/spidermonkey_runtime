@@ -20,11 +20,69 @@ jobs:
       run: |
         sudo apt update
         sudo apt install gcc-7 llvm autoconf2.13 automake clang python -y
+    - name: Cache cargo registry
+      uses: actions/cache@v2
+      with:
+        path: ~/.cargo/registry
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+    - name: Cache cargo index
+      uses: actions/cache@v2
+      with:
+        path: ~/.cargo/git
+        key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+    - name: Ccache
+      uses: actions/cache@v2
+      with:
+        path: ~/.ccache
+        key: ${{ runner.OS }}-ccache-${{ hashFiles('**\Cargo.lock') }}
     - name: Build
       run: |
         export SHELL=/bin/bash
         export CC=/usr/bin/clang
         export CXX=/usr/bin/clang++
-        cargo build --verbose
+        ccache -z
+        CCACHE=$(which ccache) cargo build --verbose
+        ccache -s
     - name: Run tests
       run: cargo test --verbose
+    - name: Format
+      run: |
+        cargo fmt
+    - name: Commit fmt files
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git commit -m "autofmt" -a || exit 0
+    - name: Push  fmt changes
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        branch: ${{ github.ref }}
+    - name: Doc
+      run: |
+        cargo doc
+    - name: Commit docs
+      run: |
+        cp -r ./target/doc /tmp
+        cd /tmp/doc
+        git init
+        echo '<!DOCTYPE html><html><head><title>Redirect</title><meta http-equiv = "refresh" content = "0; url = https://${{ GITHUB_ACTOR }}.github.io/es_runtime/es_runtime/index.html" /></head><body><p>Redirecting</p></body></html>' >> index.html
+        git add .
+        git remote add origin https://github.com/${{ GITHUB_REPOSITORY }}.git
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git commit -m "doc" -a || exit 0
+    - name: Push docs
+      uses: ad-m/github-push-action@master
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        branch : gh-pages
+        force: true
+        directory: /tmp/doc
+    - name: Deploy to gh-pages 
+      run: |
+        curl -X POST https://api.github.com/repos/${{ GITHUB_REPOSITORY }}/pages/builds -H "Accept: application/vnd.github.mister-fantastic-preview+json" -u ${{ GITHUB_ACTOR }}:${{ secrets.GH_TOKEN }}
+    - name: Clippy check
+      uses: actions-rs/clippy-check@annotations-fallback
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
