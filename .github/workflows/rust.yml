@@ -66,9 +66,9 @@ jobs:
         cp -r ./target/doc /tmp
         cd /tmp/doc
         git init
-        echo '<!DOCTYPE html><html><head><title>Redirect</title><meta http-equiv = "refresh" content = "0; url = https://'${{ GITHUB_ACTOR }}'.github.io/es_runtime/es_runtime/index.html" /></head><body><p>Redirecting</p></body></html>' >> index.html
+        echo '<!DOCTYPE html><html><head><title>Redirect</title><meta http-equiv = "refresh" content = "0; url = https://'${{ github.actor }}'.github.io/es_runtime/es_runtime/index.html" /></head><body><p>Redirecting</p></body></html>' >> index.html
         git add .
-        git remote add origin https://github.com/${{ GITHUB_REPOSITORY }}.git
+        git remote add origin https://github.com/${{ github.repository }}.git
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         git commit -m "doc" -a || exit 0
@@ -81,7 +81,7 @@ jobs:
         directory: /tmp/doc
     - name: Deploy to gh-pages 
       run: |
-        curl -X POST https://api.github.com/repos/${{ GITHUB_REPOSITORY }}/pages/builds -H "Accept: application/vnd.github.mister-fantastic-preview+json" -u ${{ GITHUB_ACTOR }}:${{ secrets.GH_TOKEN }}
+        curl -X POST https://api.github.com/repos/${{ github.repository }}/pages/builds -H "Accept: application/vnd.github.mister-fantastic-preview+json" -u ${{ github.actor }}:${{ secrets.GH_TOKEN }}
     - name: Clippy check
       uses: actions-rs/clippy-check@annotations-fallback
       with:
