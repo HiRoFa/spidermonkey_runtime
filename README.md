@@ -6,6 +6,9 @@ The engine used is the Mozilla SpiderMonkey engine (https://developer.mozilla.or
 
 This project started as a hobby project for me to learn rust. I hope some of you find it useful to learn about using spidermonkey from rust.
 
+* [DOCS](https://drfos.github.io/es_runtime/es_runtime/index.html)
+* [TUTORIALS](docs/HOWTO.md)
+
 # Status
 
 Nowhere near production ready, it is untested...
@@ -189,6 +192,4 @@ Besides rust, you'll need to install the following packages to compile the mozjs
 
 for more detailed info please visit https://github.com/servo/mozjs#building 
 
-# Howtos
 
-[HOWTO](docs/HOWTO.md)
