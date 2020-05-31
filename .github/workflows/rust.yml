@@ -66,7 +66,7 @@ jobs:
         cp -r ./target/doc /tmp
         cd /tmp/doc
         git init
-        echo '<!DOCTYPE html><html><head><title>Redirect</title><meta http-equiv = "refresh" content = "0; url = https://${{ GITHUB_ACTOR }}.github.io/es_runtime/es_runtime/index.html" /></head><body><p>Redirecting</p></body></html>' >> index.html
+        echo '<!DOCTYPE html><html><head><title>Redirect</title><meta http-equiv = "refresh" content = "0; url = https://'${{ GITHUB_ACTOR }}'.github.io/es_runtime/es_runtime/index.html" /></head><body><p>Redirecting</p></body></html>' >> index.html
         git add .
         git remote add origin https://github.com/${{ GITHUB_REPOSITORY }}.git
         git config --local user.email "action@github.com"
