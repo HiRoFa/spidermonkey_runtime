@@ -15,7 +15,9 @@
 //!
 //! ```rust
 //!
-//! fn call_jsapi_stuff(rt: &EsRuntimeWrapper) {
+//! use mozjs::rust::{Runtime, HandleObject};
+//! fn call_jsapi_stuff() {
+//!     let rt = es_runtime::esruntimewrapper::EsRuntimeWrapper::builder().build();
 //!     let res = rt.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntimeWrapper| {
 //!     
 //!         // do_with_jsapi does a couple of things
