@@ -16,9 +16,11 @@
 //! ```rust
 //!
 //! use mozjs::rust::{Runtime, HandleObject};
+//! use mozjs::jsapi::JSContext;
+//! use es_runtime::spidermonkeyruntimewrapper::SmRuntime;
 //! fn call_jsapi_stuff() {
 //!     let rt = es_runtime::esruntimewrapper::EsRuntimeWrapper::builder().build();
-//!     let res = rt.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntimeWrapper| {
+//!     let res = rt.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
 //!     
 //!         // do_with_jsapi does a couple of things
 //!         // 1.  root the global obj
