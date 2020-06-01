@@ -57,7 +57,7 @@ lazy_static! {
 }
 
 impl EsValueFacade {
-    pub(crate) fn resolve_future(man_obj_id: i32, res: Result<EsValueFacade, EsValueFacade>) -> () {
+    pub(crate) fn resolve_future(man_obj_id: i32, res: Result<EsValueFacade, EsValueFacade>) {
         PROMISE_RESOLUTION_TRANSMITTERS.with(|rc| {
             let map: &mut HashMap<i32, Sender<Result<EsValueFacade, EsValueFacade>>> =
                 &mut *rc.borrow_mut();
