@@ -8,7 +8,7 @@ This project was started as a hobby project for me to learn rust. I hope some of
 
 # status
 
-for the current status and versions please see https://gitlab.com/drfos/es_runtime
+for the current status and versions please see https://github.com/DRFos/es_runtime
 
 The version published on crates.io is based on mozjs 0.10.1 which is the latest published verion of mozjs.
 
@@ -42,13 +42,13 @@ Please see the [CHANGELOG](CHANGELOG.md) for what's new.
 
 # 0.2 and beyond goals
 
-please see https://gitlab.com/drfos/es_runtime
+please see https://github.com/DRFos/es_runtime
 
 # Other plans
 
 I'm also working on a more feature rich runtime with a commandline tool and also an application server based on this runtime
 
-for updates on the status of those please see https://gitlab.com/drfos
+for updates on the status of those please see https://github.com/DRFos
 
 I'd like to hear what you would want to see in this project and or what you'd like to use it for, please drop me a line @ incoming+drfos-es-runtime-17727229-issue-@incoming.gitlab.com
 
@@ -60,9 +60,9 @@ Cargo.toml
 
 ```toml
 [dependencies]
-es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git"}
+es_runtime = {git = "https://github.com/DRFos/es_runtime"}
 # but you should check in the repo for the tag or branch you want to use and link to that
-# es_runtime = {git = "https://gitlab.com/drfos/es_runtime.git", tag = "0.2.0"}
+# es_runtime = {git = "https://github.com/DRFos/es_runtime", tag = "0.3.5"}
 ```
 
 * for the published version
