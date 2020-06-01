@@ -4,11 +4,11 @@ version = "0.3.5"
 authors = ["Andries Hiemstra"]
 edition = "2018"
 description = "An API and Utils around the spidermonkey script engine"
-homepage = "https://gitlab.com/drfos/es_runtime"
+homepage = "https://github.com/DRFos/es_runtime"
 keywords = ["mozjs", "javascript", "runtime", "engine", "spidermonkey"]
-repository = "https://gitlab.com/drfos/es_runtime.git"
+repository = "https://github.com/DRFos/es_runtime"
 license = "GPL-3.0"
-documentation = "https://gitlab.com/drfos/es_runtime/blob/master/docs/HOWTO.md"
+documentation = "https://drfos.github.io/es_runtime/es_runtime/index.html"
 readme = "README.md"
 categories = ["development-tools"]
 
