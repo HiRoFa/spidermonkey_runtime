@@ -14,9 +14,9 @@ thread_local!(
     pub static LOCAL_JOBS: RefCell<Vec<Box<LocalJob>>> = RefCell::new(vec![]);
 );
 ///
-/// the MicroTaksManager is a single threaded threadpool which is used to act as the only thread
+/// the MicroTaskManager is a single threaded thread pool which is used to act as the only thread
 /// using an instance of the spidermonkey runtime
-/// besides being able to add taks from any thread by add_task
+/// besides being able to add tasks from any thread by add_task
 /// a running task can add jobs to the current thread by calling add_task_from_worker
 /// those tasks need not impl the Send trait and there is no locking happening to add
 /// the task to the queue
@@ -29,12 +29,12 @@ pub struct MicroTaskManager {
 impl MicroTaskManager {
     pub fn new() -> Arc<Self> {
         let uuid = format!("sttm_wt_{}", Uuid::new_v4());
-        let sttm = MicroTaskManager {
+        let task_manager = MicroTaskManager {
             jobs: DebugMutex::new(vec![], "MicroTaskManager::jobs"),
             empty_cond: Condvar::new(),
             worker_thread_name: uuid.clone(),
         };
-        let rc = Arc::new(sttm);
+        let rc = Arc::new(task_manager);
 
         let wrc = Arc::downgrade(&rc);
 

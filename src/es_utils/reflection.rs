@@ -21,44 +21,28 @@ use std::collections::{HashMap, HashSet};
 use std::ptr::replace;
 use std::sync::Arc;
 
-/// create a class def in the runtime which constructs and calls methods in a rust proxy
-///
-///
-/// todo:
-/// method_native, add a JSNative directly
-/// static_method_native
+pub type Constructor = Box<dyn Fn(*mut JSContext, &Vec<HandleValue>) -> Result<i32, String>>;
+pub type Setter = Box<dyn Fn(*mut JSContext, i32, HandleValue) -> Result<(), String>>;
+pub type Getter = Box<dyn Fn(*mut JSContext, i32) -> Result<JSVal, String>>;
+pub type StaticSetter = Box<dyn Fn(*mut JSContext, HandleValue) -> Result<(), String>>;
+pub type StaticGetter = Box<dyn Fn(*mut JSContext) -> Result<JSVal, String>>;
+pub type Method = Box<dyn Fn(*mut JSContext, i32, &Vec<HandleValue>) -> Result<JSVal, String>>;
+pub type StaticMethod = Box<dyn Fn(*mut JSContext, &Vec<HandleValue>) -> Result<JSVal, String>>;
 
+/// create a class def in the runtime which constructs and calls methods in a rust proxy
 pub struct Proxy {
     pub class_name: &'static str,
-    constructor: Option<Box<dyn Fn(*mut JSContext, &Vec<HandleValue>) -> Result<i32, String>>>,
+    constructor: Option<Constructor>,
     finalizer: Option<Box<dyn Fn(&i32) -> ()>>,
-    properties: HashMap<
-        &'static str,
-        (
-            Box<dyn Fn(*mut JSContext, i32) -> Result<JSVal, String>>,
-            Box<dyn Fn(*mut JSContext, i32, HandleValue) -> Result<(), String>>,
-        ),
-    >,
+    properties: HashMap<&'static str, (Getter, Setter)>,
 
     // todo add cx as second arg to methods
-    methods: HashMap<
-        &'static str,
-        Box<dyn Fn(*mut JSContext, i32, &Vec<HandleValue>) -> Result<JSVal, String>>,
-    >,
+    methods: HashMap<&'static str, Method>,
     native_methods: HashMap<&'static str, JSNative>,
     events: HashSet<&'static str>,
     event_listeners: RefCell<HashMap<i32, HashMap<&'static str, Vec<EsPersistentRooted>>>>,
-    static_properties: HashMap<
-        &'static str,
-        (
-            Box<dyn Fn(*mut JSContext) -> Result<JSVal, String>>,
-            Box<dyn Fn(*mut JSContext, HandleValue) -> Result<(), String>>,
-        ),
-    >,
-    static_methods: HashMap<
-        &'static str,
-        Box<dyn Fn(*mut JSContext, &Vec<HandleValue>) -> Result<JSVal, String>>,
-    >,
+    static_properties: HashMap<&'static str, (StaticGetter, StaticSetter)>,
+    static_methods: HashMap<&'static str, StaticMethod>,
     static_native_methods: HashMap<&'static str, JSNative>,
     static_events: HashSet<&'static str>,
     static_event_listeners: RefCell<HashMap<&'static str, Vec<EsPersistentRooted>>>,
@@ -66,32 +50,14 @@ pub struct Proxy {
 
 pub struct ProxyBuilder {
     pub class_name: &'static str,
-    constructor: Option<Box<dyn Fn(*mut JSContext, &Vec<HandleValue>) -> Result<i32, String>>>,
+    constructor: Option<Constructor>,
     finalizer: Option<Box<dyn Fn(&i32) -> ()>>,
-    properties: HashMap<
-        &'static str,
-        (
-            Box<dyn Fn(*mut JSContext, i32) -> Result<JSVal, String>>,
-            Box<dyn Fn(*mut JSContext, i32, HandleValue) -> Result<(), String>>,
-        ),
-    >,
-    methods: HashMap<
-        &'static str,
-        Box<dyn Fn(*mut JSContext, i32, &Vec<HandleValue>) -> Result<JSVal, String>>,
-    >,
+    properties: HashMap<&'static str, (Getter, Setter)>,
+    methods: HashMap<&'static str, Method>,
     native_methods: HashMap<&'static str, JSNative>,
     events: HashSet<&'static str>,
-    static_properties: HashMap<
-        &'static str,
-        (
-            Box<dyn Fn(*mut JSContext) -> Result<JSVal, String>>,
-            Box<dyn Fn(*mut JSContext, HandleValue) -> Result<(), String>>,
-        ),
-    >,
-    static_methods: HashMap<
-        &'static str,
-        Box<dyn Fn(*mut JSContext, &Vec<HandleValue>) -> Result<JSVal, String>>,
-    >,
+    static_properties: HashMap<&'static str, (StaticGetter, StaticSetter)>,
+    static_methods: HashMap<&'static str, StaticMethod>,
     static_native_methods: HashMap<&'static str, JSNative>,
     static_events: HashSet<&'static str>,
 }
@@ -855,10 +821,10 @@ unsafe extern "C" fn proxy_instance_setter(
     trace!("reflection::setter");
 
     let args = CallArgs::from_vp(vp, argc);
-    let thisv: mozjs::jsapi::Value = *args.thisv();
+    let this_val: mozjs::jsapi::Value = *args.thisv();
 
-    if thisv.is_object() {
-        if let Some(proxy) = get_proxy_for(cx, thisv.to_object()) {
+    if this_val.is_object() {
+        if let Some(proxy) = get_proxy_for(cx, this_val.to_object()) {
             trace!("reflection::setter get for cn:{}", &proxy.class_name);
 
             let callee: *mut JSObject = args.callee();
@@ -872,7 +838,7 @@ unsafe extern "C" fn proxy_instance_setter(
                 trace!("reflection::setter set {}", prop_name);
 
                 // get obj id
-                let obj_id = get_obj_id_for(cx, thisv.to_object());
+                let obj_id = get_obj_id_for(cx, this_val.to_object());
 
                 trace!(
                     "reflection::setter set {} for for obj_id {}",
@@ -888,13 +854,10 @@ unsafe extern "C" fn proxy_instance_setter(
 
                     trace!("reflection::setter setting val");
                     let js_val_res = prop.1(cx, obj_id, val);
-                    match js_val_res {
-                        Err(js_err) => {
-                            let s = format!("setter {} failed\ncaused by: {}\0", p_name, js_err);
-                            JS_ReportErrorASCII(cx, s.as_ptr() as *const libc::c_char);
-                            return false;
-                        }
-                        _ => {}
+                    if let Err(js_err) = js_val_res {
+                        let s = format!("setter {} failed\ncaused by: {}\0", p_name, js_err);
+                        JS_ReportErrorASCII(cx, s.as_ptr() as *const libc::c_char);
+                        return false;
                     }
                 }
             }
@@ -912,10 +875,10 @@ unsafe extern "C" fn proxy_static_setter(
     trace!("reflection::static_setter");
 
     let args = CallArgs::from_vp(vp, argc);
-    let thisv: mozjs::jsapi::Value = *args.thisv();
+    let this_val: mozjs::jsapi::Value = *args.thisv();
 
-    if thisv.is_object() {
-        if let Some(proxy) = get_static_proxy_for(cx, thisv.to_object()) {
+    if this_val.is_object() {
+        if let Some(proxy) = get_static_proxy_for(cx, this_val.to_object()) {
             trace!("reflection::static_setter get for cn:{}", &proxy.class_name);
 
             let callee: *mut JSObject = args.callee();
@@ -936,13 +899,10 @@ unsafe extern "C" fn proxy_static_setter(
 
                     trace!("reflection::static_setter setting val");
                     let js_val_res = prop.1(cx, val);
-                    match js_val_res {
-                        Err(js_err) => {
-                            let s = format!("setter {} failed\ncaused by: {}\0", p_name, js_err);
-                            JS_ReportErrorASCII(cx, s.as_ptr() as *const libc::c_char);
-                            return false;
-                        }
-                        _ => {}
+                    if let Err(js_err) = js_val_res {
+                        let s = format!("setter {} failed\ncaused by: {}\0", p_name, js_err);
+                        JS_ReportErrorASCII(cx, s.as_ptr() as *const libc::c_char);
+                        return false;
                     }
                 }
             }
