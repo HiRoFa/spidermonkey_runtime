@@ -1,9 +1,8 @@
-use crate::es_utils::es_jsid_to_string;
 use crate::es_utils::rooting::EsPersistentRooted;
-use core::ptr;
-use log::trace;
+use crate::es_utils::{es_jsid_to_string, EsErrorInfo};
 
 use mozjs::jsapi::CallArgs;
+use mozjs::jsapi::HandleValueArray;
 use mozjs::jsapi::JSClass;
 use mozjs::jsapi::JSClassOps;
 use mozjs::jsapi::JSContext;
@@ -13,8 +12,10 @@ use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::JSCLASS_FOREGROUND_FINALIZE;
 use mozjs::jsval::{JSVal, NullValue, ObjectValue, UndefinedValue};
-use mozjs::rust::{HandleObject, HandleValue};
+use mozjs::rust::{HandleObject, HandleValue, MutableHandleObject};
 
+use core::ptr;
+use log::trace;
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -31,6 +32,7 @@ pub type StaticMethod = Box<dyn Fn(*mut JSContext, &Vec<HandleValue>) -> Result<
 
 /// create a class def in the runtime which constructs and calls methods in a rust proxy
 pub struct Proxy {
+    pub package: Vec<&'static str>,
     pub class_name: &'static str,
     constructor: Option<Constructor>,
     finalizer: Option<Box<dyn Fn(&i32) -> ()>>,
@@ -49,6 +51,7 @@ pub struct Proxy {
 }
 
 pub struct ProxyBuilder {
+    pub package: Vec<&'static str>,
     pub class_name: &'static str,
     constructor: Option<Constructor>,
     finalizer: Option<Box<dyn Fn(&i32) -> ()>>,
@@ -65,20 +68,22 @@ pub struct ProxyBuilder {
 thread_local! {
     static PROXY_INSTANCE_IDS: RefCell<HashMap<usize, i32>> = RefCell::new(HashMap::new());
     static PROXY_INSTANCE_CLASSNAMES: RefCell<HashMap<i32, String>> = RefCell::new(HashMap::new());
-    static PROXIES: RefCell<HashMap<&'static str, Arc<Proxy>>> = RefCell::new(HashMap::new());
+    static PROXIES: RefCell<HashMap<String, Arc<Proxy>>> = RefCell::new(HashMap::new());
 }
 
-pub fn get_proxy(name: &str) -> Option<Arc<Proxy>> {
+/// find a ref to a proxy, use full canonical name as key
+pub fn get_proxy(canonical_name: &str) -> Option<Arc<Proxy>> {
     // get proxy from PROXIES
-    PROXIES.with(|rc: &RefCell<HashMap<&'static str, Arc<Proxy>>>| {
-        let map: &HashMap<&str, Arc<Proxy>> = &*rc.borrow();
-        map.get(name).cloned()
+    PROXIES.with(|rc: &RefCell<HashMap<String, Arc<Proxy>>>| {
+        let map: &HashMap<String, Arc<Proxy>> = &*rc.borrow();
+        map.get(canonical_name).cloned()
     })
 }
 
 impl Proxy {
     fn new(cx: *mut JSContext, scope: HandleObject, builder: &mut ProxyBuilder) -> Arc<Self> {
         let mut ret = Proxy {
+            package: builder.package.clone(),
             class_name: builder.class_name,
             constructor: unsafe { replace(&mut builder.constructor, None) },
             finalizer: unsafe { replace(&mut builder.finalizer, None) },
@@ -136,13 +141,27 @@ impl Proxy {
 
         // todo if no constructor: create an object instead of a function
 
+        // todo get_or_define with rval
+        let pkg_obj =
+            crate::es_utils::objects::get_or_define_package(cx, scope, ret.package.clone());
+        rooted!(in (cx) let pkg_root = pkg_obj);
+
         let func: *mut mozjs::jsapi::JSFunction =
             crate::es_utils::functions::define_native_constructor(
                 cx,
-                scope,
+                pkg_root.handle(),
                 ret.class_name,
                 Some(proxy_construct),
             );
+
+        let cname = ret.get_canonical_name();
+        rooted!(in (cx) let cname_root = crate::es_utils::new_es_value_from_str(cx, cname.as_str()));
+        crate::es_utils::objects::set_es_obj_prop_val_permanent(
+            cx,
+            unsafe { HandleObject::from_marked_location(&(func as *mut JSObject)) },
+            PROXY_PROP_CLASS_NAME,
+            cname_root.handle(),
+        );
 
         ret.init_static_properties(cx, unsafe {
             mozjs::rust::HandleObject::from_marked_location(&(func as *mut JSObject))
@@ -156,17 +175,37 @@ impl Proxy {
 
         let ret_arc = Arc::new(ret);
 
-        PROXIES.with(|map_rc: &RefCell<HashMap<&'static str, Arc<Proxy>>>| {
+        PROXIES.with(|map_rc: &RefCell<HashMap<String, Arc<Proxy>>>| {
             let map = &mut *map_rc.borrow_mut();
-            map.insert(ret_arc.class_name, ret_arc.clone());
+            map.insert(ret_arc.get_canonical_name(), ret_arc.clone());
         });
 
         ret_arc
     }
 
-    pub fn _new_instance(_args: &[HandleValue]) -> *mut JSObject {
+    pub fn get_canonical_name(&self) -> String {
+        format!("{}.{}", self.package.join("."), self.class_name)
+    }
+
+    pub fn new_instance(
+        &self,
+        cx: *mut JSContext,
+        scope: HandleObject,
+        args: HandleValueArray,
+        return_handle: MutableHandleObject,
+    ) -> Result<(), EsErrorInfo> {
         // to be used for EsValueFacade::new_proxy()
-        panic!("NYI");
+        // we realy need a self.package to get the constructor
+
+        let package = vec!["a", "b", "Client"];
+        let constructor_obj = crate::es_utils::objects::get_or_define_package(cx, scope, package);
+        rooted!(in (cx) let constructor_root = ObjectValue(constructor_obj));
+        crate::es_utils::objects::new_from_constructor(
+            cx,
+            constructor_root.handle(),
+            args,
+            return_handle,
+        )
     }
 
     pub fn dispatch_event(
@@ -265,8 +304,9 @@ impl Proxy {
 }
 
 impl ProxyBuilder {
-    pub fn new(class_name: &'static str) -> Self {
+    pub fn new(package: Vec<&'static str>, class_name: &'static str) -> Self {
         ProxyBuilder {
+            package,
             class_name,
             constructor: None,
             finalizer: None,
@@ -365,6 +405,7 @@ mod tests {
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use log::debug;
     use mozjs::jsval::{Int32Value, UndefinedValue};
+    use mozjs::rust::HandleValue;
 
     #[test]
     fn test_proxy() {
@@ -374,7 +415,7 @@ mod tests {
         rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
                 sm_rt.do_with_jsapi(|_rt, cx, global| {
-                    let _proxy_arc = ProxyBuilder::new("TestClass1")
+                    let _proxy_arc = ProxyBuilder::new(vec![],"TestClass1")
                         .constructor(|cx: *mut JSContext, args: &Vec<HandleValue>| {
                             // this will run in the sm_rt workerthread so global is rooted here
                             debug!("proxytest: construct");
@@ -450,7 +491,7 @@ mod tests {
         rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
                 sm_rt.do_with_jsapi(|_rt, cx, global| {
-                    let _proxy_arc = ProxyBuilder::new("TestClass2")
+                    let _proxy_arc = ProxyBuilder::new(vec![],"TestClass2")
                         .static_property("foo", |_cx| {
                             debug!("static_proxy.get foo");
                             Ok(Int32Value(123))
@@ -802,7 +843,11 @@ pub fn get_proxy_for(cx: *mut JSContext, obj: *mut JSObject) -> Option<Arc<Proxy
 
 fn get_static_proxy_for(cx: *mut JSContext, obj: *mut JSObject) -> Option<Arc<Proxy>> {
     let obj_handle = unsafe { mozjs::rust::HandleObject::from_marked_location(&obj) };
-    let cn_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(cx, obj_handle, "name");
+    let cn_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+        cx,
+        obj_handle,
+        PROXY_PROP_CLASS_NAME,
+    );
     if let Ok(class_name) = cn_res {
         return PROXIES.with(|proxies_rc| {
             let proxies = &*proxies_rc.borrow();
@@ -1389,7 +1434,7 @@ unsafe extern "C" fn proxy_construct(
     let class_name = crate::es_utils::objects::get_es_obj_prop_val_as_string(
         cx,
         constructor_root.handle(),
-        "name",
+        PROXY_PROP_CLASS_NAME,
     )
     .ok()
     .unwrap();
