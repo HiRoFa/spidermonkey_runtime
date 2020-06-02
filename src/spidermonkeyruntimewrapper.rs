@@ -165,10 +165,10 @@ impl SmRuntime {
         func_name: &str,
         arguments: Vec<EsValueFacade>,
     ) -> Result<EsValueFacade, EsErrorInfo> {
-        self.do_with_jsapi(|rt, cx, global| {
+        self.do_with_jsapi(|rt, _cx, global| {
             trace!("smrt.call {} in thread {}", func_name, thread_id::get());
 
-            self.call_obj_method_name(rt, cx, global, global, obj_names, func_name, arguments)
+            self.call_obj_method_name(rt, global, global, obj_names, func_name, arguments)
         })
     }
 
@@ -288,7 +288,6 @@ impl SmRuntime {
     fn call_obj_method_name(
         &self,
         rt: &Runtime,
-        context: *mut JSContext,
         global: HandleObject,
         scope: HandleObject,
         obj_names: Vec<&str>,
@@ -296,6 +295,8 @@ impl SmRuntime {
         args: Vec<EsValueFacade>,
     ) -> Result<EsValueFacade, EsErrorInfo> {
         trace!("sm_rt.call_obj_method_name({}, ...)", function_name);
+
+        let context = rt.cx();
 
         rooted!(in(context) let mut rval = UndefinedValue());
         do_with_rooted_esvf_vec(context, args, |hva| {
@@ -904,7 +905,6 @@ mod tests {
 
                         let res = sm_rt.call_obj_method_name(
                             rt,
-                            cx,
                             global,
                             global,
                             vec!["myobj", "sub"],

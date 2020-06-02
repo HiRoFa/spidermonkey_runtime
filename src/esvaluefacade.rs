@@ -652,10 +652,8 @@ impl EsValueFacade {
             ObjectValue(obj)
         } else if self.is_prepped_promise() {
             trace!("to_es_value.7 prepped_promise");
-            let map: &mut HashMap<
-                usize,
-                Option<Either<Result<EsValueFacade, String>, (i32, Weak<EsRuntimeWrapperInner>)>>,
-            > = &mut PROMISE_ANSWERS.lock("to_es_value.7").unwrap();
+            let map: &mut HashMap<usize, PromiseResultContainer> =
+                &mut PROMISE_ANSWERS.lock("to_es_value.7").unwrap();
             let id = self.val_promise.as_ref().unwrap();
             if let Some(opt) = map.get(id) {
                 trace!("create promise");
@@ -738,14 +736,15 @@ impl EsValueFacade {
     }
 }
 
+type PromiseResultContainer =
+    Option<Either<Result<EsValueFacade, String>, (i32, Weak<EsRuntimeWrapperInner>)>>;
+
 impl Drop for EsValueFacade {
     fn drop(&mut self) {
         if self.is_prepped_promise() {
             // drop from map if val is None, task has not run yet and to_es_val was not called
-            let map: &mut HashMap<
-                usize,
-                Option<Either<Result<EsValueFacade, String>, (i32, Weak<EsRuntimeWrapperInner>)>>,
-            > = &mut PROMISE_ANSWERS.lock("EsValueFacade::drop").unwrap();
+            let map: &mut HashMap<usize, PromiseResultContainer> =
+                &mut PROMISE_ANSWERS.lock("EsValueFacade::drop").unwrap();
             let id = self.val_promise.as_ref().unwrap();
             if let Some(opt) = map.get(id) {
                 if opt.is_none() {
