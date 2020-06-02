@@ -1,30 +1,60 @@
 //!
-//! Welcome to the es_runtime crate
+//! # Welcome to the es_runtime crate
 //!
-//! es_runtime is aimed at making it possible for rust developers to integrate an ECMA-Script engine in their rust projects without having specialized knowledge about ECMA-Script engines.
+//! es_runtime is aimed at making it possible for rust developers to integrate a script engine in their rust projects without having specialized knowledge about that script engines.
 //!
-//! The engine used is the Mozilla SpiderMonkey engine (https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey).
+//! The engine used is Mozilla SpiderMonkey (https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey).
 //!
 //! There are basicly two ways of using this lib
 //!
-//! If you don't feel like using the JSAPI, which comes with quite a manual then you can use the utils in this project which use the EsValueFacade struct to pass variables around.
+//! ## Using EsValueFacade
 //!
-//! There is also number of utils which allow you to use the JSAPI, these can be accessed by calling EsRuntimeWrapper.do_in_es_runtime_thread(_sync)
+//! If you don't feel like using the JSAPI, which comes with quite a learning curve. then you can use the utils in this project which use the EsValueFacade struct to pass variables around.
 //!
-//! # Example
+//! ### Examples
+//!
+//! Using EsValueFacade:
+//!
+//! ```rust
+//!
+//! use es_runtime::esvaluefacade::EsValueFacade;
+//! use es_runtime::es_utils::EsErrorInfo;
+//! fn use_es_value_facade() {
+//!     let rt = es_runtime::esruntimewrapper::EsRuntimeWrapper::builder().build();
+//!     rt.eval_sync("let my_public_method = function(a, b){console.log(\"my_public_method called with: a=%s b=%s\", a, b);};", "my_script.es");
+//!     let a = EsValueFacade::new_str(format!("abc"));
+//!     let b = EsValueFacade::new_str(format!("def"));
+//!     let res: Result<EsValueFacade, EsErrorInfo> = rt.call_sync(vec![], "my_public_method", vec![a, b]);
+//!     assert!(res.is_ok());
+//! }
+//!
+//! ```
+//!
+//!
+//! ## Using JSAPI
+//!
+//! There is also number of utils which allow you to use the JSAPI, these can be accessed by calling EsRuntimeWrapper.do_in_es_runtime_thread(_sync).
+//!
+//! utils can be found in the es_runtime::es_utils package.
+//!
+//! ### Examples
+//!
+//! Using JSAPI:
 //!
 //! ```rust
 //!
 //! use mozjs::rust::{Runtime, HandleObject};
 //! use mozjs::jsapi::JSContext;
 //! use es_runtime::spidermonkeyruntimewrapper::SmRuntime;
-//! fn call_jsapi_stuff() {
+//!
+//! fn use_jsapi() {
 //!     let rt = es_runtime::esruntimewrapper::EsRuntimeWrapper::builder().build();
+//!     // first of all we need to run a closure in the worker thread for the engine
 //!     let res = rt.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
-//!     
+//!         // then we tell the SmRuntime we want to use the JSAPI
 //!         // do_with_jsapi does a couple of things
 //!         // 1.  root the global obj
-//!         // 2.   enter the correct Comparment using AutoCompartment        
+//!         // 2.   enter the correct Compartment using AutoCompartment        
 //!         sm_rt.do_with_jsapi(|runtime: &Runtime, context: *mut JSContext, global_handle: HandleObject| {
 //!
 //!             // work with JSAPI methods here
@@ -36,7 +66,6 @@
 //!
 //!     });
 //! }
-//!
 //! ```
 //!
 
