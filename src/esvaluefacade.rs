@@ -146,10 +146,8 @@ impl EsValueFacade {
 
         let id = {
             // locked scope
-            let map: &mut HashMap<
-                usize,
-                Option<Either<Result<EsValueFacade, String>, (i32, Weak<EsRuntimeWrapperInner>)>>,
-            > = &mut PROMISE_ANSWERS.lock("gen_id").unwrap();
+            let map: &mut HashMap<usize, PromiseResultContainerOption> =
+                &mut PROMISE_ANSWERS.lock("gen_id").unwrap();
 
             let mut rng = rand::thread_rng();
             let mut id = rng.gen();
@@ -167,17 +165,10 @@ impl EsValueFacade {
             trace!("running prom reso task for {}", id);
             let res = resolver();
             trace!("got prom result for {}, ok={}", id, res.is_ok());
-            let eith_opt: Option<(
-                Either<Result<EsValueFacade, String>, (i32, Weak<EsRuntimeWrapperInner>)>,
-                Result<EsValueFacade, String>,
-            )> = {
+            let either_opt: Option<(PromiseResultContainer, Result<EsValueFacade, String>)> = {
                 // locked scope
-                let map: &mut HashMap<
-                    usize,
-                    Option<
-                        Either<Result<EsValueFacade, String>, (i32, Weak<EsRuntimeWrapperInner>)>,
-                    >,
-                > = &mut PROMISE_ANSWERS.lock("in_task").unwrap();
+                let map: &mut HashMap<usize, PromiseResultContainerOption> =
+                    &mut PROMISE_ANSWERS.lock("in_task").unwrap();
 
                 if map.contains_key(&id) {
                     let val = map.get(&id).unwrap();
@@ -208,7 +199,7 @@ impl EsValueFacade {
                 }
             }; // end of locked scope
 
-            if let Some((eith, res)) = eith_opt {
+            if let Some((eith, res)) = either_opt {
                 if eith.is_right() {
                     // in our right we have a rooted promise and a weakref to our runtimeinner
                     let (prom_regged_id, weak_rt_ref) = eith.right().unwrap();
@@ -651,81 +642,7 @@ impl EsValueFacade {
 
             ObjectValue(obj)
         } else if self.is_prepped_promise() {
-            trace!("to_es_value.7 prepped_promise");
-            let map: &mut HashMap<usize, PromiseResultContainer> =
-                &mut PROMISE_ANSWERS.lock("to_es_value.7").unwrap();
-            let id = self.val_promise.as_ref().unwrap();
-            if let Some(opt) = map.get(id) {
-                trace!("create promise");
-                // create promise
-                let prom = es_utils::promises::new_promise(context);
-                trace!("rooting promise");
-                rooted!(in (context) let prom_root = prom);
-
-                if opt.is_none() {
-                    trace!("set rooted Promise obj and weakref in right");
-                    // set rooted Promise obj and weakref in right
-
-                    let (pid, rti_ref) =
-                        crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
-                            let sm_rt: &SmRuntime = &*sm_rt_rc.borrow();
-
-                            let pid = crate::spidermonkeyruntimewrapper::register_cached_object(
-                                context, prom,
-                            );
-
-                            let weakref = sm_rt.opt_es_rt_inner.as_ref().unwrap().clone();
-
-                            (pid, weakref)
-                        });
-                    map.insert(id.clone(), Some(Either::Right((pid, rti_ref))));
-                } else {
-                    trace!("remove eith from map and resolve promise with left");
-                    // remove eith from map and resolve promise with left
-                    let eith = map.remove(id).unwrap().unwrap();
-
-                    if eith.is_left() {
-                        let res = eith.left().unwrap();
-                        if res.is_ok() {
-                            rooted!(in (context) let res_root = res.ok().unwrap().to_es_value(context));
-                            let prom_reso_res = es_utils::promises::resolve_promise(
-                                context,
-                                prom_root.handle(),
-                                res_root.handle(),
-                            );
-                            if prom_reso_res.is_err() {
-                                panic!(
-                                    "could not resolve promise: {}",
-                                    prom_reso_res.err().unwrap().err_msg()
-                                );
-                            }
-                        } else {
-                            // reject prom
-                            let err_str = res.err().unwrap();
-                            let err_val =
-                                es_utils::new_es_value_from_str(context, err_str.as_str());
-                            rooted!(in (context) let res_root = err_val);
-
-                            let prom_reje_res = es_utils::promises::reject_promise(
-                                context,
-                                prom_root.handle(),
-                                res_root.handle(),
-                            );
-                            if prom_reje_res.is_err() {
-                                panic!(
-                                    "could not reject promise: {}",
-                                    prom_reje_res.err().unwrap().err_msg()
-                                );
-                            }
-                        }
-                    } else {
-                        panic!("eith had unexpected right for id {}", id);
-                    }
-                }
-                ObjectValue(prom)
-            } else {
-                panic!("PROMISE_ANSWERS had no val for id {}", id);
-            }
+            self.to_es_promise_value(context)
 
         // todo
         } else {
@@ -734,16 +651,92 @@ impl EsValueFacade {
             UndefinedValue()
         }
     }
+
+    fn to_es_promise_value(&self, context: *mut JSContext) -> JSVal {
+        trace!("to_es_value.7 prepped_promise");
+        let map: &mut HashMap<usize, PromiseResultContainerOption> =
+            &mut PROMISE_ANSWERS.lock("to_es_value.7").unwrap();
+        let id = self.val_promise.as_ref().unwrap();
+        if let Some(opt) = map.get(id) {
+            trace!("create promise");
+            // create promise
+            let prom = es_utils::promises::new_promise(context);
+            trace!("rooting promise");
+            rooted!(in (context) let prom_root = prom);
+
+            if opt.is_none() {
+                trace!("set rooted Promise obj and weakref in right");
+                // set rooted Promise obj and weakref in right
+
+                let (pid, rti_ref) = crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
+                    let sm_rt: &SmRuntime = &*sm_rt_rc.borrow();
+
+                    let pid =
+                        crate::spidermonkeyruntimewrapper::register_cached_object(context, prom);
+
+                    let weakref = sm_rt.opt_es_rt_inner.as_ref().unwrap().clone();
+
+                    (pid, weakref)
+                });
+                map.insert(id.clone(), Some(Either::Right((pid, rti_ref))));
+            } else {
+                trace!("remove eith from map and resolve promise with left");
+                // remove eith from map and resolve promise with left
+                let eith = map.remove(id).unwrap().unwrap();
+
+                if eith.is_left() {
+                    let res = eith.left().unwrap();
+                    if res.is_ok() {
+                        rooted!(in (context) let res_root = res.ok().unwrap().to_es_value(context));
+                        let prom_reso_res = es_utils::promises::resolve_promise(
+                            context,
+                            prom_root.handle(),
+                            res_root.handle(),
+                        );
+                        if prom_reso_res.is_err() {
+                            panic!(
+                                "could not resolve promise: {}",
+                                prom_reso_res.err().unwrap().err_msg()
+                            );
+                        }
+                    } else {
+                        // reject prom
+                        let err_str = res.err().unwrap();
+                        let err_val = es_utils::new_es_value_from_str(context, err_str.as_str());
+                        rooted!(in (context) let res_root = err_val);
+
+                        let prom_reje_res = es_utils::promises::reject_promise(
+                            context,
+                            prom_root.handle(),
+                            res_root.handle(),
+                        );
+                        if prom_reje_res.is_err() {
+                            panic!(
+                                "could not reject promise: {}",
+                                prom_reje_res.err().unwrap().err_msg()
+                            );
+                        }
+                    }
+                } else {
+                    panic!("eith had unexpected right for id {}", id);
+                }
+            }
+            ObjectValue(prom)
+        } else {
+            panic!("PROMISE_ANSWERS had no val for id {}", id);
+        }
+    }
 }
 
 type PromiseResultContainer =
-    Option<Either<Result<EsValueFacade, String>, (i32, Weak<EsRuntimeWrapperInner>)>>;
+    Either<Result<EsValueFacade, String>, (i32, Weak<EsRuntimeWrapperInner>)>;
+type PromiseResultContainerOption = Option<PromiseResultContainer>;
 
 impl Drop for EsValueFacade {
     fn drop(&mut self) {
         if self.is_prepped_promise() {
             // drop from map if val is None, task has not run yet and to_es_val was not called
-            let map: &mut HashMap<usize, PromiseResultContainer> =
+            let map: &mut HashMap<usize, PromiseResultContainerOption> =
                 &mut PROMISE_ANSWERS.lock("EsValueFacade::drop").unwrap();
             let id = self.val_promise.as_ref().unwrap();
             if let Some(opt) = map.get(id) {
