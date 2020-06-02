@@ -45,15 +45,11 @@ thread_local! {
         { RefCell::new(HashMap::new()) };
 }
 
+type PromiseAnswersMap = HashMap<usize, PromiseResultContainerOption>;
+
 lazy_static! {
-    static ref PROMISE_ANSWERS: Arc<
-        DebugMutex<
-            HashMap<
-                usize,
-                Option<Either<Result<EsValueFacade, String>, (i32, Weak<EsRuntimeWrapperInner>)>>,
-            >,
-        >,
-    > = Arc::new(DebugMutex::new(HashMap::new(), "PROMISE_ANSWERS"));
+    static ref PROMISE_ANSWERS: Arc<DebugMutex<PromiseAnswersMap>> =
+        Arc::new(DebugMutex::new(HashMap::new(), "PROMISE_ANSWERS"));
 }
 
 impl EsValueFacade {
@@ -146,8 +142,7 @@ impl EsValueFacade {
 
         let id = {
             // locked scope
-            let map: &mut HashMap<usize, PromiseResultContainerOption> =
-                &mut PROMISE_ANSWERS.lock("gen_id").unwrap();
+            let map: &mut PromiseAnswersMap = &mut PROMISE_ANSWERS.lock("gen_id").unwrap();
 
             let mut rng = rand::thread_rng();
             let mut id = rng.gen();
@@ -167,8 +162,7 @@ impl EsValueFacade {
             trace!("got prom result for {}, ok={}", id, res.is_ok());
             let either_opt: Option<(PromiseResultContainer, Result<EsValueFacade, String>)> = {
                 // locked scope
-                let map: &mut HashMap<usize, PromiseResultContainerOption> =
-                    &mut PROMISE_ANSWERS.lock("in_task").unwrap();
+                let map: &mut PromiseAnswersMap = &mut PROMISE_ANSWERS.lock("in_task").unwrap();
 
                 if map.contains_key(&id) {
                     let val = map.get(&id).unwrap();
@@ -654,8 +648,7 @@ impl EsValueFacade {
 
     fn to_es_promise_value(&self, context: *mut JSContext) -> JSVal {
         trace!("to_es_value.7 prepped_promise");
-        let map: &mut HashMap<usize, PromiseResultContainerOption> =
-            &mut PROMISE_ANSWERS.lock("to_es_value.7").unwrap();
+        let map: &mut PromiseAnswersMap = &mut PROMISE_ANSWERS.lock("to_es_value.7").unwrap();
         let id = self.val_promise.as_ref().unwrap();
         if let Some(opt) = map.get(id) {
             trace!("create promise");
@@ -736,7 +729,7 @@ impl Drop for EsValueFacade {
     fn drop(&mut self) {
         if self.is_prepped_promise() {
             // drop from map if val is None, task has not run yet and to_es_val was not called
-            let map: &mut HashMap<usize, PromiseResultContainerOption> =
+            let map: &mut PromiseAnswersMap =
                 &mut PROMISE_ANSWERS.lock("EsValueFacade::drop").unwrap();
             let id = self.val_promise.as_ref().unwrap();
             if let Some(opt) = map.get(id) {

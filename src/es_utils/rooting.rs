@@ -38,11 +38,8 @@ impl EsPersistentRooted {
         self.heap_obj.get()
     }
 
-    //pub fn handle(&self) -> mozjs::rust::Handle<*mut mozjs::jsapi::JSObject> {
-    //    unsafe { mozjs::rust::Handle::from_marked_location(self.get() as *const _) }
-    // }
-
-    #[allow(unsafe_code)]
+    /// # Safety
+    /// be safe :)
     pub unsafe fn init(&mut self, cx: *mut JSContext, js_obj: *mut JSObject) {
         self.heap_obj.set(js_obj);
         self.permanent_js_root.set(ObjectValue(js_obj));
@@ -57,7 +54,6 @@ impl EsPersistentRooted {
 }
 
 impl Drop for EsPersistentRooted {
-    #[allow(unsafe_code)]
     fn drop(&mut self) {
         unsafe {
             let cx = Runtime::get();
