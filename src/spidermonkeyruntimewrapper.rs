@@ -23,7 +23,7 @@ use mozjs::jsapi::OnNewGlobalHookOption;
 use mozjs::jsapi::SetJobQueue;
 use mozjs::jsapi::SetModuleResolveHook;
 use mozjs::jsapi::JS::HandleValueArray;
-use mozjs::jsval::{NullValue, ObjectValue, UndefinedValue};
+use mozjs::jsval::{JSVal, NullValue, ObjectValue, UndefinedValue};
 use mozjs::panic::wrap_panic;
 use mozjs::rust::wrappers::JS_CallFunctionValue;
 use mozjs::rust::HandleObject;
@@ -44,16 +44,20 @@ use std::str;
 use std::sync::{Arc, Weak};
 
 /// the type for registering rust_ops in the script engine
+// todo remove
 pub type OP = Arc<
     dyn Fn(&EsRuntimeWrapperInner, Vec<EsValueFacade>) -> Result<EsValueFacade, String>
         + Send
         + Sync,
 >;
 
+pub type GlobalOp = dyn Fn(*mut JSContext, CallArgs) -> bool + Send + 'static;
+
 /// wrapper for the SpiderMonkey runtime
 pub struct SmRuntime {
     runtime: mozjs::rust::Runtime,
     global_obj: *mut JSObject,
+    // todo remove
     op_container: HashMap<String, OP>,
     pub(crate) opt_es_rt_inner: Option<Weak<EsRuntimeWrapperInner>>,
 }
@@ -62,6 +66,7 @@ thread_local! {
     /// the thread-local SpiderMonkeyRuntime
     /// this only exists for the worker thread of the MicroTaskManager
     pub(crate) static SM_RT: RefCell<SmRuntime> = RefCell::new(SmRuntime::new());
+    static GLOBAL_OPS: RefCell<HashMap<&'static str, Box<GlobalOp>>> = RefCell::new(HashMap::new());
 }
 
 impl SmRuntime {
@@ -77,6 +82,46 @@ impl SmRuntime {
         SM_RT.with(|sm_rt_rc| {
             let sm_rt = &*sm_rt_rc.borrow();
             sm_rt.clone_rtw_inner()
+        })
+    }
+
+    /// add a function to the global object
+    /// this function will be callable from javascript just by using func_name();
+    /// # Example
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use mozjs::jsval::Int32Value;
+    /// use mozjs::jsapi::CallArgs;
+    /// fn add_global_function_example(){
+    ///     let rt = EsRuntimeWrapperBuilder::new().build();
+    ///     rt.do_in_es_runtime_thread_sync(|sm_rt| {
+    ///         sm_rt.add_global_function("my_function", |_cx, args: CallArgs| {
+    ///             // impl method here
+    ///             args.rval().set(Int32Value(480));
+    ///             true
+    ///         });
+    ///     });
+    ///     let esvf = rt.eval_sync("my_function();", "test_add_global_function_example.es").ok().expect("test_add_global_function_example failed");
+    ///     assert_eq!(esvf.get_i32(), &480);
+    /// }
+    /// ```
+    pub fn add_global_function<F>(&self, name: &'static str, func: F)
+    where
+        F: Fn(*mut JSContext, CallArgs) -> bool + Send + 'static,
+    {
+        GLOBAL_OPS.with(move |global_ops_rc| {
+            let global_ops = &mut *global_ops_rc.borrow_mut();
+            global_ops.insert(name, Box::new(func));
+        });
+
+        self.do_with_jsapi(|_rt, cx, global| {
+            // reg function
+            es_utils::functions::define_native_function(
+                cx,
+                global,
+                name,
+                Some(global_op_native_method),
+            );
         })
     }
 
@@ -369,6 +414,33 @@ impl SmRuntime {
         }
         ret
     }
+}
+
+unsafe extern "C" fn global_op_native_method(
+    cx: *mut JSContext,
+    argc: u32,
+    vp: *mut mozjs::jsapi::Value,
+) -> bool {
+    // todo get name from callee, get global op, invoke
+
+    let args = CallArgs::from_vp(vp, argc);
+    let callee: *mut JSObject = args.callee();
+    let prop_name_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+        cx,
+        HandleObject::from_marked_location(&callee),
+        "name",
+    );
+    if let Ok(prop_name) = prop_name_res {
+        return GLOBAL_OPS.with(|global_ops_rc| {
+            let global_ops = &*global_ops_rc.borrow();
+            let boxed_op = global_ops
+                .get(prop_name.as_str())
+                .expect("could not find op");
+            boxed_op(cx, args)
+        });
+    }
+
+    false
 }
 
 thread_local! {
