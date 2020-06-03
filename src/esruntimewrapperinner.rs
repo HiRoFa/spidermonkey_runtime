@@ -6,9 +6,6 @@ use crate::spidermonkeyruntimewrapper::SmRuntime;
 use log::{debug, trace};
 use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::JS_ReportErrorASCII;
-use mozjs::jsval::JSVal;
-use mozjs::rust::HandleValue;
-use std::rc::Rc;
 use std::sync::Arc;
 
 pub struct EsRuntimeWrapperInner {
