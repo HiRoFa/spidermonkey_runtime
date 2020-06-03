@@ -23,7 +23,7 @@ use mozjs::jsapi::OnNewGlobalHookOption;
 use mozjs::jsapi::SetJobQueue;
 use mozjs::jsapi::SetModuleResolveHook;
 use mozjs::jsapi::JS::HandleValueArray;
-use mozjs::jsval::{JSVal, NullValue, ObjectValue, UndefinedValue};
+use mozjs::jsval::{NullValue, ObjectValue, UndefinedValue};
 use mozjs::panic::wrap_panic;
 use mozjs::rust::wrappers::JS_CallFunctionValue;
 use mozjs::rust::HandleObject;
