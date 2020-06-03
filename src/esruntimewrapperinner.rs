@@ -198,8 +198,7 @@ impl EsRuntimeWrapperInner {
 
                 let func_rc_clone = func_rc.clone();
                 let prom_res_esvf = EsValueFacade::new_promise(move || {
-                    let func_res = func_rc_clone(args_vec);
-                    func_res
+                    func_rc_clone(args_vec)
                 });
                 args.rval().set(prom_res_esvf.to_es_value(cx));
                 true
