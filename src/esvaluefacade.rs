@@ -19,15 +19,13 @@ use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-/// the EsValueFacade is a converter between rust variables and script objects
-/// when receiving a EsValueFacade from the script engine it's data is always a clone from the actual data so we need not worry about the value being garbage collected
-///
-
 struct RustManagedEsVar {
     obj_id: i32,
     opt_receiver: Option<Receiver<Result<EsValueFacade, EsValueFacade>>>,
 }
 
+/// the EsValueFacade is a converter between rust variables and script objects
+/// when receiving a EsValueFacade from the script engine it's data is always a clone from the actual data so we need not worry about the value being garbage collected
 pub struct EsValueFacade {
     val_string: Option<String>,
     val_i32: Option<i32>,
@@ -66,6 +64,7 @@ impl EsValueFacade {
         })
     }
 
+    /// create a new EsValueFacade representing an undefined value
     pub fn undefined() -> Self {
         EsValueFacade {
             val_string: None,
@@ -80,42 +79,49 @@ impl EsValueFacade {
         }
     }
 
+    /// create a new EsValueFacade representing a float
     pub fn new_f64(num: f64) -> Self {
         let mut ret = Self::undefined();
         ret.val_f64 = Some(num);
         ret
     }
 
+    /// create a new EsValueFacade representing a basic object with properties as defined in the HashMap
     pub fn new_obj(props: HashMap<String, EsValueFacade>) -> Self {
         let mut ret = Self::undefined();
         ret.val_object = Some(props);
         ret
     }
 
+    /// create a new EsValueFacade representing a signed integer
     pub fn new_i32(num: i32) -> Self {
         let mut ret = Self::undefined();
         ret.val_i32 = Some(num);
         ret
     }
 
+    /// create a new EsValueFacade representing a String
     pub fn new_str(s: String) -> Self {
         let mut ret = Self::undefined();
         ret.val_string = Some(s);
         ret
     }
 
+    /// create a new EsValueFacade representing a bool
     pub fn new_bool(b: bool) -> Self {
         let mut ret = Self::undefined();
         ret.val_boolean = Some(b);
         ret
     }
 
+    /// create a new EsValueFacade representing an Array
     pub fn new_array(vals: Vec<EsValueFacade>) -> Self {
         let mut ret = Self::undefined();
         ret.val_array = Some(vals);
         ret
     }
 
+    /// create a new EsValueFacade representing a Promise, the passed closure will actually run in a seperate helper thread and resolve the Promise that is created in the script runtime
     pub fn new_promise<C>(resolver: C) -> EsValueFacade
     where
         C: FnOnce() -> Result<EsValueFacade, String> + Send + 'static,

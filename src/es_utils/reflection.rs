@@ -383,6 +383,7 @@ impl Proxy {
     }
 }
 
+/// Builder struct to create a Proxy object in script
 impl ProxyBuilder {
     pub fn new(namespace: Vec<&'static str>, class_name: &'static str) -> Self {
         ProxyBuilder {
@@ -401,6 +402,8 @@ impl ProxyBuilder {
         }
     }
 
+    /// function to call when the Proxy is constructed
+    /// please not that if you do not add a constructor you can only use the static methods, getters, setters and events
     pub fn constructor<C>(&mut self, constructor: C) -> &mut Self
     where
         C: Fn(*mut JSContext, &Vec<HandleValue>) -> Result<i32, String> + 'static,
@@ -409,6 +412,8 @@ impl ProxyBuilder {
         self
     }
 
+    /// this closure is called when the instance of the Proxy is garbage collected,
+    /// you should use this to cleanup anny instances you may have created in rust
     pub fn finalizer<F>(&mut self, finalizer: F) -> &mut Self
     where
         F: Fn(&i32) -> () + 'static,
@@ -417,6 +422,7 @@ impl ProxyBuilder {
         self
     }
 
+    /// add a getter and setter
     pub fn property<G, S>(&mut self, name: &'static str, getter: G, setter: S) -> &mut Self
     where
         G: Fn(*mut JSContext, i32) -> Result<JSVal, String> + 'static,
@@ -427,6 +433,7 @@ impl ProxyBuilder {
         self
     }
 
+    /// add a static getter and setter
     pub fn static_property<G, S>(&mut self, name: &'static str, getter: G, setter: S) -> &mut Self
     where
         G: Fn(*mut JSContext) -> Result<JSVal, String> + 'static,
@@ -437,6 +444,7 @@ impl ProxyBuilder {
         self
     }
 
+    /// add a method
     pub fn method<M>(&mut self, name: &'static str, method: M) -> &mut Self
     where
         M: Fn(*mut JSContext, i32, &Vec<HandleValue>) -> Result<JSVal, String> + 'static,
@@ -445,11 +453,13 @@ impl ProxyBuilder {
         self
     }
 
+    /// add a native method
     pub fn native_method<M>(&mut self, name: &'static str, method: JSNative) -> &mut Self {
         self.native_methods.insert(name, method);
         self
     }
 
+    /// add a static method
     pub fn static_method<M>(&mut self, name: &'static str, method: M) -> &mut Self
     where
         M: Fn(*mut JSContext, &Vec<HandleValue>) -> Result<JSVal, String> + 'static,
@@ -899,11 +909,13 @@ unsafe extern "C" fn proxy_static_getter(
     true
 }
 
+/// retrieve the object ID for an instance of a Proxy class
 pub fn get_obj_id_for(cx: *mut JSContext, obj: *mut JSObject) -> i32 {
     let obj_handle = unsafe { mozjs::rust::HandleObject::from_marked_location(&obj) };
     crate::es_utils::objects::get_es_obj_prop_val_as_i32(cx, obj_handle, PROXY_PROP_OBJ_ID)
 }
 
+/// Get the Proxy of which an object is an instance
 pub fn get_proxy_for(cx: *mut JSContext, obj: *mut JSObject) -> Option<Arc<Proxy>> {
     let obj_handle = unsafe { mozjs::rust::HandleObject::from_marked_location(&obj) };
     let cn_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
