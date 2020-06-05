@@ -21,9 +21,9 @@ this.esses = new (class Esses {
             // we also store the promise in a Map so it is not garbage collected
             this._registered_promises.set(id, prom);
 
-            setImmediate(function(prom, id) {
+            setImmediate(function() {
                 esses.register_waitfor_promise(prom, id);
-            }, prom, id);
+            });
             return id;
         } else {
             throw Error("value pass to registerPromiseForResolutionInRust was not a Promise [" + typeof prom + "]");

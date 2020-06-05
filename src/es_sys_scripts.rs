@@ -6,18 +6,6 @@ pub(crate) fn init_es(rt: &EsRuntimeWrapper) {
         "es_sys_scripts/es_01_core.es",
         include_str!("es_sys_scripts/es_01_core.es"),
     );
-
-    init_file(
-        rt,
-        "es_sys_scripts/es_02_async.es",
-        include_str!("es_sys_scripts/es_02_async.es"),
-    );
-
-    init_file(
-        rt,
-        "es_sys_scripts/es_03_promises.es",
-        include_str!("es_sys_scripts/es_03_promises.es"),
-    );
 }
 
 fn init_file(runtime: &EsRuntimeWrapper, file_name: &str, es_code: &str) {
