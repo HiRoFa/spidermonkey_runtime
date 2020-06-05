@@ -20,15 +20,15 @@ use mozjs::rust::{
 };
 use std::ptr;
 
-pub fn get_or_define_package(
+pub fn get_or_define_namespace(
     context: *mut JSContext,
     obj: HandleObject,
-    path: Vec<&str>,
+    namespace: Vec<&str>,
 ) -> *mut JSObject {
     trace!("get_or_define_package");
 
     let mut cur_obj = *obj;
-    for name in path {
+    for name in namespace {
         trace!("get_or_define_package, loop step: {}", name);
 
         rooted!(in(context) let mut cur_root = cur_obj);
@@ -276,7 +276,7 @@ pub fn set_es_obj_prop_val_permanent(
 mod tests {
     use crate::es_utils;
     use crate::es_utils::objects::{
-        get_es_obj_prop_val, get_js_obj_prop_names, get_or_define_package,
+        get_es_obj_prop_val, get_js_obj_prop_names, get_or_define_namespace,
     };
     use crate::es_utils::{es_value_to_str, report_es_ex};
     use crate::esruntimewrapper::EsRuntimeWrapper;
@@ -408,8 +408,8 @@ mod tests {
         let rt: &EsRuntimeWrapper = rt_arc.borrow();
         let res = rt.do_in_es_runtime_thread_sync(|sm_rt| {
             sm_rt.do_with_jsapi(|_rt, cx, global| {
-                get_or_define_package(cx, global, vec!["test_get_or_define_package", "a", "b"]);
-                get_or_define_package(cx, global, vec!["test_get_or_define_package", "a", "c"]);
+                get_or_define_namespace(cx, global, vec!["test_get_or_define_package", "a", "b"]);
+                get_or_define_namespace(cx, global, vec!["test_get_or_define_package", "a", "c"]);
             });
 
             true

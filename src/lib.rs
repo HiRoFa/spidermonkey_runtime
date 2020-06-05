@@ -30,6 +30,23 @@
 //!
 //! ```
 //!
+//! you can also define a function in rust that may be called from script
+//!
+//! ```rust
+//!
+//! use es_runtime::esvaluefacade::EsValueFacade;
+//! fn define_function(){
+//!     let rt = es_runtime::esruntimewrapper::EsRuntimeWrapper::builder().build();
+//!     // using the async variant means the function will return as a Promise
+//!     rt.add_global_async_function("my_function", |args: Vec<EsValueFacade>| {
+//!          println!("rust closure was called from script");
+//!          Ok(EsValueFacade::undefined())
+//!     });
+//!     rt.eval_sync("my_function();", "define_function.es").ok().unwrap();
+//! }
+//!
+//! ```
+//!
 //!
 //! ## Using JSAPI
 //!
@@ -62,7 +79,15 @@
 //!     
 //!             // return a value
 //!             true
-//!         })
+//!         });
+//!
+//!         // you can also define a global function which can be called from script
+//!         sm_rt.add_global_function("my_function", |_cx, _callargs| {
+//!              println!("rust function was called from script");
+//!              true
+//!         });
+//!
+//!         true
 //!
 //!     });
 //! }

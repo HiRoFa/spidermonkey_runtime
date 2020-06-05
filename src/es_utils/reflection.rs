@@ -1,3 +1,83 @@
+//!
+//! # Reflection
+//!
+//! Using rust data from script
+//!
+//! U can use the Proxy struct in es_utils::reflection to create a proxy object
+//!
+//! ```rust
+//! use mozjs::rooted;
+//! use mozjs::rust::HandleValue;
+//! use mozjs::jsval::{Int32Value, UndefinedValue};
+//! use mozjs::jsapi::JSContext;
+//! use es_runtime::es_utils;
+//! use log::debug;
+//! use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+//! fn test_proxy() {
+//!     let rt = EsRuntimeWrapperBuilder::new().build();
+//!     rt.do_in_es_runtime_thread_sync(|sm_rt| {
+//!         sm_rt.do_with_jsapi(|_rt, cx, global|{
+//!             let proxy_arc = es_utils::reflection::ProxyBuilder::new(vec![], "TestClass1")
+//!             // if you want to create a proxy that can be constructed you need to pass a constructor
+//!             // you need to generate an id here for your object
+//!             // if you don't pass a constructor you can only use the static_* methods to create events, properties and methods
+//!            .constructor(|_cx: *mut JSContext, args: &Vec<HandleValue>| {
+//!                // this will run in the sm_rt workerthread so global is rooted here
+//!                debug!("proxytest: construct");
+//!                Ok(1)
+//!            })
+//!            // create a property and pass a closure for the get and set action
+//!            .property("foo", |_cx, obj_id| {
+//!                debug!("proxy.get foo {}", obj_id);
+//!                Ok(Int32Value(123))
+//!            }, |_cx, obj_id, _val| {
+//!                debug!("proxy.set foo {}", obj_id);
+//!                Ok(())
+//!            })
+//!            // the finalizer is called when the instance is garbage collected, use this to drop your own object in rust
+//!            .finalizer(|id: &i32| {
+//!                debug!("proxytest: finalize id {}", id);
+//!            })
+//!            // a method for your instance
+//!            .method("methodA", |_cx, obj_id, args| {
+//!                debug!("proxy.methodA called for obj {} with {} args", obj_id, args.len());
+//!                Ok(UndefinedValue())
+//!            })
+//!            // and an event that may be dispatched
+//!            .event("saved")
+//!            // when done build your proxy
+//!            .build(cx, global);
+//!        
+//!
+//!                let esvf = sm_rt.eval(
+//!                "// create a new instance of your Proxy\n\
+//!                     let tp_obj = new TestClass1('bar'); \n\
+//!                 // you can set props that are not proxied \n\
+//!                     tp_obj.abc = 1; console.log('tp_obj.abc = %s', tp_obj.abc); \n\
+//!                // test you getter and setter\n\
+//!                    let i = tp_obj.foo; tp_obj.foo = 987; \n\
+//!                // test your method\n\
+//!                    tp_obj.methodA(1, 2, 3); \n\
+//!                // add an event listener\n\
+//!                     tp_obj.addEventListener('saved', (evt) => {console.log('tp_obj was saved');}); \n\
+//!                // dispatch an event from script\n\
+//!                    tp_obj.dispatchEvent('saved', {}); \n\
+//!                // allow you object to be GCed\n\
+//!                    tp_obj = null; i;",
+//!                "test_proxy.es",
+//!            ).ok().unwrap();
+//!
+//!            assert_eq!(&123, esvf.get_i32());
+//!  
+//!            // dispatch event from rust
+//!            rooted!(in (cx) let event_obj_root = UndefinedValue());
+//!            proxy_arc.dispatch_event(1, "saved", cx, event_obj_root.handle().into());
+//!     });
+//! })
+//!}
+//! ```
+//!
+
 use crate::es_utils::rooting::EsPersistentRooted;
 use crate::es_utils::{es_jsid_to_string, EsErrorInfo};
 
@@ -32,7 +112,7 @@ pub type StaticMethod = Box<dyn Fn(*mut JSContext, &Vec<HandleValue>) -> Result<
 
 /// create a class def in the runtime which constructs and calls methods in a rust proxy
 pub struct Proxy {
-    pub package: Vec<&'static str>,
+    pub namespace: Vec<&'static str>,
     pub class_name: &'static str,
     constructor: Option<Constructor>,
     finalizer: Option<Box<dyn Fn(&i32) -> ()>>,
@@ -51,7 +131,7 @@ pub struct Proxy {
 }
 
 pub struct ProxyBuilder {
-    pub package: Vec<&'static str>,
+    pub namespace: Vec<&'static str>,
     pub class_name: &'static str,
     constructor: Option<Constructor>,
     finalizer: Option<Box<dyn Fn(&i32) -> ()>>,
@@ -83,7 +163,7 @@ pub fn get_proxy(canonical_name: &str) -> Option<Arc<Proxy>> {
 impl Proxy {
     fn new(cx: *mut JSContext, scope: HandleObject, builder: &mut ProxyBuilder) -> Arc<Self> {
         let mut ret = Proxy {
-            package: builder.package.clone(),
+            namespace: builder.namespace.clone(),
             class_name: builder.class_name,
             constructor: unsafe { replace(&mut builder.constructor, None) },
             finalizer: unsafe { replace(&mut builder.finalizer, None) },
@@ -143,7 +223,7 @@ impl Proxy {
 
         // todo get_or_define with rval
         let pkg_obj =
-            crate::es_utils::objects::get_or_define_package(cx, scope, ret.package.clone());
+            crate::es_utils::objects::get_or_define_namespace(cx, scope, ret.namespace.clone());
         rooted!(in (cx) let pkg_root = pkg_obj);
 
         let func: *mut mozjs::jsapi::JSFunction =
@@ -184,7 +264,7 @@ impl Proxy {
     }
 
     pub fn get_canonical_name(&self) -> String {
-        format!("{}.{}", self.package.join("."), self.class_name)
+        format!("{}.{}", self.namespace.join("."), self.class_name)
     }
 
     pub fn new_instance(
@@ -195,10 +275,10 @@ impl Proxy {
         return_handle: MutableHandleObject,
     ) -> Result<(), EsErrorInfo> {
         // to be used for EsValueFacade::new_proxy()
-        // we realy need a self.package to get the constructor
 
-        let package = vec!["a", "b", "Client"];
-        let constructor_obj = crate::es_utils::objects::get_or_define_package(cx, scope, package);
+        let namespace = vec!["a", "b", "Client"];
+        let constructor_obj =
+            crate::es_utils::objects::get_or_define_namespace(cx, scope, namespace);
         rooted!(in (cx) let constructor_root = ObjectValue(constructor_obj));
         crate::es_utils::objects::new_from_constructor(
             cx,
@@ -304,9 +384,9 @@ impl Proxy {
 }
 
 impl ProxyBuilder {
-    pub fn new(package: Vec<&'static str>, class_name: &'static str) -> Self {
+    pub fn new(namespace: Vec<&'static str>, class_name: &'static str) -> Self {
         ProxyBuilder {
-            package,
+            namespace,
             class_name,
             constructor: None,
             finalizer: None,
@@ -419,13 +499,13 @@ mod tests {
                         .constructor(|cx: *mut JSContext, args: &Vec<HandleValue>| {
                             // this will run in the sm_rt workerthread so global is rooted here
                             debug!("proxytest: construct");
-                            let foo = if !args.is_empty() {
+                            let name = if !args.is_empty() {
                                 let hv = args.get(0).unwrap();
                                 es_value_to_str(cx, **hv).ok().unwrap()
                             } else {
                                 "NoName".to_string()
                             };
-                            debug!("proxytest: construct with name {}", foo);
+                            debug!("proxytest: construct with name {}", name);
                             Ok(1)
                         })
                         .property("foo", |_cx, obj_id| {

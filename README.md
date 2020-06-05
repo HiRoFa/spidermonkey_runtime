@@ -7,7 +7,6 @@ The engine used is the Mozilla SpiderMonkey engine (https://developer.mozilla.or
 This project started as a hobby project for me to learn rust. I hope some of you find it useful to learn about using spidermonkey from rust.
 
 * [DOCS](https://drfos.github.io/es_runtime/es_runtime/index.html)
-* [TUTORIALS](docs/HOWTO.md)
 
 # Status
 
@@ -132,46 +131,11 @@ my_app.rs
             .ok()
             .unwrap();
 
-        // register a native rust method
-
-        rt.register_op(
-            "my_rusty_op",
-            Arc::new(|_rt, args: Vec<EsValueFacade>| {
-                let a = args.get(0).unwrap().get_i32();
-                let b = args.get(1).unwrap().get_i32();
-                Ok(EsValueFacade::new_i32(a * b))
-            }),
-        );
-
-        // call the rust method from ES
-
-        rt.eval_sync(
-            "this.myObj.c = esses.invoke_rust_op_sync('my_rusty_op', 3, 7);",
-            "test2.es",
-        )
-        .ok()
-        .unwrap();
-
-        let c: Result<EsValueFacade, EsErrorInfo> =
-            rt.eval_sync("(this.myObj.c);", "test3.es");
-
-        assert_eq!(&21, c.ok().unwrap().get_i32());
-
-        // define an ES method and calling it from rust
-
-        rt.eval_sync("this.my_method = (a, b) => {return a * b;};", "test4.es")
-            .ok()
-            .unwrap();
-
-        let args = vec![EsValueFacade::new_i32(12), EsValueFacade::new_i32(5)];
-        let c_res: Result<EsValueFacade, EsErrorInfo> = rt.call_sync("my_method", args);
-        let c: EsValueFacade = c_res.ok().unwrap();
-        assert_eq!(&60, c.get_i32());
     }
 
-
-
 ```
+
+For a basic getting started you should see the examples in the [DOCS](https://drfos.github.io/es_runtime/es_runtime/index.html#examples)
 
 # A word on compiling
 
