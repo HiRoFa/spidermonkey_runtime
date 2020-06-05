@@ -47,7 +47,7 @@
 //!            .event("saved")
 //!            // when done build your proxy
 //!            .build(cx, global);
-//!        
+//!
 //!
 //!                let esvf = sm_rt.eval(
 //!                "// create a new instance of your Proxy\n\
@@ -68,7 +68,7 @@
 //!            ).ok().unwrap();
 //!
 //!            assert_eq!(&123, esvf.get_i32());
-//!  
+//!
 //!            // dispatch event from rust
 //!            rooted!(in (cx) let event_obj_root = UndefinedValue());
 //!            proxy_arc.dispatch_event(1, "saved", cx, event_obj_root.handle().into());
