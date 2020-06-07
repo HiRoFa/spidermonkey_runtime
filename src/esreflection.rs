@@ -38,17 +38,19 @@ use crate::esruntimewrapper::EsRuntimeWrapper;
 use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
 use crate::esvaluefacade::EsValueFacade;
 use mozjs::jsval::JSVal;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::ptr::replace;
 
 pub type EsProxyConstructor = dyn Fn(Vec<EsValueFacade>) -> Result<i32, String> + Send;
 pub type EsProxyMethod = dyn Fn(i32, Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send;
+pub type EsProxyFinalizer = dyn Fn(i32) -> () + Send;
+/*
 pub type EsProxyGetter = dyn Fn(i32) -> Result<EsValueFacade, String> + Send;
 pub type EsProxySetter = dyn Fn(i32, EsValueFacade) -> Result<(), String> + Send;
-pub type EsProxyFinalizer = dyn Fn(i32) -> () + Send;
 pub type EsProxyStaticMethod = dyn Fn(Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send;
 pub type EsProxyStaticGetter = dyn Fn() -> Result<EsValueFacade, String> + Send;
 pub type EsProxyStaticSetter = dyn Fn(EsValueFacade) -> Result<(), String> + Send;
+ */
 
 pub struct EsProxy {
     namespace: Vec<&'static str>,
@@ -60,14 +62,13 @@ pub struct EsProxyBuilder {
     pub class_name: &'static str,
     constructor: Option<Box<EsProxyConstructor>>,
     finalizer: Option<Box<EsProxyFinalizer>>,
-    properties: HashMap<&'static str, (Box<EsProxyGetter>, Box<EsProxySetter>)>,
-
     methods: HashMap<&'static str, Box<EsProxyMethod>>,
+    /*properties: HashMap<&'static str, (Box<EsProxyGetter>, Box<EsProxySetter>)>,
     events: HashSet<&'static str>,
-    static_properties: HashMap<&'static str, (Box<EsProxyStaticGetter>, Box<EsProxyStaticSetter>)>,
 
+    static_properties: HashMap<&'static str, (Box<EsProxyStaticGetter>, Box<EsProxyStaticSetter>)>,
     static_methods: HashMap<&'static str, Box<EsProxyStaticMethod>>,
-    static_events: HashSet<&'static str>,
+    static_events: HashSet<&'static str>,*/
 }
 
 impl EsProxy {
@@ -120,12 +121,12 @@ impl EsProxyBuilder {
             class_name,
             constructor: None,
             finalizer: None,
-            properties: Default::default(),
             methods: Default::default(),
+            /*properties: Default::default(),
             events: Default::default(),
             static_properties: Default::default(),
             static_methods: Default::default(),
-            static_events: Default::default(),
+            static_events: Default::default(),*/
         }
     }
     pub fn constructor<C>(&mut self, constructor: C) -> &mut Self
