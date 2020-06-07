@@ -21,7 +21,7 @@
 //!             // if you want to create a proxy that can be constructed you need to pass a constructor
 //!             // you need to generate an id here for your object
 //!             // if you don't pass a constructor you can only use the static_* methods to create events, properties and methods
-//!            .constructor(|_cx: *mut JSContext, args: &Vec<HandleValue>| {
+//!            .constructor(|_cx: *mut JSContext, args: Vec<HandleValue>| {
 //!                // this will run in the sm_rt workerthread so global is rooted here
 //!                debug!("proxytest: construct");
 //!                Ok(1)
@@ -102,13 +102,13 @@ use std::collections::{HashMap, HashSet};
 use std::ptr::replace;
 use std::sync::Arc;
 
-pub type Constructor = Box<dyn Fn(*mut JSContext, &Vec<HandleValue>) -> Result<i32, String>>;
+pub type Constructor = Box<dyn Fn(*mut JSContext, Vec<HandleValue>) -> Result<i32, String>>;
 pub type Setter = Box<dyn Fn(*mut JSContext, i32, HandleValue) -> Result<(), String>>;
 pub type Getter = Box<dyn Fn(*mut JSContext, i32) -> Result<JSVal, String>>;
+pub type Method = Box<dyn Fn(*mut JSContext, i32, Vec<HandleValue>) -> Result<JSVal, String>>;
 pub type StaticSetter = Box<dyn Fn(*mut JSContext, HandleValue) -> Result<(), String>>;
 pub type StaticGetter = Box<dyn Fn(*mut JSContext) -> Result<JSVal, String>>;
-pub type Method = Box<dyn Fn(*mut JSContext, i32, &Vec<HandleValue>) -> Result<JSVal, String>>;
-pub type StaticMethod = Box<dyn Fn(*mut JSContext, &Vec<HandleValue>) -> Result<JSVal, String>>;
+pub type StaticMethod = Box<dyn Fn(*mut JSContext, Vec<HandleValue>) -> Result<JSVal, String>>;
 
 /// create a class def in the runtime which constructs and calls methods in a rust proxy
 pub struct Proxy {
@@ -406,7 +406,7 @@ impl ProxyBuilder {
     /// please not that if you do not add a constructor you can only use the static methods, getters, setters and events
     pub fn constructor<C>(&mut self, constructor: C) -> &mut Self
     where
-        C: Fn(*mut JSContext, &Vec<HandleValue>) -> Result<i32, String> + 'static,
+        C: Fn(*mut JSContext, Vec<HandleValue>) -> Result<i32, String> + 'static,
     {
         self.constructor = Some(Box::new(constructor));
         self
@@ -447,7 +447,7 @@ impl ProxyBuilder {
     /// add a method
     pub fn method<M>(&mut self, name: &'static str, method: M) -> &mut Self
     where
-        M: Fn(*mut JSContext, i32, &Vec<HandleValue>) -> Result<JSVal, String> + 'static,
+        M: Fn(*mut JSContext, i32, Vec<HandleValue>) -> Result<JSVal, String> + 'static,
     {
         self.methods.insert(name, Box::new(method));
         self
@@ -462,7 +462,7 @@ impl ProxyBuilder {
     /// add a static method
     pub fn static_method<M>(&mut self, name: &'static str, method: M) -> &mut Self
     where
-        M: Fn(*mut JSContext, &Vec<HandleValue>) -> Result<JSVal, String> + 'static,
+        M: Fn(*mut JSContext, Vec<HandleValue>) -> Result<JSVal, String> + 'static,
     {
         self.static_methods.insert(name, Box::new(method));
         self
@@ -506,7 +506,7 @@ mod tests {
             inner.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
                 sm_rt.do_with_jsapi(|_rt, cx, global| {
                     let _proxy_arc = ProxyBuilder::new(vec![],"TestClass1")
-                        .constructor(|cx: *mut JSContext, args: &Vec<HandleValue>| {
+                        .constructor(|cx: *mut JSContext, args: Vec<HandleValue>| {
                             // this will run in the sm_rt workerthread so global is rooted here
                             debug!("proxytest: construct");
                             let name = if !args.is_empty() {
@@ -1406,7 +1406,7 @@ unsafe extern "C" fn proxy_instance_method(
                         args_vec.push(HandleValue::from_marked_location(&*args.get(x)));
                     }
 
-                    let js_val_res = prop(cx, obj_id, &args_vec);
+                    let js_val_res = prop(cx, obj_id, args_vec);
                     match js_val_res {
                         Ok(js_val) => {
                             args.rval().set(js_val);
@@ -1459,7 +1459,7 @@ unsafe extern "C" fn proxy_static_method(
                         args_vec.push(HandleValue::from_marked_location(&*args.get(x)));
                     }
 
-                    let js_val_res = prop(cx, &args_vec);
+                    let js_val_res = prop(cx, args_vec);
                     match js_val_res {
                         Ok(js_val) => {
                             args.rval().set(js_val);
@@ -1542,7 +1542,7 @@ unsafe extern "C" fn proxy_construct(
                 args_vec.push(HandleValue::from_marked_location(&*args.get(x)));
             }
 
-            let obj_id_res = constructor(cx, &args_vec);
+            let obj_id_res = constructor(cx, args_vec);
 
             if obj_id_res.is_ok() {
                 let obj_id = obj_id_res.ok().unwrap();

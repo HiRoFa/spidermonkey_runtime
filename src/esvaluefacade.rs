@@ -483,7 +483,7 @@ impl EsValueFacade {
         rt_arc.do_in_es_runtime_thread_sync(job)
     }
 
-    pub fn invoke_function2(
+    pub(crate) fn invoke_function2(
         cached_id: i32,
         sm_rt: &SmRuntime,
         args: Vec<EsValueFacade>,

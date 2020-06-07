@@ -109,7 +109,7 @@ mod es_sys_scripts;
 #[macro_use]
 
 pub mod es_utils;
-//pub mod esreflection; // i'm leaving this out for now
+pub mod esreflection;
 pub mod esruntimewrapper;
 pub mod esruntimewrapperbuilder;
 pub mod esruntimewrapperinner;
