@@ -8,6 +8,7 @@
 ///
 /// use es_runtime::esreflection::EsProxy;
 /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+/// use es_runtime::esvaluefacade::EsValueFacade;
 /// fn test_es_proxy(){
 ///
 ///     let rt = EsRuntimeWrapperBuilder::new().build();
@@ -15,11 +16,17 @@
 ///     let proxy: EsProxy = EsProxy::builder(vec!["com", "my", "biz"], "MyClass")
 ///     .constructor(|args| {
 ///         Ok(1)
-///     }).finalizer(|obj_id| {
+///     })
+///     .finalizer(|obj_id| {
 ///         println!("obj {} was garbage collected", obj_id);
-///     }).build(&rt);
+///     })
+///     .method("do_something", |_obj_id, _args| {
+///          println!("doing something in rust");
+///          Ok(EsValueFacade::undefined())
+///     })
+///     .build(&rt);
 ///
-///     rt.eval_sync("let my_instance = new com.my.biz.MyClass(1, 2, 3);", "esproxy_example.es");
+///     rt.eval_sync("let my_instance = new com.my.biz.MyClass(1, 2, 3); my_instance.do_something(); my_instance = null;", "es_proxy_example.es");
 ///
 /// }
 ///
@@ -135,11 +142,24 @@ impl EsProxyBuilder {
         self.finalizer = Some(Box::new(finalizer));
         self
     }
+    pub fn method<M>(&mut self, name: &'static str, method: M) -> &mut Self
+    where
+        M: Fn(i32, Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send + 'static,
+    {
+        self.methods.insert(name, Box::new(method));
+        self
+    }
+
     pub fn build(&mut self, rt: &EsRuntimeWrapper) -> EsProxy {
         let cn = self.class_name;
         let ns = self.namespace.clone();
         let constructor_opt = unsafe { replace(&mut self.constructor, None) };
         let finalizer_opt = unsafe { replace(&mut self.finalizer, None) };
+        let mut methods = HashMap::new();
+        self.methods.drain().all(|entry| {
+            methods.insert(entry.0, entry.1);
+            true
+        });
 
         rt.do_in_es_runtime_thread_sync(move |sm_rt| {
             sm_rt.do_with_jsapi(move |_rt, cx, global| {
@@ -163,6 +183,31 @@ impl EsProxyBuilder {
                 if let Some(f) = finalizer_opt {
                     builder.finalizer(f);
                 }
+
+                methods.drain().all(|method_entry| {
+                    let es_method_name = method_entry.0;
+
+                    let es_method = method_entry.1;
+                    builder.method(es_method_name, move |_cx, obj_id, args| {
+                        crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
+                            let sm_rt = &*sm_rt_rc.borrow();
+                            sm_rt.do_with_jsapi(|rt, cx, global| {
+                                let mut es_args: Vec<EsValueFacade> = vec![];
+                                for arg_val in args {
+                                    let esvf = EsValueFacade::new_v(rt, cx, global, arg_val);
+                                    es_args.push(esvf);
+                                }
+
+                                let res = es_method(obj_id, es_args);
+                                match res {
+                                    Ok(esvf) => Ok(esvf.to_es_value(cx)),
+                                    Err(err_str) => Err(err_str),
+                                }
+                            })
+                        })
+                    });
+                    true
+                });
 
                 let _proxy = builder.build(cx, global);
             });
