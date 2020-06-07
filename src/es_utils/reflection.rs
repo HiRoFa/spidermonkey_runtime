@@ -35,7 +35,7 @@
 //!                Ok(())
 //!            })
 //!            // the finalizer is called when the instance is garbage collected, use this to drop your own object in rust
-//!            .finalizer(|id: &i32| {
+//!            .finalizer(|id: i32| {
 //!                debug!("proxytest: finalize id {}", id);
 //!            })
 //!            // a method for your instance
@@ -115,7 +115,7 @@ pub struct Proxy {
     pub namespace: Vec<&'static str>,
     pub class_name: &'static str,
     constructor: Option<Constructor>,
-    finalizer: Option<Box<dyn Fn(&i32) -> ()>>,
+    finalizer: Option<Box<dyn Fn(i32) -> ()>>,
     properties: HashMap<&'static str, (Getter, Setter)>,
 
     // todo add cx as second arg to methods
@@ -134,7 +134,7 @@ pub struct ProxyBuilder {
     pub namespace: Vec<&'static str>,
     pub class_name: &'static str,
     constructor: Option<Constructor>,
-    finalizer: Option<Box<dyn Fn(&i32) -> ()>>,
+    finalizer: Option<Box<dyn Fn(i32) -> ()>>,
     properties: HashMap<&'static str, (Getter, Setter)>,
     methods: HashMap<&'static str, Method>,
     native_methods: HashMap<&'static str, JSNative>,
@@ -416,7 +416,7 @@ impl ProxyBuilder {
     /// you should use this to cleanup anny instances you may have created in rust
     pub fn finalizer<F>(&mut self, finalizer: F) -> &mut Self
     where
-        F: Fn(&i32) -> () + 'static,
+        F: Fn(i32) -> () + 'static,
     {
         self.finalizer = Some(Box::new(finalizer));
         self
@@ -530,7 +530,7 @@ mod tests {
                         }, |_cx, _obj_id, _val| {
                             Ok(())
                         })
-                        .finalizer(|id: &i32| {
+                        .finalizer(|id: i32| {
                             debug!("proxytest: finalize id {}", id);
                         })
                         .method("methodA", |_cx, obj_id, args| {
@@ -1499,7 +1499,7 @@ unsafe extern "C" fn proxy_instance_finalize(_fop: *mut JSFreeOp, object: *mut J
         trace!("finalize id {} of type {}", id, cn);
         if let Some(proxy) = get_proxy(cn.as_str()) {
             if let Some(finalizer) = &proxy.finalizer {
-                finalizer(&id);
+                finalizer(id);
             }
 
             // clear event listeners

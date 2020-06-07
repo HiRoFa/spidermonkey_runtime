@@ -151,7 +151,7 @@ fn parse_field_value(field: String, value: String) -> String {
 
         // remove chars behind .
         if let Some(i) = i_val.find('.') {
-            i_val.split_off(i);
+            let _ = i_val.split_off(i);
         }
 
         if let Some(dot_in_field_idx) = field.find('.') {
@@ -159,7 +159,7 @@ fn parse_field_value(field: String, value: String) -> String {
             // get part behind dot
             let mut num_decimals_str = m_field.split_off(dot_in_field_idx + 1);
             // remove d or i at end
-            num_decimals_str.split_off(num_decimals_str.len() - 1);
+            let _ = num_decimals_str.split_off(num_decimals_str.len() - 1);
             // see if we have a number
             if !num_decimals_str.is_empty() {
                 let ct_res = usize::from_str(num_decimals_str.as_str());
@@ -182,7 +182,7 @@ fn parse_field_value(field: String, value: String) -> String {
             // get part behind dot
             let mut num_decimals_str = m_field.split_off(dot_in_field_idx + 1);
             // remove d or i at end
-            num_decimals_str.split_off(num_decimals_str.len() - 1);
+            let _ = num_decimals_str.split_off(num_decimals_str.len() - 1);
             // see if we have a number
             if !num_decimals_str.is_empty() {
                 let ct_res = usize::from_str(num_decimals_str.as_str());
@@ -200,7 +200,7 @@ fn parse_field_value(field: String, value: String) -> String {
                             f_val.push('0');
                         }
                         if f_val.len() - dot_idx > ct {
-                            f_val.split_off(dot_idx + ct + 1);
+                            let _ = f_val.split_off(dot_idx + ct + 1);
                         }
                     }
                 }

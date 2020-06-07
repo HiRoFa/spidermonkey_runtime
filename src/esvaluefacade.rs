@@ -39,8 +39,7 @@ pub struct EsValueFacade {
 }
 
 thread_local! {
-    static PROMISE_RESOLUTION_TRANSMITTERS: RefCell<HashMap<i32, Sender<Result<EsValueFacade, EsValueFacade>>>> =
-        { RefCell::new(HashMap::new()) };
+    static PROMISE_RESOLUTION_TRANSMITTERS: RefCell<HashMap<i32, Sender<Result<EsValueFacade, EsValueFacade>>>> = RefCell::new(HashMap::new());
 }
 
 type PromiseAnswersMap = HashMap<usize, PromiseResultContainerOption>;

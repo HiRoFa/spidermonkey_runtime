@@ -1,29 +1,31 @@
-//! # EsProxy
-//!
-//! the EsProxy struct provides a simple way to reflect a rust object in teh script engine
-//!
-//! # Example
-//!
-//! ```rust
-//!
-//! use es_runtime::esreflection::EsProxy;
-//! use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
-//! fn test_es_proxy(){
-//!
-//!     let rt = EsRuntimeWrapperBuilder::new().build();
-//!     
-//!     let proxy: EsProxy = EsProxy::builder(vec!["com", "my", "biz"], "MyClass")
-//!     .constructor(|args| {
-//!         Ok(1)
-//!     }).build(&rt);
-//!
-//!     rt.eval_sync("let my_instance = new com.my.biz.MyClass(1, 2, 3);", "esproxy_example.es");
-//!
-//! }
-//!
-//! ```
-//!
-
+/// # EsProxy
+///
+/// the EsProxy struct provides a simple way to reflect a rust object in teh script engine
+///
+/// # Example
+///
+/// ```rust
+///
+/// use es_runtime::esreflection::EsProxy;
+/// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+/// fn test_es_proxy(){
+///
+///     let rt = EsRuntimeWrapperBuilder::new().build();
+///     
+///     let proxy: EsProxy = EsProxy::builder(vec!["com", "my", "biz"], "MyClass")
+///     .constructor(|args| {
+///         Ok(1)
+///     }).finalizer(|obj_id| {
+///         println!("obj {} was garbage collected", obj_id);
+///     }).build(&rt);
+///
+///     rt.eval_sync("let my_instance = new com.my.biz.MyClass(1, 2, 3);", "esproxy_example.es");
+///
+/// }
+///
+/// ```
+///
+///
 use crate::es_utils::reflection::{get_proxy, ProxyBuilder};
 use crate::esruntimewrapper::EsRuntimeWrapper;
 use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
@@ -36,7 +38,7 @@ pub type EsProxyConstructor = dyn Fn(Vec<EsValueFacade>) -> Result<i32, String> 
 pub type EsProxyMethod = dyn Fn(i32, Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send;
 pub type EsProxyGetter = dyn Fn(i32) -> Result<EsValueFacade, String> + Send;
 pub type EsProxySetter = dyn Fn(i32, EsValueFacade) -> Result<(), String> + Send;
-pub type EsProxyFinalizer = dyn Fn(&i32) -> () + Send;
+pub type EsProxyFinalizer = dyn Fn(i32) -> () + Send;
 pub type EsProxyStaticMethod = dyn Fn(Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send;
 pub type EsProxyStaticGetter = dyn Fn() -> Result<EsValueFacade, String> + Send;
 pub type EsProxyStaticSetter = dyn Fn(EsValueFacade) -> Result<(), String> + Send;
@@ -74,7 +76,7 @@ impl EsProxy {
     ) {
         let p_name = self.class_name;
         rt.do_in_es_runtime_thread(move |sm_rt| {
-            sm_rt.do_with_jsapi(move |rt, cx, global| {
+            sm_rt.do_with_jsapi(move |_rt, cx, _global| {
                 let proxy = get_proxy(p_name).unwrap();
                 let event_obj_value: JSVal = event_obj.to_es_value(cx);
                 rooted!(in (cx) let event_obj_root = event_obj_value);
@@ -90,7 +92,7 @@ impl EsProxy {
     ) {
         let p_name = self.class_name;
         rt.do_in_es_runtime_thread(move |sm_rt| {
-            sm_rt.do_with_jsapi(move |rt, cx, global| {
+            sm_rt.do_with_jsapi(move |_rt, cx, _global| {
                 let proxy = get_proxy(p_name).unwrap();
                 let event_obj_value: JSVal = event_obj.to_es_value(cx);
                 rooted!(in (cx) let event_obj_root = event_obj_value);
@@ -126,17 +128,25 @@ impl EsProxyBuilder {
         self.constructor = Some(Box::new(constructor));
         self
     }
+    pub fn finalizer<F>(&mut self, finalizer: F) -> &mut Self
+    where
+        F: Fn(i32) + Send + 'static,
+    {
+        self.finalizer = Some(Box::new(finalizer));
+        self
+    }
     pub fn build(&mut self, rt: &EsRuntimeWrapper) -> EsProxy {
         let cn = self.class_name;
         let ns = self.namespace.clone();
-        let mut constructor_opt = unsafe { replace(&mut self.constructor, None) };
+        let constructor_opt = unsafe { replace(&mut self.constructor, None) };
+        let finalizer_opt = unsafe { replace(&mut self.finalizer, None) };
 
         rt.do_in_es_runtime_thread_sync(move |sm_rt| {
-            sm_rt.do_with_jsapi(move |rt, cx, global| {
+            sm_rt.do_with_jsapi(move |_rt, cx, global| {
                 let mut builder = ProxyBuilder::new(ns, cn);
 
                 if let Some(c) = constructor_opt {
-                    builder.constructor(move |cx: *mut mozjs::jsapi::JSContext, args| {
+                    builder.constructor(move |_cx: *mut mozjs::jsapi::JSContext, args| {
                         crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
                             let sm_rt = &*sm_rt_rc.borrow();
                             sm_rt.do_with_jsapi(|rt, cx, global| {
@@ -149,6 +159,9 @@ impl EsProxyBuilder {
                             })
                         })
                     });
+                }
+                if let Some(f) = finalizer_opt {
+                    builder.finalizer(f);
                 }
 
                 let _proxy = builder.build(cx, global);
