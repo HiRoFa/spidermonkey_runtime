@@ -12,7 +12,7 @@
 //! fn test_es_proxy(){
 //!
 //!     let rt = EsRuntimeWrapperBuilder::new().build();
-//!     
+//!
 //!     let proxy: EsProxy = EsProxy::builder(vec!["com", "my", "biz"], "MyClass")
 //!     .constructor(|args| {
 //!         Ok(1)
@@ -28,7 +28,7 @@
 //!          Ok(EsValueFacade::new_i32(137))
 //!     }, |_obj_id, val| {
 //!          println!("rust prop my_prop set to {}", val.get_i32());
-//!          Ok(())  
+//!          Ok(())
 //!     })
 //!     .event("EventA")
 //!     .event("EventB")
