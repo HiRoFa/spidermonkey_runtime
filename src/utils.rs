@@ -19,20 +19,20 @@ impl<T> AutoIdMap<T> {
         self.last_id
     }
 
-    pub fn replace(&mut self, id: &usize, elem: T) {
+    pub fn replace(&mut self, id: usize, elem: T) {
         // because we really don't want you to abuse this to insert your own id's :)
-        if !self.contains_key(id) {
+        if !self.contains_key(&id) {
             panic!("no entry to replace for {}", id);
         }
         self.map.insert(id.clone(), elem);
     }
 
-    pub fn get(&self, id: &usize) -> Option<&T> {
-        self.map.get(id)
+    pub fn get(&self, id: usize) -> Option<&T> {
+        self.map.get(&id)
     }
 
-    pub fn remove(&mut self, id: &usize) -> T {
-        self.map.remove(id).expect("no such elem")
+    pub fn remove(&mut self, id: usize) -> T {
+        self.map.remove(&id).expect("no such elem")
     }
 
     #[allow(dead_code)]
@@ -56,7 +56,7 @@ pub mod tests {
         let id2 = map.insert("hi2");
         assert_ne!(id1, id2);
         assert_eq!(map.len(), 2);
-        let s1 = map.remove(&id1);
+        let s1 = map.remove(id1);
         assert_eq!(s1, "hi");
         assert_eq!(map.len(), 1);
     }
