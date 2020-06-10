@@ -141,7 +141,7 @@ impl EsRuntimeWrapper {
         f(&*inner)
     }
 
-    pub fn do_in_es_runtime_thread<R: Send + 'static, J>(&self, immutable_job: J)
+    pub fn do_in_es_runtime_thread<J>(&self, immutable_job: J)
     where
         J: FnOnce(&SmRuntime) -> () + Send + 'static,
     {

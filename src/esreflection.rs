@@ -9,6 +9,7 @@
 //! use es_runtime::esreflection::EsProxy;
 //! use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
 //! use es_runtime::esvaluefacade::EsValueFacade;
+//! use std::collections::HashMap;
 //! fn test_es_proxy(){
 //!
 //!     let rt = EsRuntimeWrapperBuilder::new().build();
@@ -35,6 +36,22 @@
 //!     .build(&rt);
 //!
 //!     rt.eval_sync("let my_instance = new com.my.biz.MyClass(1, 2, 3); my_instance.do_something(); my_instance.my_prop = 541; let a = my_instance.my_prop; my_instance = null;", "es_proxy_example.es").ok().unwrap();
+//!     
+//!     // create a static class
+//!
+//!     let static_proxy: EsProxy = EsProxy::builder(vec!["com", "my", "biz"], "MyApp")
+//!     .static_method("inform", |args| {
+//!          Ok(EsValueFacade::new_bool(true))
+//!      })
+//!     .static_event("epiphany")
+//!     .build(&rt);
+//!
+//!     rt.eval_sync("com.my.biz.MyApp.addEventListener('epiphany', (evt) => {console.log('Rust had an epiphany about %s', evt.subject);});com.my.biz.MyApp.inform(1, 2, 3);", "es_proxy_example2.es").ok().unwrap();
+//!
+//!     let mut evt_props = HashMap::new();
+//!     evt_props.insert("subject".to_string(), EsValueFacade::new_str("Putting people on Jupiter".to_string()));
+//!     let evt_obj = EsValueFacade::new_obj(evt_props);
+//!     static_proxy.dispatch_static_event(&rt, "epiphany", evt_obj);
 //!
 //! }
 //!
@@ -43,7 +60,6 @@
 //!
 use crate::es_utils::reflection::{get_proxy, ProxyBuilder};
 use crate::esruntimewrapper::EsRuntimeWrapper;
-use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
 use crate::esvaluefacade::EsValueFacade;
 use mozjs::jsval::JSVal;
 use std::collections::{HashMap, HashSet};
@@ -54,11 +70,9 @@ pub type EsProxyMethod = dyn Fn(&i32, Vec<EsValueFacade>) -> Result<EsValueFacad
 pub type EsProxyFinalizer = dyn Fn(i32) -> () + Send;
 pub type EsProxyGetter = dyn Fn(&i32) -> Result<EsValueFacade, String> + Send;
 pub type EsProxySetter = dyn Fn(&i32, EsValueFacade) -> Result<(), String> + Send;
-/*
 pub type EsProxyStaticMethod = dyn Fn(Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send;
 pub type EsProxyStaticGetter = dyn Fn() -> Result<EsValueFacade, String> + Send;
 pub type EsProxyStaticSetter = dyn Fn(EsValueFacade) -> Result<(), String> + Send;
- */
 
 pub struct EsProxy {
     namespace: Vec<&'static str>,
@@ -68,24 +82,28 @@ pub struct EsProxy {
 pub struct EsProxyBuilder {
     pub namespace: Vec<&'static str>,
     pub class_name: &'static str,
+
     constructor: Option<Box<EsProxyConstructor>>,
     finalizer: Option<Box<EsProxyFinalizer>>,
+
     methods: HashMap<&'static str, Box<EsProxyMethod>>,
     properties: HashMap<&'static str, (Box<EsProxyGetter>, Box<EsProxySetter>)>,
+
     events: HashSet<&'static str>,
-    /*
+
     static_properties: HashMap<&'static str, (Box<EsProxyStaticGetter>, Box<EsProxyStaticSetter>)>,
     static_methods: HashMap<&'static str, Box<EsProxyStaticMethod>>,
-    static_events: HashSet<&'static str>,*/
+    static_events: HashSet<&'static str>,
 }
 
 impl EsProxy {
     pub fn builder(namespace: Vec<&'static str>, class_name: &'static str) -> EsProxyBuilder {
         EsProxyBuilder::new(namespace, class_name)
     }
+    // todo do we want sync variants which may return a veto boolean or an alterted EsValueFacade?
     pub fn dispatch_event(
         &self,
-        rt: &EsRuntimeWrapperInner,
+        rt: &EsRuntimeWrapper,
         obj_id: i32,
         event_name: &'static str,
         event_obj: EsValueFacade,
@@ -97,12 +115,12 @@ impl EsProxy {
                 let event_obj_value: JSVal = event_obj.to_es_value(cx);
                 rooted!(in (cx) let event_obj_root = event_obj_value);
                 proxy.dispatch_event(obj_id, event_name, cx, event_obj_root.handle().into());
-            })
-        })
+            });
+        });
     }
     pub fn dispatch_static_event(
         &self,
-        rt: &EsRuntimeWrapperInner,
+        rt: &EsRuntimeWrapper,
         event_name: &'static str,
         event_obj: EsValueFacade,
     ) {
@@ -113,8 +131,8 @@ impl EsProxy {
                 let event_obj_value: JSVal = event_obj.to_es_value(cx);
                 rooted!(in (cx) let event_obj_root = event_obj_value);
                 proxy.dispatch_static_event(event_name, cx, event_obj_root.handle().into());
-            })
-        })
+            });
+        });
     }
     pub fn get_canonical_name(&self) -> String {
         format!("{}.{}", self.namespace.join("."), self.class_name)
@@ -132,10 +150,9 @@ impl EsProxyBuilder {
             methods: Default::default(),
             properties: Default::default(),
             events: Default::default(),
-            /*
             static_properties: Default::default(),
             static_methods: Default::default(),
-            static_events: Default::default(),*/
+            static_events: Default::default(),
         }
     }
     pub fn constructor<C>(&mut self, constructor: C) -> &mut Self
@@ -183,22 +200,64 @@ impl EsProxyBuilder {
         self
     }
 
+    pub fn static_event(&mut self, event_type: &'static str) -> &mut Self {
+        self.static_events.insert(event_type);
+        self
+    }
+
+    pub fn static_property<G, S>(&mut self, name: &'static str, getter: G, setter: S) -> &mut Self
+    where
+        G: Fn() -> Result<EsValueFacade, String> + Send + 'static,
+        S: Fn(EsValueFacade) -> Result<(), String> + Send + 'static,
+    {
+        self.static_properties
+            .insert(name, (Box::new(getter), Box::new(setter)));
+        self
+    }
+    pub fn static_method<M>(&mut self, name: &'static str, method: M) -> &mut Self
+    where
+        M: Fn(Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send + 'static,
+    {
+        self.static_methods.insert(name, Box::new(method));
+        self
+    }
+
     pub fn build(&mut self, rt: &EsRuntimeWrapper) -> EsProxy {
         let cn = self.class_name;
         let ns = self.namespace.clone();
         let constructor_opt = unsafe { replace(&mut self.constructor, None) };
         let finalizer_opt = unsafe { replace(&mut self.finalizer, None) };
         let mut methods = HashMap::new();
+
         self.methods.drain().all(|entry| {
             methods.insert(entry.0, entry.1);
             true
         });
+
         let mut properties = HashMap::new();
         self.properties.drain().all(|entry| {
             properties.insert(entry.0, entry.1);
             true
         });
+
         let events = self.events.clone();
+
+        // static
+        let mut static_methods = HashMap::new();
+
+        self.static_methods.drain().all(|entry| {
+            static_methods.insert(entry.0, entry.1);
+            true
+        });
+
+        let mut static_properties = HashMap::new();
+        self.static_properties.drain().all(|entry| {
+            static_properties.insert(entry.0, entry.1);
+            true
+        });
+
+        let static_events = self.static_events.clone();
+        // / static
 
         rt.do_in_es_runtime_thread_sync(move |sm_rt| {
             sm_rt.do_with_jsapi(move |_rt, cx, global| {
@@ -281,6 +340,66 @@ impl EsProxyBuilder {
 
                 for evt in events {
                     builder.event(evt);
+                }
+
+                static_methods.drain().all(|method_entry| {
+                    let es_method_name = method_entry.0;
+
+                    let es_method = method_entry.1;
+                    builder.static_method(es_method_name, move |_cx, args| {
+                        crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
+                            let sm_rt = &*sm_rt_rc.borrow();
+                            sm_rt.do_with_jsapi(|rt, cx, global| {
+                                let mut es_args: Vec<EsValueFacade> = vec![];
+                                for arg_val in args {
+                                    let esvf = EsValueFacade::new_v(rt, cx, global, arg_val);
+                                    es_args.push(esvf);
+                                }
+
+                                let res = es_method(es_args);
+                                match res {
+                                    Ok(esvf) => Ok(esvf.to_es_value(cx)),
+                                    Err(err_str) => Err(err_str),
+                                }
+                            })
+                        })
+                    });
+                    true
+                });
+
+                static_properties.drain().all(|method_entry| {
+                    let es_prop_name = method_entry.0;
+
+                    let (es_getter, es_setter) = method_entry.1;
+                    builder.static_property(
+                        es_prop_name,
+                        move |_cx| {
+                            crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
+                                let sm_rt = &*sm_rt_rc.borrow();
+                                sm_rt.do_with_jsapi(|_rt, cx, _global| {
+                                    let res = es_getter();
+                                    match res {
+                                        Ok(esvf) => Ok(esvf.to_es_value(cx)),
+                                        Err(err_str) => Err(err_str),
+                                    }
+                                })
+                            })
+                        },
+                        move |_cx, val| {
+                            crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
+                                let sm_rt = &*sm_rt_rc.borrow();
+                                sm_rt.do_with_jsapi(|rt, cx, global| {
+                                    let es_val = EsValueFacade::new_v(rt, cx, global, val);
+                                    es_setter(es_val)
+                                })
+                            })
+                        },
+                    );
+                    true
+                });
+
+                for evt in static_events {
+                    builder.static_event(evt);
                 }
 
                 let _proxy = builder.build(cx, global);
