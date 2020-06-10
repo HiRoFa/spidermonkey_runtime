@@ -25,9 +25,10 @@ impl<T> AutoIdMap<T> {
         if !self.contains_key(id) {
             panic!("no entry to replace for {}", id);
         }
-        self.map.insert(id.clone(), elem);
+        self.map.insert(*id, elem);
     }
 
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn get(&self, id: &usize) -> Option<&T> {
         self.map.get(id)
     }
