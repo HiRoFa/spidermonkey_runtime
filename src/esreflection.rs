@@ -1,6 +1,6 @@
 //! # EsProxy
 //!
-//! the EsProxy struct provides a simple way to reflect a rust object in teh script engine
+//! the EsProxy struct provides a simple way to reflect a rust object in the script engine
 //!
 //! # Example
 //!
@@ -50,10 +50,10 @@ use std::collections::{HashMap, HashSet};
 use std::ptr::replace;
 
 pub type EsProxyConstructor = dyn Fn(Vec<EsValueFacade>) -> Result<i32, String> + Send;
-pub type EsProxyMethod = dyn Fn(i32, Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send;
+pub type EsProxyMethod = dyn Fn(&i32, Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send;
 pub type EsProxyFinalizer = dyn Fn(i32) -> () + Send;
-pub type EsProxyGetter = dyn Fn(i32) -> Result<EsValueFacade, String> + Send;
-pub type EsProxySetter = dyn Fn(i32, EsValueFacade) -> Result<(), String> + Send;
+pub type EsProxyGetter = dyn Fn(&i32) -> Result<EsValueFacade, String> + Send;
+pub type EsProxySetter = dyn Fn(&i32, EsValueFacade) -> Result<(), String> + Send;
 /*
 pub type EsProxyStaticMethod = dyn Fn(Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send;
 pub type EsProxyStaticGetter = dyn Fn() -> Result<EsValueFacade, String> + Send;
@@ -154,15 +154,15 @@ impl EsProxyBuilder {
     }
     pub fn method<M>(&mut self, name: &'static str, method: M) -> &mut Self
     where
-        M: Fn(i32, Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send + 'static,
+        M: Fn(&i32, Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send + 'static,
     {
         self.methods.insert(name, Box::new(method));
         self
     }
     pub fn property<G, S>(&mut self, name: &'static str, getter: G, setter: S) -> &mut Self
     where
-        G: Fn(i32) -> Result<EsValueFacade, String> + Send + 'static,
-        S: Fn(i32, EsValueFacade) -> Result<(), String> + Send + 'static,
+        G: Fn(&i32) -> Result<EsValueFacade, String> + Send + 'static,
+        S: Fn(&i32, EsValueFacade) -> Result<(), String> + Send + 'static,
     {
         self.properties
             .insert(name, (Box::new(getter), Box::new(setter)));
@@ -237,7 +237,7 @@ impl EsProxyBuilder {
                                     es_args.push(esvf);
                                 }
 
-                                let res = es_method(obj_id, es_args);
+                                let res = es_method(&obj_id, es_args);
                                 match res {
                                     Ok(esvf) => Ok(esvf.to_es_value(cx)),
                                     Err(err_str) => Err(err_str),
@@ -258,7 +258,7 @@ impl EsProxyBuilder {
                             crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
                                 let sm_rt = &*sm_rt_rc.borrow();
                                 sm_rt.do_with_jsapi(|_rt, cx, _global| {
-                                    let res = es_getter(obj_id);
+                                    let res = es_getter(&obj_id);
                                     match res {
                                         Ok(esvf) => Ok(esvf.to_es_value(cx)),
                                         Err(err_str) => Err(err_str),
@@ -271,7 +271,7 @@ impl EsProxyBuilder {
                                 let sm_rt = &*sm_rt_rc.borrow();
                                 sm_rt.do_with_jsapi(|rt, cx, global| {
                                     let es_val = EsValueFacade::new_v(rt, cx, global, val);
-                                    es_setter(obj_id, es_val)
+                                    es_setter(&obj_id, es_val)
                                 })
                             })
                         },

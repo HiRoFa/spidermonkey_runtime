@@ -7,12 +7,12 @@ use crate::es_utils::rooting::EsPersistentRooted;
 use crate::es_utils::EsErrorInfo;
 use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
+use crate::utils::AutoIdMap;
 use either::Either;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsval::{BooleanValue, DoubleValue, Int32Value, JSVal, ObjectValue, UndefinedValue};
 use mozjs::rust::{HandleObject, HandleValue, Runtime};
-use rand::Rng;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
@@ -35,18 +35,18 @@ pub struct EsValueFacade {
     val_object: Option<HashMap<String, EsValueFacade>>,
     val_array: Option<Vec<EsValueFacade>>,
     val_promise: Option<usize>,
-    val_js_function: Option<(i32, Arc<EsRuntimeWrapperInner>)>,
+    val_js_function: Option<(usize, Arc<EsRuntimeWrapperInner>)>,
 }
 
 thread_local! {
     static PROMISE_RESOLUTION_TRANSMITTERS: RefCell<HashMap<i32, Sender<Result<EsValueFacade, EsValueFacade>>>> = RefCell::new(HashMap::new());
 }
 
-type PromiseAnswersMap = HashMap<usize, PromiseResultContainerOption>;
+type PromiseAnswersMap = AutoIdMap<PromiseResultContainerOption>;
 
 lazy_static! {
     static ref PROMISE_ANSWERS: Arc<DebugMutex<PromiseAnswersMap>> =
-        Arc::new(DebugMutex::new(HashMap::new(), "PROMISE_ANSWERS"));
+        Arc::new(DebugMutex::new(AutoIdMap::new(), "PROMISE_ANSWERS"));
 }
 
 impl EsValueFacade {
@@ -149,14 +149,7 @@ impl EsValueFacade {
             // locked scope
             let map: &mut PromiseAnswersMap = &mut PROMISE_ANSWERS.lock("gen_id").unwrap();
 
-            let mut rng = rand::thread_rng();
-            let mut id = rng.gen();
-            while map.contains_key(&id) {
-                id = rng.gen();
-            }
-
-            map.insert(id, None);
-            id
+            map.insert(None)
         }; // end locked scope
 
         trace!("prepping promise {}", id);
@@ -175,7 +168,7 @@ impl EsValueFacade {
                         trace!("PROMISE_ANSWERS had Some for {} setting to val", id);
                         // set result in left
                         let new_val = Some(Either::Left(res));
-                        map.insert(id, new_val);
+                        map.replace(&id, new_val);
                         None
                     } else {
                         trace!("PROMISE_ANSWERS had Some resolve promise in right");
@@ -184,7 +177,7 @@ impl EsValueFacade {
                         // we need a weakref to the runtime here, os we can run in the es thread
                         // will be stored in a tuple with the EsPersisistentRooted
 
-                        let eith = map.remove(&id).unwrap().unwrap();
+                        let eith = map.remove(&id).unwrap();
 
                         Some((eith, res))
 
@@ -483,7 +476,7 @@ impl EsValueFacade {
     }
 
     pub(crate) fn invoke_function2(
-        cached_id: i32,
+        cached_id: usize,
         sm_rt: &SmRuntime,
         args: Vec<EsValueFacade>,
     ) -> Result<EsValueFacade, EsErrorInfo> {
@@ -493,7 +486,7 @@ impl EsValueFacade {
     }
 
     pub(crate) fn invoke_function3(
-        cached_id: i32,
+        cached_id: usize,
         rt: &Runtime,
         cx: *mut JSContext,
         global: HandleObject,
@@ -595,6 +588,7 @@ impl EsValueFacade {
         }
     }
 
+    // todo, refactor to have a rval: MutableHandleValue
     pub(crate) fn to_es_value(&self, context: *mut JSContext) -> mozjs::jsapi::Value {
         trace!("to_es_value.1");
 
@@ -676,11 +670,11 @@ impl EsValueFacade {
 
                     (pid, weakref)
                 });
-                map.insert(id.clone(), Some(Either::Right((pid, rti_ref))));
+                map.replace(id, Some(Either::Right((pid, rti_ref))));
             } else {
                 trace!("remove eith from map and resolve promise with left");
                 // remove eith from map and resolve promise with left
-                let eith = map.remove(id).unwrap().unwrap();
+                let eith = map.remove(id).unwrap();
 
                 if eith.is_left() {
                     let res = eith.left().unwrap();
@@ -727,7 +721,7 @@ impl EsValueFacade {
 }
 
 type PromiseResultContainer =
-    Either<Result<EsValueFacade, String>, (i32, Weak<EsRuntimeWrapperInner>)>;
+    Either<Result<EsValueFacade, String>, (usize, Weak<EsRuntimeWrapperInner>)>;
 type PromiseResultContainerOption = Option<PromiseResultContainer>;
 
 impl Drop for EsValueFacade {

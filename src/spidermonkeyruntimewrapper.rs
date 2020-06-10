@@ -3,6 +3,7 @@ use crate::es_utils::rooting::EsPersistentRooted;
 use crate::es_utils::EsErrorInfo;
 use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
 use crate::esvaluefacade::EsValueFacade;
+use crate::utils::AutoIdMap;
 
 use log::{debug, trace};
 use lru::LruCache;
@@ -30,8 +31,6 @@ use mozjs::rust::HandleObject;
 use mozjs::rust::RealmOptions;
 use mozjs::rust::Runtime;
 use mozjs::rust::SIMPLE_GLOBAL_CLASS;
-
-use rand::Rng;
 
 use std::borrow::Borrow;
 use std::cell::RefCell;
@@ -445,7 +444,7 @@ unsafe extern "C" fn global_op_native_method(
 
 thread_local! {
 // store epr in Box because https://doc.servo.org/mozjs_sys/jsgc/struct.Heap.html#method.boxed
-    static OBJECT_CACHE: RefCell<HashMap<i32, EsPersistentRooted>> = RefCell::new(HashMap::new());
+    static OBJECT_CACHE: RefCell<AutoIdMap<EsPersistentRooted>> = RefCell::new(AutoIdMap::new());
 }
 
 pub(crate) fn do_with_rooted_esvf_vec<R, C>(
@@ -474,18 +473,13 @@ where
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub fn register_cached_object(context: *mut JSContext, obj: *mut JSObject) -> i32 {
+pub fn register_cached_object(context: *mut JSContext, obj: *mut JSObject) -> usize {
     let mut epr = EsPersistentRooted::default();
     unsafe { epr.init(context, obj) };
     OBJECT_CACHE.with(|object_cache_rc| {
         let map = &mut *object_cache_rc.borrow_mut();
-        let mut rng = rand::thread_rng();
-        let mut id: i32 = rng.gen();
-        while map.contains_key(&id) {
-            id = rng.gen();
-        }
 
-        map.insert(id.clone(), epr);
+        let id = map.insert(epr);
 
         trace!("cache obj with id {}", id);
 
@@ -493,7 +487,7 @@ pub fn register_cached_object(context: *mut JSContext, obj: *mut JSObject) -> i3
     })
 }
 
-pub fn do_with_cached_object<C, R>(id: i32, consumer: C) -> R
+pub fn do_with_cached_object<C, R>(id: usize, consumer: C) -> R
 where
     C: Fn(&EsPersistentRooted) -> R,
 {
@@ -507,11 +501,11 @@ where
     })
 }
 
-pub fn consume_cached_object(id: i32) -> EsPersistentRooted {
+pub fn consume_cached_object(id: usize) -> EsPersistentRooted {
     trace!("consume cached obj with id {}", id);
     OBJECT_CACHE.with(|object_cache_rc| {
         let map = &mut *object_cache_rc.borrow_mut();
-        map.remove(&id).expect("no such id")
+        map.remove(&id)
     })
 }
 
