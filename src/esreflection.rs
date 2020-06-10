@@ -36,7 +36,7 @@
 //!     .build(&rt);
 //!
 //!     rt.eval_sync("let my_instance = new com.my.biz.MyClass(1, 2, 3); my_instance.do_something(); my_instance.my_prop = 541; let a = my_instance.my_prop; my_instance = null;", "es_proxy_example.es").ok().unwrap();
-//!     
+//!
 //!     // create a static class
 //!
 //!     let static_proxy: EsProxy = EsProxy::builder(vec!["com", "my", "biz"], "MyApp")
