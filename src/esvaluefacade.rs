@@ -163,12 +163,12 @@ impl EsValueFacade {
                 let map: &mut PromiseAnswersMap = &mut PROMISE_ANSWERS.lock("in_task").unwrap();
 
                 if map.contains_key(&id) {
-                    let val = map.get(id).unwrap();
+                    let val = map.get(&id).unwrap();
                     if val.is_none() {
                         trace!("PROMISE_ANSWERS had Some for {} setting to val", id);
                         // set result in left
                         let new_val = Some(Either::Left(res));
-                        map.replace(id, new_val);
+                        map.replace(&id, new_val);
                         None
                     } else {
                         trace!("PROMISE_ANSWERS had Some resolve promise in right");
@@ -177,7 +177,7 @@ impl EsValueFacade {
                         // we need a weakref to the runtime here, os we can run in the es thread
                         // will be stored in a tuple with the EsPersisistentRooted
 
-                        let eith = map.remove(id).unwrap();
+                        let eith = map.remove(&id).unwrap();
 
                         Some((eith, res))
 
@@ -649,7 +649,7 @@ impl EsValueFacade {
         trace!("to_es_value.7 prepped_promise");
         let map: &mut PromiseAnswersMap = &mut PROMISE_ANSWERS.lock("to_es_value.7").unwrap();
         let id = self.val_promise.as_ref().unwrap();
-        if let Some(opt) = map.get(id.clone()) {
+        if let Some(opt) = map.get(id) {
             trace!("create promise");
             // create promise
             let prom = es_utils::promises::new_promise(context);
@@ -670,11 +670,11 @@ impl EsValueFacade {
 
                     (pid, weakref)
                 });
-                map.replace(id.clone(), Some(Either::Right((pid, rti_ref))));
+                map.replace(id, Some(Either::Right((pid, rti_ref))));
             } else {
                 trace!("remove eith from map and resolve promise with left");
                 // remove eith from map and resolve promise with left
-                let eith = map.remove(id.clone()).unwrap();
+                let eith = map.remove(id).unwrap();
 
                 if eith.is_left() {
                     let res = eith.left().unwrap();
@@ -731,9 +731,9 @@ impl Drop for EsValueFacade {
             let map: &mut PromiseAnswersMap =
                 &mut PROMISE_ANSWERS.lock("EsValueFacade::drop").unwrap();
             let id = self.val_promise.as_ref().unwrap();
-            if let Some(opt) = map.get(id.clone()) {
+            if let Some(opt) = map.get(id) {
                 if opt.is_none() {
-                    map.remove(id.clone());
+                    map.remove(id);
                 }
             }
         } else if self.is_function() {

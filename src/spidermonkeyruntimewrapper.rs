@@ -493,7 +493,7 @@ where
 {
     OBJECT_CACHE.with(|object_cache_rc| {
         let map = &mut *object_cache_rc.borrow_mut();
-        if let Some(epr) = map.get(id) {
+        if let Some(epr) = map.get(&id) {
             consumer(epr)
         } else {
             panic!("no such id");
@@ -505,7 +505,7 @@ pub fn consume_cached_object(id: usize) -> EsPersistentRooted {
     trace!("consume cached obj with id {}", id);
     OBJECT_CACHE.with(|object_cache_rc| {
         let map = &mut *object_cache_rc.borrow_mut();
-        map.remove(id)
+        map.remove(&id)
     })
 }
 
