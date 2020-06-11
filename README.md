@@ -55,24 +55,23 @@ The reason I chose SpiderMonkey as the engine is that I've been dealing with les
 ## 0.2 goals
 
 * [x] Use newer mozjs
-
-## 0.2.1 goals
-
 * [x] Re-enable possibility to create multiple runtimes
-
-## 0.2.2 goals
-
 * [x] Init a EsValueFacade as a promise from rust, #19
 * [x] More tests for e.g. error handling in module loading, error handling in promises
 
-## 0.3.0 
+## 0.3 goals 
 
 * [x] Run rust-ops multithreaded, and return Promises from rust #8
-
-## 0.3.x
-
 * [x] Pass functions as consumer argument to rust-ops
 * [x] Proxy class for rust objects
+
+## 0.4 goals
+
+* [x] EsProxy
+* [x] Simpler method invocation (remove invoke_rust_op)
+
+## 0.5 goals
+
 * [ ] Dynamic imports #20
 * [ ] TypedArrays from and to Vecs
 * [ ] Complete set of from/to primitives in EsValueFacade
@@ -85,12 +84,13 @@ The reason I chose SpiderMonkey as the engine is that I've been dealing with les
 
 * [ ] No more segfaults in unit test with gc_zeal_options
 
-## 2.0 goals
+## goals for later
 
-* [ ] TypeScript support
 * [ ] Interactive Debugging
 * [ ] Profiling
+* [ ] WebAssembly support
 * [ ] Much more
+
 
 # Other plans
 

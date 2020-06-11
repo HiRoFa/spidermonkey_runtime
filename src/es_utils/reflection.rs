@@ -27,9 +27,10 @@
 //!                Ok(1)
 //!            })
 //!            // create a property and pass a closure for the get and set action
-//!            .property("foo", |_cx, obj_id| {
+//!            .property("foo", |_cx, obj_id, mut rval| {
 //!                debug!("proxy.get foo {}", obj_id);
-//!                Ok(Int32Value(123))
+//!                rval.set(Int32Value(123));
+//!                Ok(())
 //!            }, |_cx, obj_id, _val| {
 //!                debug!("proxy.set foo {}", obj_id);
 //!                Ok(())
@@ -39,9 +40,9 @@
 //!                debug!("proxytest: finalize id {}", id);
 //!            })
 //!            // a method for your instance
-//!            .method("methodA", |_cx, obj_id, args| {
+//!            .method("methodA", |_cx, obj_id, args, _rval| {
 //!                debug!("proxy.methodA called for obj {} with {} args", obj_id, args.len());
-//!                Ok(UndefinedValue())
+//!                Ok(())
 //!            })
 //!            // and an event that may be dispatched
 //!            .event("saved")
@@ -91,8 +92,8 @@ use mozjs::jsapi::JSNative;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::JSCLASS_FOREGROUND_FINALIZE;
-use mozjs::jsval::{JSVal, NullValue, ObjectValue, UndefinedValue};
-use mozjs::rust::{HandleObject, HandleValue, MutableHandleObject};
+use mozjs::jsval::{NullValue, ObjectValue, UndefinedValue};
+use mozjs::rust::{HandleObject, HandleValue, MutableHandleObject, MutableHandleValue};
 
 use core::ptr;
 use log::trace;
@@ -104,11 +105,13 @@ use std::sync::Arc;
 
 pub type Constructor = Box<dyn Fn(*mut JSContext, Vec<HandleValue>) -> Result<i32, String>>;
 pub type Setter = Box<dyn Fn(*mut JSContext, i32, HandleValue) -> Result<(), String>>;
-pub type Getter = Box<dyn Fn(*mut JSContext, i32) -> Result<JSVal, String>>;
-pub type Method = Box<dyn Fn(*mut JSContext, i32, Vec<HandleValue>) -> Result<JSVal, String>>;
+pub type Getter = Box<dyn Fn(*mut JSContext, i32, MutableHandleValue) -> Result<(), String>>;
+pub type Method =
+    Box<dyn Fn(*mut JSContext, i32, Vec<HandleValue>, MutableHandleValue) -> Result<(), String>>;
 pub type StaticSetter = Box<dyn Fn(*mut JSContext, HandleValue) -> Result<(), String>>;
-pub type StaticGetter = Box<dyn Fn(*mut JSContext) -> Result<JSVal, String>>;
-pub type StaticMethod = Box<dyn Fn(*mut JSContext, Vec<HandleValue>) -> Result<JSVal, String>>;
+pub type StaticGetter = Box<dyn Fn(*mut JSContext, MutableHandleValue) -> Result<(), String>>;
+pub type StaticMethod =
+    Box<dyn Fn(*mut JSContext, Vec<HandleValue>, MutableHandleValue) -> Result<(), String>>;
 
 /// create a class def in the runtime which constructs and calls methods in a rust proxy
 pub struct Proxy {
@@ -425,7 +428,7 @@ impl ProxyBuilder {
     /// add a getter and setter
     pub fn property<G, S>(&mut self, name: &'static str, getter: G, setter: S) -> &mut Self
     where
-        G: Fn(*mut JSContext, i32) -> Result<JSVal, String> + 'static,
+        G: Fn(*mut JSContext, i32, MutableHandleValue) -> Result<(), String> + 'static,
         S: Fn(*mut JSContext, i32, HandleValue) -> Result<(), String> + 'static,
     {
         self.properties
@@ -436,7 +439,7 @@ impl ProxyBuilder {
     /// add a static getter and setter
     pub fn static_property<G, S>(&mut self, name: &'static str, getter: G, setter: S) -> &mut Self
     where
-        G: Fn(*mut JSContext) -> Result<JSVal, String> + 'static,
+        G: Fn(*mut JSContext, MutableHandleValue) -> Result<(), String> + 'static,
         S: Fn(*mut JSContext, HandleValue) -> Result<(), String> + 'static,
     {
         self.static_properties
@@ -447,7 +450,8 @@ impl ProxyBuilder {
     /// add a method
     pub fn method<M>(&mut self, name: &'static str, method: M) -> &mut Self
     where
-        M: Fn(*mut JSContext, i32, Vec<HandleValue>) -> Result<JSVal, String> + 'static,
+        M: Fn(*mut JSContext, i32, Vec<HandleValue>, MutableHandleValue) -> Result<(), String>
+            + 'static,
     {
         self.methods.insert(name, Box::new(method));
         self
@@ -462,7 +466,7 @@ impl ProxyBuilder {
     /// add a static method
     pub fn static_method<M>(&mut self, name: &'static str, method: M) -> &mut Self
     where
-        M: Fn(*mut JSContext, Vec<HandleValue>) -> Result<JSVal, String> + 'static,
+        M: Fn(*mut JSContext, Vec<HandleValue>, MutableHandleValue) -> Result<(), String> + 'static,
     {
         self.static_methods.insert(name, Box::new(method));
         self
@@ -494,7 +498,7 @@ mod tests {
     use crate::es_utils::reflection::*;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use log::debug;
-    use mozjs::jsval::{Int32Value, UndefinedValue};
+    use mozjs::jsval::Int32Value;
     use mozjs::rust::HandleValue;
 
     #[test]
@@ -518,28 +522,30 @@ mod tests {
                             debug!("proxytest: construct with name {}", name);
                             Ok(1)
                         })
-                        .property("foo", |_cx, obj_id| {
+                        .property("foo", |_cx, obj_id, mut rval| {
                             debug!("proxy.get foo {}", obj_id);
-                            Ok(Int32Value(123))
+                            rval.set(Int32Value(123));
+                            Ok(())
                         }, |_cx, obj_id, _val| {
                             debug!("proxy.set foo {}", obj_id);
                             Ok(())
                         })
-                        .property("bar", |_cx, _obj_id| {
-                            Ok(Int32Value(456))
+                        .property("bar", |_cx, _obj_id, mut rval| {
+                            rval.set(Int32Value(456));
+                            Ok(())
                         }, |_cx, _obj_id, _val| {
                             Ok(())
                         })
                         .finalizer(|id: i32| {
                             debug!("proxytest: finalize id {}", id);
                         })
-                        .method("methodA", |_cx, obj_id, args| {
+                        .method("methodA", |_cx, obj_id, args, _rval| {
                             trace!("proxy.methodA called for obj {} with {} args", obj_id, args.len());
-                            Ok(UndefinedValue())
+                            Ok(())
                         })
-                        .method("methodB", |_cx, obj_id, args| {
+                        .method("methodB", |_cx, obj_id, args, _rval| {
                             trace!("proxy.methodB called for obj {} with {} args", obj_id, args.len());
-                            Ok(UndefinedValue())
+                            Ok(())
                         })
                         .event("saved")
                         .build(cx, global);
@@ -582,25 +588,27 @@ mod tests {
             inner.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
                 sm_rt.do_with_jsapi(|_rt, cx, global| {
                     let _proxy_arc = ProxyBuilder::new(vec![],"TestClass2")
-                        .static_property("foo", |_cx| {
+                        .static_property("foo", |_cx, mut rval| {
                             debug!("static_proxy.get foo");
-                            Ok(Int32Value(123))
+                            rval.set(Int32Value(123));
+                            Ok(())
                         }, |_cx, _val| {
                             debug!("static_proxy.set foo");
                             Ok(())
                         })
-                        .static_property("bar", |_cx| {
-                            Ok(Int32Value(456))
+                        .static_property("bar", |_cx, mut rval| {
+                            rval.set(Int32Value(456));
+                            Ok(())
                         }, |_cx, _val| {
                             Ok(())
                         })
-                        .static_method("methodA", |_cx, args| {
+                        .static_method("methodA", |_cx, args, _rval| {
                             trace!("static_proxy.methodA called with {} args", args.len());
-                            Ok(UndefinedValue())
+                            Ok(())
                         })
-                        .static_method("methodB", |_cx, args| {
+                        .static_method("methodB", |_cx, args, _rval| {
                             trace!("static_proxy.methodB called with {} args", args.len());
-                            Ok(UndefinedValue())
+                            Ok(())
                         })
                         .static_event("saved")
                         .build(cx, global);
@@ -838,11 +846,12 @@ unsafe extern "C" fn proxy_instance_getter(
                 let p_name = &prop_name[4..];
 
                 if let Some(prop) = proxy.properties.get(p_name) {
-                    let js_val_res = prop.0(cx, obj_id);
+                    rooted!(in (cx) let mut rval = UndefinedValue());
+                    let js_val_res = prop.0(cx, obj_id, rval.handle_mut());
                     trace!("got val for getter");
                     match js_val_res {
-                        Ok(js_val) => {
-                            args.rval().set(js_val);
+                        Ok(()) => {
+                            args.rval().set(rval.get());
                         }
                         Err(js_err) => {
                             let s = format!("method {} failed\ncaused by: {}\0", p_name, js_err);
@@ -889,11 +898,12 @@ unsafe extern "C" fn proxy_static_getter(
                 let p_name = &prop_name[4..];
 
                 if let Some(prop) = proxy.static_properties.get(p_name) {
-                    let js_val_res = prop.0(cx);
+                    rooted!(in (cx) let mut rval = UndefinedValue());
+                    let js_val_res = prop.0(cx, rval.handle_mut());
                     trace!("got val for static_getter");
                     match js_val_res {
-                        Ok(js_val) => {
-                            args.rval().set(js_val);
+                        Ok(()) => {
+                            args.rval().set(rval.get());
                         }
                         Err(js_err) => {
                             let s = format!("getter {} failed\ncaused by: {}\0", p_name, js_err);
@@ -1405,11 +1415,11 @@ unsafe extern "C" fn proxy_instance_method(
                     for x in 0..args.argc_ {
                         args_vec.push(HandleValue::from_marked_location(&*args.get(x)));
                     }
-
-                    let js_val_res = prop(cx, obj_id, args_vec);
+                    rooted!(in (cx) let mut rval = UndefinedValue());
+                    let js_val_res = prop(cx, obj_id, args_vec, rval.handle_mut());
                     match js_val_res {
-                        Ok(js_val) => {
-                            args.rval().set(js_val);
+                        Ok(()) => {
+                            args.rval().set(rval.get());
                         }
                         Err(js_err) => {
                             let s = format!("method {} failed\ncaused by: {}\0", p_name, js_err);
@@ -1459,10 +1469,11 @@ unsafe extern "C" fn proxy_static_method(
                         args_vec.push(HandleValue::from_marked_location(&*args.get(x)));
                     }
 
-                    let js_val_res = prop(cx, args_vec);
+                    rooted!(in (cx) let mut rval = UndefinedValue());
+                    let js_val_res = prop(cx, args_vec, rval.handle_mut());
                     match js_val_res {
-                        Ok(js_val) => {
-                            args.rval().set(js_val);
+                        Ok(()) => {
+                            args.rval().set(rval.get());
                         }
                         Err(js_err) => {
                             let s =

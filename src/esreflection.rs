@@ -286,7 +286,7 @@ impl EsProxyBuilder {
                     let es_method_name = method_entry.0;
 
                     let es_method = method_entry.1;
-                    builder.method(es_method_name, move |_cx, obj_id, args| {
+                    builder.method(es_method_name, move |_cx, obj_id, args, mut rval| {
                         crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
                             let sm_rt = &*sm_rt_rc.borrow();
                             sm_rt.do_with_jsapi(|rt, cx, global| {
@@ -298,7 +298,10 @@ impl EsProxyBuilder {
 
                                 let res = es_method(&obj_id, es_args);
                                 match res {
-                                    Ok(esvf) => Ok(esvf.to_es_value(cx)),
+                                    Ok(esvf) => {
+                                        rval.set(esvf.to_es_value(cx));
+                                        Ok(())
+                                    }
                                     Err(err_str) => Err(err_str),
                                 }
                             })
@@ -313,13 +316,16 @@ impl EsProxyBuilder {
                     let (es_getter, es_setter) = method_entry.1;
                     builder.property(
                         es_prop_name,
-                        move |_cx, obj_id| {
+                        move |_cx, obj_id, mut rval| {
                             crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
                                 let sm_rt = &*sm_rt_rc.borrow();
                                 sm_rt.do_with_jsapi(|_rt, cx, _global| {
                                     let res = es_getter(&obj_id);
                                     match res {
-                                        Ok(esvf) => Ok(esvf.to_es_value(cx)),
+                                        Ok(esvf) => {
+                                            rval.set(esvf.to_es_value(cx));
+                                            Ok(())
+                                        }
                                         Err(err_str) => Err(err_str),
                                     }
                                 })
@@ -346,7 +352,7 @@ impl EsProxyBuilder {
                     let es_method_name = method_entry.0;
 
                     let es_method = method_entry.1;
-                    builder.static_method(es_method_name, move |_cx, args| {
+                    builder.static_method(es_method_name, move |_cx, args, mut rval| {
                         crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
                             let sm_rt = &*sm_rt_rc.borrow();
                             sm_rt.do_with_jsapi(|rt, cx, global| {
@@ -358,7 +364,10 @@ impl EsProxyBuilder {
 
                                 let res = es_method(es_args);
                                 match res {
-                                    Ok(esvf) => Ok(esvf.to_es_value(cx)),
+                                    Ok(esvf) => {
+                                        rval.set(esvf.to_es_value(cx));
+                                        Ok(())
+                                    }
                                     Err(err_str) => Err(err_str),
                                 }
                             })
@@ -373,13 +382,16 @@ impl EsProxyBuilder {
                     let (es_getter, es_setter) = method_entry.1;
                     builder.static_property(
                         es_prop_name,
-                        move |_cx| {
+                        move |_cx, mut rval| {
                             crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
                                 let sm_rt = &*sm_rt_rc.borrow();
                                 sm_rt.do_with_jsapi(|_rt, cx, _global| {
                                     let res = es_getter();
                                     match res {
-                                        Ok(esvf) => Ok(esvf.to_es_value(cx)),
+                                        Ok(esvf) => {
+                                            rval.set(esvf.to_es_value(cx));
+                                            Ok(())
+                                        }
                                         Err(err_str) => Err(err_str),
                                     }
                                 })

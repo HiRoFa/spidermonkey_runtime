@@ -28,7 +28,7 @@ impl TaskManager {
     #[allow(dead_code)]
     pub fn run_task_blocking<R: Send, T: FnOnce() -> R + Send>(&self, task: T) -> R {
         trace!("adding a sync task from thread {}", thread_id::get());
-        // chekc if the current thread is not a worker thread, because that would be bad
+        // check if the current thread is not a worker thread, because that would be bad
         assert!(self.thread_pool.current_thread_index().is_none());
         self.thread_pool.install(task)
     }
