@@ -88,7 +88,6 @@ impl EsRuntimeWrapper {
     /// or
     /// esses.invoke_rust_op_void(name, param1, param2) -> returns nothing, but should be slightly faster then ignoring the promise from invoke_rust_op
     ///
-    #[deprecated]
     pub fn register_op(&self, name: &'static str, op: crate::spidermonkeyruntimewrapper::OP) {
         self.do_with_inner(|inner| {
             inner.register_op(name, op);
