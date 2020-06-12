@@ -214,6 +214,28 @@ impl EsProxyBuilder {
             .insert(name, (Box::new(getter), Box::new(setter)));
         self
     }
+
+    /// add a static method to the proxy class, this can be called directly on the class without creating an instance
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esreflection::EsProxyBuilder;
+    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// fn test_static_method() {
+    ///    let rt = EsRuntimeWrapperBuilder::default().build();
+    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///        .static_method("doSomethingStatic", |_args| {
+    ///            println!("did something static");
+    ///            Ok(EsValueFacade::undefined())
+    ///        })
+    ///        .build(&rt);
+    ///     // we can then eval script which uses the static method
+    ///     rt.eval_sync("my.biz.MyClass.doSomethingStatic();", "test_static_method.es").ok().unwrap();
+    /// }
+    /// ```
+    ///
     pub fn static_method<M>(&mut self, name: &'static str, method: M) -> &mut Self
     where
         M: Fn(Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send + 'static,
@@ -222,6 +244,7 @@ impl EsProxyBuilder {
         self
     }
 
+    /// build the EsProxy this adds the proxy class to the runtime and return an EsProxy object
     pub fn build(&mut self, rt: &EsRuntimeWrapper) -> EsProxy {
         let cn = self.class_name;
         let ns = self.namespace.clone();
@@ -422,6 +445,9 @@ impl EsProxyBuilder {
             class_name: self.class_name,
         }
     }
+
+    /// get the canonical name of the Proxy Class, this includes the namespace
+    /// e.g. "my.biz.MyApp"
     pub fn get_canonical_name(&self) -> String {
         format!("{}.{}", self.namespace.join("."), self.class_name)
     }
