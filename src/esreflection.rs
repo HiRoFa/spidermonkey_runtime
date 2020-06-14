@@ -162,6 +162,7 @@ impl EsProxyBuilder {
         self.constructor = Some(Box::new(constructor));
         self
     }
+
     pub fn finalizer<F>(&mut self, finalizer: F) -> &mut Self
     where
         F: Fn(i32) + Send + 'static,
@@ -169,6 +170,28 @@ impl EsProxyBuilder {
         self.finalizer = Some(Box::new(finalizer));
         self
     }
+
+    /// add a method to the proxy class, the method can be called on an instance of the class
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esreflection::EsProxyBuilder;
+    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// fn test_method() {
+    ///    let rt = EsRuntimeWrapperBuilder::default().build();
+    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///        .method("soSomething", |obj_id, args| {
+    ///             println!("doing something for objId {}", obj_id);
+    ///             Ok(EsValueFacade::undefined())
+    ///        })
+    ///        .build(&rt);
+    ///     // we can then eval script which uses the static getter and setter
+    ///     rt.eval_sync("let mc = new my.biz.MyClass(); mc.doSomething();", "test_method.es").ok().unwrap();
+    /// }
+    /// ```
+    ///
     pub fn method<M>(&mut self, name: &'static str, method: M) -> &mut Self
     where
         M: Fn(&i32, Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send + 'static,
@@ -176,6 +199,31 @@ impl EsProxyBuilder {
         self.methods.insert(name, Box::new(method));
         self
     }
+
+    /// add a property to the proxy class, the getter and setter can be called on an instance of the class
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esreflection::EsProxyBuilder;
+    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// fn test_property() {
+    ///    let rt = EsRuntimeWrapperBuilder::default().build();
+    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///        .property("someProp", |obj_id| {
+    ///             println!("getting some_prop for objId {}", obj_id);
+    ///             Ok(EsValueFacade::new_i32(1234))
+    ///        }, |obj_id, arg| {
+    ///             println!("setting some_prop to {} for objId {}", arg.get_i32(), obj_id);             
+    ///             Ok(())
+    ///         })
+    ///        .build(&rt);
+    ///     // we can then eval script which uses the static getter and setter
+    ///     rt.eval_sync("let mc = new my.biz.MyClass(); mc.someProp = 4321; console.log('someprop = %s', mc.someProp);", "test_property.es").ok().unwrap();
+    /// }
+    /// ```
+    ///
     pub fn property<G, S>(&mut self, name: &'static str, getter: G, setter: S) -> &mut Self
     where
         G: Fn(&i32) -> Result<EsValueFacade, String> + Send + 'static,
@@ -186,25 +234,38 @@ impl EsProxyBuilder {
         self
     }
 
-    /// add an event to the EsProxy class
-    /// this enables the scripter to add EventHandlers to the instance of your class
-    /// # Example
-    /// ```javascript
-    /// let obj = new my.biz.MyClass();
-    /// obj.addEventListener("my_event_type", (evt_obj) => {console.log('event was invoked');});
-    /// ```
+    /// define an event type to the proxy class, the event can be dispatched on an instance of the class
     ///
-    /// from rust you can dispatch events by calling the EsProxy::dispatch_event() method
+    /// # Example
     ///
     /// ```rust
-    ///     
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esreflection::EsProxyBuilder;
+    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// fn test_event() {
+    ///    let rt = EsRuntimeWrapperBuilder::default().build();
+    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///        .constructor(|args| {
+    ///              // use id one as obj id
+    ///              Ok(1)
+    ///        })
+    ///        .event("itHappened")
+    ///        .build(&rt);
+    ///
+    ///     // we can then eval script which uses the static getter and setter
+    ///     rt.eval_sync("let mc = new my.biz.MyClass(); mc.addEventListener('itHappened', (evtObj) => {console.log('Jup, it happened with %s', evtObj);})", "test_event.es").ok().unwrap();
+    ///
+    ///     // we can then dispatch the event from rust
+    ///     es_proxy.dispatch_event(&rt, 1, "itHappened", EsValueFacade::new_i32(123));
+    /// }
     /// ```
+    ///
     pub fn event(&mut self, event_type: &'static str) -> &mut Self {
         self.events.insert(event_type);
         self
     }
 
-    /// define a static evet type to the proxy class, the event can be dispatched directly on the class without creating an instance
+    /// define a static event type to the proxy class, the event can be dispatched directly on the class without creating an instance
     ///
     /// # Example
     ///
