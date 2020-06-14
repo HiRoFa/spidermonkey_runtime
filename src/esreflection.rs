@@ -155,6 +155,32 @@ impl EsProxyBuilder {
             static_events: Default::default(),
         }
     }
+
+    /// the constrcutor is called when the script runtime instantiates an instance of you class
+    /// if you do not define a constrcutor for you proxy your proxy will not be constructable
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esreflection::EsProxyBuilder;
+    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// fn test_constructor() {
+    ///    let rt = EsRuntimeWrapperBuilder::default().build();
+    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///        .constructor(|args| {
+    ///             println!("create a new instance");
+    ///             // return an id which you can use to identify your rust objects
+    ///             Ok(123)
+    ///        })
+    ///        .build(&rt);
+    ///     // we can then eval script which uses the static getter and setter
+    ///     rt.eval_sync("let mc = new my.biz.MyClass();", "test_constructor.es").ok().unwrap();
+    ///     // call the gc
+    ///     rt.cleanup_sync();
+    /// }
+    /// ```
+    ///
     pub fn constructor<C>(&mut self, constructor: C) -> &mut Self
     where
         C: Fn(Vec<EsValueFacade>) -> Result<i32, String> + Send + 'static,
@@ -163,6 +189,31 @@ impl EsProxyBuilder {
         self
     }
 
+    /// the finalizer is the opposite of the constrcutor, it is called when the instance
+    /// of your class is garbage collected, it is a wayt for you to clean up after
+    /// the garbage collector
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esreflection::EsProxyBuilder;
+    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// fn test_finalizer() {
+    ///    let rt = EsRuntimeWrapperBuilder::default().build();
+    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///        .finalizer(|obj_id| {
+    ///             println!("do cleanup for objId {}", obj_id);
+    ///        })
+    ///        .build(&rt);
+    ///     // we can then eval script which uses the static getter and setter
+    ///     rt.eval_sync("let mc = new my.biz.MyClass(); mc = null;", "test_finalizer.es")
+    ///         .ok().unwrap();
+    ///     // call the gc
+    ///     rt.cleanup_sync();
+    /// }
+    /// ```
+    ///
     pub fn finalizer<F>(&mut self, finalizer: F) -> &mut Self
     where
         F: Fn(i32) + Send + 'static,
@@ -188,7 +239,8 @@ impl EsProxyBuilder {
     ///        })
     ///        .build(&rt);
     ///     // we can then eval script which uses the static getter and setter
-    ///     rt.eval_sync("let mc = new my.biz.MyClass(); mc.doSomething();", "test_method.es").ok().unwrap();
+    ///     rt.eval_sync("let mc = new my.biz.MyClass(); mc.doSomething();", "test_method.es")
+    ///         .ok().unwrap();
     /// }
     /// ```
     ///
@@ -200,7 +252,8 @@ impl EsProxyBuilder {
         self
     }
 
-    /// add a property to the proxy class, the getter and setter can be called on an instance of the class
+    /// add a property to the proxy class, the getter and setter can be called on an instance
+    /// of the class
     ///
     /// # Example
     ///
@@ -220,7 +273,10 @@ impl EsProxyBuilder {
     ///         })
     ///        .build(&rt);
     ///     // we can then eval script which uses the static getter and setter
-    ///     rt.eval_sync("let mc = new my.biz.MyClass(); mc.someProp = 4321; console.log('someprop = %s', mc.someProp);", "test_property.es").ok().unwrap();
+    ///     rt.eval_sync("let mc = new my.biz.MyClass(); \
+    ///     mc.someProp = 4321; \
+    ///     console.log('someprop = %s', mc.someProp);"
+    ///     , "test_property.es").ok().unwrap();
     /// }
     /// ```
     ///
@@ -234,7 +290,8 @@ impl EsProxyBuilder {
         self
     }
 
-    /// define an event type to the proxy class, the event can be dispatched on an instance of the class
+    /// define an event type to the proxy class, the event can be dispatched on an instance
+    /// of the class
     ///
     /// # Example
     ///
@@ -253,7 +310,10 @@ impl EsProxyBuilder {
     ///        .build(&rt);
     ///
     ///     // we can then eval script which uses the static getter and setter
-    ///     rt.eval_sync("let mc = new my.biz.MyClass(); mc.addEventListener('itHappened', (evtObj) => {console.log('Jup, it happened with %s', evtObj);})", "test_event.es").ok().unwrap();
+    ///     rt.eval_sync("let mc = new my.biz.MyClass(); \
+    ///     mc.addEventListener('itHappened', \
+    ///         (evtObj) => {console.log('Jup, it happened with %s', evtObj);})"
+    ///     , "test_event.es").ok().unwrap();
     ///
     ///     // we can then dispatch the event from rust
     ///     es_proxy.dispatch_event(&rt, 1, "itHappened", EsValueFacade::new_i32(123));
@@ -265,7 +325,8 @@ impl EsProxyBuilder {
         self
     }
 
-    /// define a static event type to the proxy class, the event can be dispatched directly on the class without creating an instance
+    /// define a static event type to the proxy class, the event can be dispatched directly on the
+    /// class without creating an instance
     ///
     /// # Example
     ///
@@ -292,7 +353,8 @@ impl EsProxyBuilder {
         self
     }
 
-    /// add a static property to the proxy class, the getter and setter can be called directly on the class without creating an instance
+    /// add a static property to the proxy class, the getter and setter can be called directly on
+    /// the class without creating an instance
     ///
     /// # Example
     ///
@@ -312,7 +374,9 @@ impl EsProxyBuilder {
     ///         })
     ///        .build(&rt);
     ///     // we can then eval script which uses the static getter and setter
-    ///     rt.eval_sync("my.biz.MyClass.someProp = 4321; console.log('someprop = %s', my.biz.MyClass.someProp);", "test_static_property.es").ok().unwrap();
+    ///     rt.eval_sync("my.biz.MyClass.someProp = 4321; \
+    ///     console.log('someprop = %s', my.biz.MyClass.someProp);", "test_static_property.es")
+    ///     .ok().unwrap();
     /// }
     /// ```
     ///
@@ -326,7 +390,8 @@ impl EsProxyBuilder {
         self
     }
 
-    /// add a static method to the proxy class, this can be called directly on the class without creating an instance
+    /// add a static method to the proxy class, this can be called directly on the class without
+    /// creating an instance
     ///
     /// # Example
     ///
@@ -343,7 +408,8 @@ impl EsProxyBuilder {
     ///        })
     ///        .build(&rt);
     ///     // we can then eval script which uses the static method
-    ///     rt.eval_sync("my.biz.MyClass.doSomethingStatic();", "test_static_method.es").ok().unwrap();
+    ///     rt.eval_sync("my.biz.MyClass.doSomethingStatic();", "test_static_method.es")
+    ///     .ok().unwrap();
     /// }
     /// ```
     ///
