@@ -190,21 +190,71 @@ impl EsProxyBuilder {
     /// this enables the scripter to add EventHandlers to the instance of your class
     /// # Example
     /// ```javascript
-    /// let obj = new my.bix.MyClass();
+    /// let obj = new my.biz.MyClass();
     /// obj.addEventListener("my_event_type", (evt_obj) => {console.log('event was invoked');});
     /// ```
     ///
     /// from rust you can dispatch events by calling the EsProxy::dispatch_event() method
+    ///
+    /// ```rust
+    ///     
+    /// ```
     pub fn event(&mut self, event_type: &'static str) -> &mut Self {
         self.events.insert(event_type);
         self
     }
 
+    /// define a static evet type to the proxy class, the event can be dispatched directly on the class without creating an instance
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esreflection::EsProxyBuilder;
+    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// fn test_static_event() {
+    ///    let rt = EsRuntimeWrapperBuilder::default().build();
+    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///        .static_event("itHappened")
+    ///        .build(&rt);
+    ///
+    ///     // we can then eval script which uses the static getter and setter
+    ///     rt.eval_sync("my.biz.MyClass.addEventListener('itHappened', (evtObj) => {console.log('Jup, it happened with %s', evtObj);})", "test_static_event.es").ok().unwrap();
+    ///
+    ///     // we can then dispatch the event from rust
+    ///     es_proxy.dispatch_static_event(&rt, "itHappened", EsValueFacade::new_i32(123));
+    /// }
+    /// ```
+    ///
     pub fn static_event(&mut self, event_type: &'static str) -> &mut Self {
         self.static_events.insert(event_type);
         self
     }
 
+    /// add a static property to the proxy class, the getter and setter can be called directly on the class without creating an instance
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esreflection::EsProxyBuilder;
+    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// fn test_static_property() {
+    ///    let rt = EsRuntimeWrapperBuilder::default().build();
+    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///        .static_property("someProp", || {
+    ///             println!("getting some_prop");
+    ///             Ok(EsValueFacade::new_i32(1234))
+    ///        }, |arg| {
+    ///             println!("setting some_prop to {}", arg.get_i32());             
+    ///             Ok(())
+    ///         })
+    ///        .build(&rt);
+    ///     // we can then eval script which uses the static getter and setter
+    ///     rt.eval_sync("my.biz.MyClass.someProp = 4321; console.log('someprop = %s', my.biz.MyClass.someProp);", "test_static_property.es").ok().unwrap();
+    /// }
+    /// ```
+    ///
     pub fn static_property<G, S>(&mut self, name: &'static str, getter: G, setter: S) -> &mut Self
     where
         G: Fn() -> Result<EsValueFacade, String> + Send + 'static,
