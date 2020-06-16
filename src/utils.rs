@@ -3,6 +3,7 @@ use std::collections::HashMap;
 /// AutoIdMap is a wrapper around HashMap which automatically creates a unique id for it's entries
 /// # Example
 /// ```rust
+/// use es_runtime::utils::AutoIdMap;
 /// fn test_auto_id_map() {
 ///     let mut map = AutoIdMap::new();
 ///     let id1 = map.insert("hi");
@@ -63,9 +64,21 @@ impl<T> AutoIdMap<T> {
         self.map.len()
     }
 
+    /// see if map is empty
+    #[allow(dead_code)]
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
     /// check if a map contains a certain id
     #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn contains_key(&self, id: &usize) -> bool {
         self.map.contains_key(id)
+    }
+}
+
+impl<T> Default for AutoIdMap<T> {
+    fn default() -> Self {
+        AutoIdMap::new()
     }
 }

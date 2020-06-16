@@ -26,6 +26,18 @@ struct RustManagedEsVar {
 
 /// the EsValueFacade is a converter between rust variables and script objects
 /// when receiving a EsValueFacade from the script engine it's data is always a clone from the actual data so we need not worry about the value being garbage collected
+///
+/// # Example
+///
+/// ```rust
+/// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+/// fn test_es_value_facade(){
+///     let rt = EsRuntimeWrapperBuilder::default().build();
+///     let esvf = rt.eval_sync("123", "test_es_value_facade.es").ok().unwrap();
+///     assert!(esvf.is_i32());
+///     assert_eq!(esvf.get_i32(), &123);
+/// }
+/// ```
 pub struct EsValueFacade {
     val_string: Option<String>,
     val_i32: Option<i32>,
@@ -121,6 +133,30 @@ impl EsValueFacade {
     }
 
     /// create a new EsValueFacade representing a Promise, the passed closure will actually run in a seperate helper thread and resolve the Promise that is created in the script runtime
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use std::time::Duration;
+    /// fn test_new_promise(){
+    ///    let rt = EsRuntimeWrapperBuilder::new().build();
+    ///    rt.eval_sync("let myFunc = function(a){\
+    ///        a.then((res) => {\
+    ///            console.log('a resolved with %s', res);\
+    ///        });\
+    ///    };", "test_new_promise.es");
+    ///    let esvf_arg = EsValueFacade::new_promise(|| {
+    ///        // do complicated calculations or whatever here, it will run async
+    ///        // then return Ok to resolve the promise or Err to reject it
+    ///        Ok(EsValueFacade::new_i32(123))
+    ///    });
+    ///    rt.call_sync(vec![], "myFunc", vec![esvf_arg]);
+    ///    // wait for promise to resolve
+    ///    std::thread::sleep(Duration::from_secs(1));
+    /// }
+    /// ```
     pub fn new_promise<C>(resolver: C) -> EsValueFacade
     where
         C: FnOnce() -> Result<EsValueFacade, String> + Send + 'static,
@@ -442,6 +478,23 @@ impl EsValueFacade {
         self.val_promise.is_some()
     }
 
+    /// wait for a promise to resolve in rust
+    /// # Example
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use std::time::Duration;
+    /// fn test_get_promise_result_blocking(){
+    ///     let rt = EsRuntimeWrapperBuilder::new().build();
+    ///     // run the script and fail if script fails
+    ///     let esvf_prom = rt.eval_sync("let p = new Promise((resolve, reject) => {setImmediate(() => {resolve(123);});}); p;", "test_get_promise_result_blocking.es").ok().expect("script failed");
+    ///     // wait for the promise or fail on timeout
+    ///     let wait_res = esvf_prom.get_promise_result_blocking(Duration::from_secs(1)).ok().expect("promise timed out");
+    ///     // get the ok result, fail is promise was rejected
+    ///     let esvf = wait_res.ok().expect("promise was rejected");
+    ///     // check the result
+    ///     assert_eq!(esvf.get_i32(), &123);
+    /// }
+    /// ```
     pub fn get_promise_result_blocking(
         &self,
         timeout: Duration,

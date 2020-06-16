@@ -108,7 +108,7 @@ mod enginehandleproducer;
 mod es_sys_scripts;
 #[macro_use]
 
-mod utils;
+pub mod utils;
 pub mod es_utils;
 pub mod esreflection;
 pub mod esruntimewrapper;
