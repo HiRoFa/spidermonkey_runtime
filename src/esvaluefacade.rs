@@ -336,7 +336,7 @@ impl EsValueFacade {
                 // add vals
 
                 let arr_len = get_array_length(context, obj_root.handle()).ok().unwrap();
-                for x in 0..arr_len - 1 {
+                for x in 0..arr_len {
                     rooted!(in (context) let mut arr_element_root = UndefinedValue());
                     let get_res = get_array_element(
                         context,
@@ -1109,6 +1109,8 @@ mod tests {
         assert!(esvf.is_array());
 
         let vec: &Vec<EsValueFacade> = esvf.get_array();
+
+        assert_eq!(vec.len(), 3);
 
         let esvf_0 = vec.get(1).unwrap();
 
