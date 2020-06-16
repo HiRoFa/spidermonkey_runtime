@@ -1201,7 +1201,7 @@ mod tests {
         let res2 = p2_esvf_rej
             .ok()
             .unwrap()
-            .get_promise_result_blocking(Duration::from_secs(10))
+            .get_promise_result_blocking(Duration::from_secs(30))
             .ok()
             .unwrap();
 
@@ -1231,7 +1231,7 @@ mod tests {
         let res = p2_esvf
             .ok()
             .unwrap()
-            .get_promise_result_blocking(Duration::from_secs(10))
+            .get_promise_result_blocking(Duration::from_secs(30))
             .ok()
             .unwrap();
 

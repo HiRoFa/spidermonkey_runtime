@@ -16,8 +16,8 @@ use std::cell::RefCell;
 use std::time::Duration;
 
 lazy_static! {
-    /// a static Multithreaded taskmanager used to run rust ops async and multithreaded
-    static ref HELPER_TASKS: Arc<TaskManager> = Arc::new(TaskManager::new(num_cpus::get()));
+    /// a static Multithreaded taskmanager used to run rust ops async and multithreaded ( in at least 2 threads)
+    static ref HELPER_TASKS: Arc<TaskManager> = Arc::new(TaskManager::new(std::cmp::max(2, num_cpus::get())));
 }
 
 /// the EsRuntimeWrapper is a facade that adds all script todo's to the SmRuntimeWrapper's MicroTaskManager so they are invoked in a single worker thread
