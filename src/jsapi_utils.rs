@@ -1,3 +1,28 @@
+//! # jsapi_utils
+//!
+//! this mod contains utilities for working with JSAPI(SpiderMonkey)
+//! unless states otherwise you can asume that all methods in this mod and submods need to be called
+//! from the workerthread of the EsRuntime
+//!
+//! # Example
+//!
+//! ```no_run
+//!     use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+//!     use es_runtime::jsapi_utils;
+//!
+//! let rt = EsRuntimeWrapperBuilder::new().build();
+//! rt.do_in_es_runtime_thread_sync(|sm_rt| {
+//!     // use jsapi_utils here
+//!     // if you need the Runtime, JSContext or Global object (which you almost allways will)
+//!     // you can use this method in the SmRuntime
+//!     sm_rt.do_with_jsapi(|rt, cx, global| {
+//!         // use jsapi_utils here
+//!         let there_is_a_pending_exception = jsapi_utils::report_es_ex(cx).is_some();         
+//!     })
+//! })
+//! ```
+//!
+
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 use crate::jsapi_utils::objects::{get_es_obj_prop_val_as_i32, get_es_obj_prop_val_as_string};
 use log::{debug, trace};

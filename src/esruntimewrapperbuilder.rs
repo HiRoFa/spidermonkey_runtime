@@ -6,11 +6,10 @@ use std::time::Duration;
 ///
 /// # Example
 ///
-/// ```rust
+/// ```no_run
 /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
-/// fn test_EsRuntimeWrapperBuilder(){
-///     let rt = EsRuntimeWrapperBuilder::default().build();
-/// }
+///
+/// let rt = EsRuntimeWrapperBuilder::default().build();
 /// ```
 ///
 

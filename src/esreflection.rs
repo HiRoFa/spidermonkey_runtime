@@ -4,13 +4,12 @@
 //!
 //! # Example
 //!
-//! ```rust
+//! ```no_run
 //!
 //! use es_runtime::esreflection::EsProxy;
 //! use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
 //! use es_runtime::esvaluefacade::EsValueFacade;
 //! use std::collections::HashMap;
-//! fn test_es_proxy(){
 //!
 //!     let rt = EsRuntimeWrapperBuilder::new().build();
 //!
@@ -52,9 +51,6 @@
 //!     evt_props.insert("subject".to_string(), EsValueFacade::new_str("Putting people on Jupiter".to_string()));
 //!     let evt_obj = EsValueFacade::new_obj(evt_props);
 //!     static_proxy.dispatch_static_event(&rt, "epiphany", evt_obj);
-//!
-//! }
-//!
 //! ```
 //!
 //!
@@ -108,24 +104,22 @@ impl EsProxy {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
-    /// fn test_dispatch_event(){
-    ///    let rt = EsRuntimeWrapperBuilder::default().build();
-    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
-    ///    .constructor(|args| {
-    ///        Ok(1)
-    ///    })
-    ///    .event("some_event").build(&rt);
-    ///    rt.eval_sync("let i = new my.biz.MyClass(); \
-    ///                  i.addEventListener('some_event', (evtObj) => {\
-    ///                      console.log('it happened!');\
-    ///                  });", "test_dispatch_event.es");
-    ///    es_proxy.dispatch_event(&rt, 1, "some_event", EsValueFacade::undefined());
     ///
-    /// }
+    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///.constructor(|args| {
+    ///    Ok(1)
+    ///})
+    ///.event("some_event").build(&rt);
+    ///rt.eval_sync("let i = new my.biz.MyClass(); \
+    ///              i.addEventListener('some_event', (evtObj) => {\
+    ///                  console.log('it happened!');\
+    ///              });", "test_dispatch_event.es");
+    ///es_proxy.dispatch_event(&rt, 1, "some_event", EsValueFacade::undefined());
     /// ```
     pub fn dispatch_event(
         &self,
@@ -151,24 +145,22 @@ impl EsProxy {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
-    /// fn test_dispatch_event(){
-    ///    let rt = EsRuntimeWrapperBuilder::default().build();
-    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
-    ///    .constructor(|args| {
-    ///        Ok(1)
-    ///    })
-    ///    .event("some_event").build(&rt);
-    ///    rt.eval_sync("let i = new my.biz.MyClass(); \
-    ///                  i.addEventListener('some_event', (evtObj) => {\
-    ///                      console.log('it happened!');\
-    ///                  });", "test_dispatch_event.es");
-    ///    es_proxy.dispatch_event(&rt, 1, "some_event", EsValueFacade::undefined());
     ///
-    /// }
+    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///.constructor(|args| {
+    ///    Ok(1)
+    ///})
+    ///.event("some_event").build(&rt);
+    ///rt.eval_sync("let i = new my.biz.MyClass(); \
+    ///              i.addEventListener('some_event', (evtObj) => {\
+    ///                  console.log('it happened!');\
+    ///              });", "test_dispatch_event.es");
+    ///es_proxy.dispatch_event(&rt, 1, "some_event", EsValueFacade::undefined());
     /// ```
     pub fn dispatch_static_event(
         &self,
@@ -191,16 +183,14 @@ impl EsProxy {
     /// e.g. "my.biz.MyApp"
     /// # Example
     ///
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
-    /// fn test_canonical_name(){
-    ///    let rt = EsRuntimeWrapperBuilder::default().build();
-    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass").build(&rt);
-    ///    assert_eq!(es_proxy.get_canonical_name().as_str(), "my.biz.MyClass");
-    /// }
     ///
+    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass").build(&rt);
+    ///assert_eq!(es_proxy.get_canonical_name().as_str(), "my.biz.MyClass");
     /// ```
     pub fn get_canonical_name(&self) -> String {
         format!("{}.{}", self.namespace.join("."), self.class_name)
@@ -214,14 +204,13 @@ impl EsProxyBuilder {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
-    /// fn test_builder_new() {
-    ///    let rt = EsRuntimeWrapperBuilder::default().build();
-    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass").build(&rt);
-    /// }
+    ///
+    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass").build(&rt);
     /// ```
     pub fn new(namespace: Vec<&'static str>, class_name: &'static str) -> Self {
         EsProxyBuilder {
@@ -243,24 +232,23 @@ impl EsProxyBuilder {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
-    /// fn test_constructor() {
-    ///    let rt = EsRuntimeWrapperBuilder::default().build();
-    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
-    ///        .constructor(|args| {
-    ///             println!("create a new instance");
-    ///             // return an id which you can use to identify your rust objects
-    ///             Ok(123)
-    ///        })
-    ///        .build(&rt);
-    ///     // we can then eval script which uses the static getter and setter
-    ///     rt.eval_sync("let mc = new my.biz.MyClass();", "test_constructor.es").ok().unwrap();
-    ///     // call the gc
-    ///     rt.cleanup_sync();
-    /// }
+    ///
+    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///    .constructor(|args| {
+    ///         println!("create a new instance");
+    ///         // return an id which you can use to identify your rust objects
+    ///         Ok(123)
+    ///    })
+    ///    .build(&rt);
+    /// // we can then eval script which uses the static getter and setter
+    /// rt.eval_sync("let mc = new my.biz.MyClass();", "test_constructor.es").ok().unwrap();
+    /// // call the gc
+    /// rt.cleanup_sync();
     /// ```
     ///
     pub fn constructor<C>(&mut self, constructor: C) -> &mut Self
@@ -277,23 +265,22 @@ impl EsProxyBuilder {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
-    /// fn test_finalizer() {
-    ///    let rt = EsRuntimeWrapperBuilder::default().build();
-    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
-    ///        .finalizer(|obj_id| {
-    ///             println!("do cleanup for objId {}", obj_id);
-    ///        })
-    ///        .build(&rt);
-    ///     // we can then eval script which uses the static getter and setter
-    ///     rt.eval_sync("let mc = new my.biz.MyClass(); mc = null;", "test_finalizer.es")
-    ///         .ok().unwrap();
-    ///     // call the gc
-    ///     rt.cleanup_sync();
-    /// }
+    ///
+    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///    .finalizer(|obj_id| {
+    ///         println!("do cleanup for objId {}", obj_id);
+    ///    })
+    ///    .build(&rt);
+    /// // we can then eval script which uses the static getter and setter
+    /// rt.eval_sync("let mc = new my.biz.MyClass(); mc = null;", "test_finalizer.es")
+    ///     .ok().unwrap();
+    /// // call the gc
+    /// rt.cleanup_sync();
     /// ```
     ///
     pub fn finalizer<F>(&mut self, finalizer: F) -> &mut Self
@@ -308,22 +295,21 @@ impl EsProxyBuilder {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
-    /// fn test_method() {
-    ///    let rt = EsRuntimeWrapperBuilder::default().build();
-    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
-    ///        .method("soSomething", |obj_id, args| {
-    ///             println!("doing something for objId {}", obj_id);
-    ///             Ok(EsValueFacade::undefined())
-    ///        })
-    ///        .build(&rt);
-    ///     // we can then eval script which uses the static getter and setter
-    ///     rt.eval_sync("let mc = new my.biz.MyClass(); mc.doSomething();", "test_method.es")
-    ///         .ok().unwrap();
-    /// }
+    ///
+    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///    .method("soSomething", |obj_id, args| {
+    ///         println!("doing something for objId {}", obj_id);
+    ///         Ok(EsValueFacade::undefined())
+    ///    })
+    ///    .build(&rt);
+    /// // we can then eval script which uses the static getter and setter
+    /// rt.eval_sync("let mc = new my.biz.MyClass(); mc.doSomething();", "test_method.es")
+    ///     .ok().unwrap();
     /// ```
     ///
     pub fn method<M>(&mut self, name: &'static str, method: M) -> &mut Self
@@ -339,27 +325,26 @@ impl EsProxyBuilder {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
-    /// fn test_property() {
-    ///    let rt = EsRuntimeWrapperBuilder::default().build();
-    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
-    ///        .property("someProp", |obj_id| {
-    ///             println!("getting some_prop for objId {}", obj_id);
-    ///             Ok(EsValueFacade::new_i32(1234))
-    ///        }, |obj_id, arg| {
-    ///             println!("setting some_prop to {} for objId {}", arg.get_i32(), obj_id);             
-    ///             Ok(())
-    ///         })
-    ///        .build(&rt);
-    ///     // we can then eval script which uses the static getter and setter
-    ///     rt.eval_sync("let mc = new my.biz.MyClass(); \
-    ///     mc.someProp = 4321; \
-    ///     console.log('someprop = %s', mc.someProp);"
-    ///     , "test_property.es").ok().unwrap();
-    /// }
+    ///
+    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///    .property("someProp", |obj_id| {
+    ///         println!("getting some_prop for objId {}", obj_id);
+    ///         Ok(EsValueFacade::new_i32(1234))
+    ///    }, |obj_id, arg| {
+    ///         println!("setting some_prop to {} for objId {}", arg.get_i32(), obj_id);             
+    ///         Ok(())
+    ///     })
+    ///    .build(&rt);
+    /// // we can then eval script which uses the static getter and setter
+    /// rt.eval_sync("let mc = new my.biz.MyClass(); \
+    /// mc.someProp = 4321; \
+    /// console.log('someprop = %s', mc.someProp);"
+    /// , "test_property.es").ok().unwrap();
     /// ```
     ///
     pub fn property<G, S>(&mut self, name: &'static str, getter: G, setter: S) -> &mut Self
@@ -377,29 +362,28 @@ impl EsProxyBuilder {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
-    /// fn test_event() {
-    ///    let rt = EsRuntimeWrapperBuilder::default().build();
-    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
-    ///        .constructor(|args| {
-    ///              // use id one as obj id
-    ///              Ok(1)
-    ///        })
-    ///        .event("itHappened")
-    ///        .build(&rt);
     ///
-    ///     // we can then eval script which uses the static getter and setter
-    ///     rt.eval_sync("let mc = new my.biz.MyClass(); \
-    ///     mc.addEventListener('itHappened', \
-    ///         (evtObj) => {console.log('Jup, it happened with %s', evtObj);})"
-    ///     , "test_event.es").ok().unwrap();
+    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///    .constructor(|args| {
+    ///          // use id one as obj id
+    ///          Ok(1)
+    ///    })
+    ///    .event("itHappened")
+    ///    .build(&rt);
     ///
-    ///     // we can then dispatch the event from rust
-    ///     es_proxy.dispatch_event(&rt, 1, "itHappened", EsValueFacade::new_i32(123));
-    /// }
+    /// // we can then eval script which uses the static getter and setter
+    /// rt.eval_sync("let mc = new my.biz.MyClass(); \
+    /// mc.addEventListener('itHappened', \
+    ///     (evtObj) => {console.log('Jup, it happened with %s', evtObj);})"
+    /// , "test_event.es").ok().unwrap();
+    ///
+    /// // we can then dispatch the event from rust
+    /// es_proxy.dispatch_event(&rt, 1, "itHappened", EsValueFacade::new_i32(123));
     /// ```
     ///
     pub fn event(&mut self, event_type: &'static str) -> &mut Self {
@@ -412,22 +396,21 @@ impl EsProxyBuilder {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
-    /// fn test_static_event() {
-    ///    let rt = EsRuntimeWrapperBuilder::default().build();
-    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
-    ///        .static_event("itHappened")
-    ///        .build(&rt);
     ///
-    ///     // we can then eval script which uses the static getter and setter
-    ///     rt.eval_sync("my.biz.MyClass.addEventListener('itHappened', (evtObj) => {console.log('Jup, it happened with %s', evtObj);})", "test_static_event.es").ok().unwrap();
+    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///    .static_event("itHappened")
+    ///    .build(&rt);
     ///
-    ///     // we can then dispatch the event from rust
-    ///     es_proxy.dispatch_static_event(&rt, "itHappened", EsValueFacade::new_i32(123));
-    /// }
+    /// // we can then eval script which uses the static getter and setter
+    /// rt.eval_sync("my.biz.MyClass.addEventListener('itHappened', (evtObj) => {console.log('Jup, it happened with %s', evtObj);})", "test_static_event.es").ok().unwrap();
+    ///
+    /// // we can then dispatch the event from rust
+    /// es_proxy.dispatch_static_event(&rt, "itHappened", EsValueFacade::new_i32(123));
     /// ```
     ///
     pub fn static_event(&mut self, event_type: &'static str) -> &mut Self {
@@ -440,26 +423,25 @@ impl EsProxyBuilder {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
-    /// fn test_static_property() {
-    ///    let rt = EsRuntimeWrapperBuilder::default().build();
-    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
-    ///        .static_property("someProp", || {
-    ///             println!("getting some_prop");
-    ///             Ok(EsValueFacade::new_i32(1234))
-    ///        }, |arg| {
-    ///             println!("setting some_prop to {}", arg.get_i32());             
-    ///             Ok(())
-    ///         })
-    ///        .build(&rt);
-    ///     // we can then eval script which uses the static getter and setter
-    ///     rt.eval_sync("my.biz.MyClass.someProp = 4321; \
-    ///     console.log('someprop = %s', my.biz.MyClass.someProp);", "test_static_property.es")
-    ///     .ok().unwrap();
-    /// }
+    ///
+    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///    .static_property("someProp", || {
+    ///         println!("getting some_prop");
+    ///         Ok(EsValueFacade::new_i32(1234))
+    ///    }, |arg| {
+    ///         println!("setting some_prop to {}", arg.get_i32());             
+    ///         Ok(())
+    ///     })
+    ///    .build(&rt);
+    /// // we can then eval script which uses the static getter and setter
+    /// rt.eval_sync("my.biz.MyClass.someProp = 4321; \
+    /// console.log('someprop = %s', my.biz.MyClass.someProp);", "test_static_property.es")
+    /// .ok().unwrap();
     /// ```
     ///
     pub fn static_property<G, S>(&mut self, name: &'static str, getter: G, setter: S) -> &mut Self
@@ -477,22 +459,21 @@ impl EsProxyBuilder {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
-    /// fn test_static_method() {
-    ///    let rt = EsRuntimeWrapperBuilder::default().build();
-    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
-    ///        .static_method("doSomethingStatic", |_args| {
-    ///            println!("did something static");
-    ///            Ok(EsValueFacade::undefined())
-    ///        })
-    ///        .build(&rt);
-    ///     // we can then eval script which uses the static method
-    ///     rt.eval_sync("my.biz.MyClass.doSomethingStatic();", "test_static_method.es")
-    ///     .ok().unwrap();
-    /// }
+    ///
+    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///    .static_method("doSomethingStatic", |_args| {
+    ///        println!("did something static");
+    ///        Ok(EsValueFacade::undefined())
+    ///    })
+    ///    .build(&rt);
+    /// // we can then eval script which uses the static method
+    /// rt.eval_sync("my.biz.MyClass.doSomethingStatic();", "test_static_method.es")
+    /// .ok().unwrap();
     /// ```
     ///
     pub fn static_method<M>(&mut self, name: &'static str, method: M) -> &mut Self

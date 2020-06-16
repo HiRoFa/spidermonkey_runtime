@@ -87,22 +87,21 @@ impl SmRuntime {
     /// add a function to the global object
     /// this function will be callable from javascript just by using func_name();
     /// # Example
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use mozjs::jsval::Int32Value;
     /// use mozjs::jsapi::CallArgs;
-    /// fn add_global_function_example(){
-    ///     let rt = EsRuntimeWrapperBuilder::new().build();
-    ///     rt.do_in_es_runtime_thread_sync(|sm_rt| {
-    ///         sm_rt.add_global_function("my_function", |_cx, args: CallArgs| {
-    ///             // impl method here
-    ///             args.rval().set(Int32Value(480));
-    ///             true
-    ///         });
+    ///
+    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// rt.do_in_es_runtime_thread_sync(|sm_rt| {
+    ///     sm_rt.add_global_function("my_function", |_cx, args: CallArgs| {
+    ///         // impl method here
+    ///         args.rval().set(Int32Value(480));
+    ///         true
     ///     });
-    ///     let esvf = rt.eval_sync("my_function();", "test_add_global_function_example.es").ok().expect("test_add_global_function_example failed");
-    ///     assert_eq!(esvf.get_i32(), &480);
-    /// }
+    /// });
+    /// let esvf = rt.eval_sync("my_function();", "test_add_global_function_example.es").ok().expect("test_add_global_function_example failed");
+    /// assert_eq!(esvf.get_i32(), &480);
     /// ```
     pub fn add_global_function<F>(&self, name: &'static str, func: F)
     where

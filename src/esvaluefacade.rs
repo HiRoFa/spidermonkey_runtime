@@ -29,14 +29,13 @@ struct RustManagedEsVar {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```no_run
 /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
-/// fn test_es_value_facade(){
-///     let rt = EsRuntimeWrapperBuilder::default().build();
-///     let esvf = rt.eval_sync("123", "test_es_value_facade.es").ok().unwrap();
-///     assert!(esvf.is_i32());
-///     assert_eq!(esvf.get_i32(), &123);
-/// }
+///
+/// let rt = EsRuntimeWrapperBuilder::default().build();
+/// let esvf = rt.eval_sync("123", "test_es_value_facade.es").ok().unwrap();
+/// assert!(esvf.is_i32());
+/// assert_eq!(esvf.get_i32(), &123);
 /// ```
 pub struct EsValueFacade {
     val_string: Option<String>,
@@ -136,26 +135,25 @@ impl EsValueFacade {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     /// use std::time::Duration;
-    /// fn test_new_promise(){
-    ///    let rt = EsRuntimeWrapperBuilder::new().build();
-    ///    rt.eval_sync("let myFunc = function(a){\
-    ///        a.then((res) => {\
-    ///            console.log('a resolved with %s', res);\
-    ///        });\
-    ///    };", "test_new_promise.es");
-    ///    let esvf_arg = EsValueFacade::new_promise(|| {
-    ///        // do complicated calculations or whatever here, it will run async
-    ///        // then return Ok to resolve the promise or Err to reject it
-    ///        Ok(EsValueFacade::new_i32(123))
-    ///    });
-    ///    rt.call_sync(vec![], "myFunc", vec![esvf_arg]);
-    ///    // wait for promise to resolve
-    ///    std::thread::sleep(Duration::from_secs(1));
-    /// }
+    ///
+    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// rt.eval_sync("let myFunc = function(a){\
+    ///     a.then((res) => {\
+    ///         console.log('a resolved with %s', res);\
+    ///     });\
+    /// };", "test_new_promise.es");
+    /// let esvf_arg = EsValueFacade::new_promise(|| {
+    ///     // do complicated calculations or whatever here, it will run async
+    ///     // then return Ok to resolve the promise or Err to reject it
+    ///     Ok(EsValueFacade::new_i32(123))
+    /// });
+    /// rt.call_sync(vec![], "myFunc", vec![esvf_arg]);
+    /// // wait for promise to resolve
+    /// std::thread::sleep(Duration::from_secs(1));
     /// ```
     pub fn new_promise<C>(resolver: C) -> EsValueFacade
     where
@@ -490,20 +488,19 @@ impl EsValueFacade {
 
     /// wait for a promise to resolve in rust
     /// # Example
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use std::time::Duration;
-    /// fn test_get_promise_result_blocking(){
-    ///     let rt = EsRuntimeWrapperBuilder::new().build();
-    ///     // run the script and fail if script fails
-    ///     let esvf_prom = rt.eval_sync("let p = new Promise((resolve, reject) => {setImmediate(() => {resolve(123);});}); p;", "test_get_promise_result_blocking.es").ok().expect("script failed");
-    ///     // wait for the promise or fail on timeout
-    ///     let wait_res = esvf_prom.get_promise_result_blocking(Duration::from_secs(1)).ok().expect("promise timed out");
-    ///     // get the ok result, fail is promise was rejected
-    ///     let esvf = wait_res.ok().expect("promise was rejected");
-    ///     // check the result
-    ///     assert_eq!(esvf.get_i32(), &123);
-    /// }
+    ///
+    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// // run the script and fail if script fails
+    /// let esvf_prom = rt.eval_sync("let p = new Promise((resolve, reject) => {setImmediate(() => {resolve(123);});}); p;", "test_get_promise_result_blocking.es").ok().expect("script failed");
+    /// // wait for the promise or fail on timeout
+    /// let wait_res = esvf_prom.get_promise_result_blocking(Duration::from_secs(1)).ok().expect("promise timed out");
+    /// // get the ok result, fail is promise was rejected
+    /// let esvf = wait_res.ok().expect("promise was rejected");
+    /// // check the result
+    /// assert_eq!(esvf.get_i32(), &123);
     /// ```
     pub fn get_promise_result_blocking(
         &self,
@@ -522,15 +519,14 @@ impl EsValueFacade {
 
     /// get the value as a Map of EsValueFacades, this works when the value was an object in the script engine
     /// # Example
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
-    /// fn test_get_object(){
-    ///     let rt = EsRuntimeWrapperBuilder::new().build();
-    ///     let esvf = rt.eval_sync("{a: 1, b: 2};", "test_get_object.es").ok().expect("script failed");
-    ///     let map = esvf.get_object();
-    ///     assert!(map.contains_key("a"));
-    ///     assert!(map.contains_key("b"));
-    /// }
+    ///
+    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// let esvf = rt.eval_sync("{a: 1, b: 2};", "test_get_object.es").ok().expect("script failed");
+    /// let map = esvf.get_object();
+    /// assert!(map.contains_key("a"));
+    /// assert!(map.contains_key("b"));
     /// ```
     pub fn get_object(&self) -> &HashMap<String, EsValueFacade> {
         self.val_object.as_ref().unwrap()
@@ -538,15 +534,14 @@ impl EsValueFacade {
 
     /// get the value as a Vec of EsValueFacades, this works when the value was an array in the script engine
     /// # Example
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
-    /// fn test_get_array(){
-    ///     let rt = EsRuntimeWrapperBuilder::new().build();
-    ///     let esvf = rt.eval_sync("[1, 2, 3];", "test_get_array.es").ok().expect("script failed");
-    ///     let arr: &Vec<EsValueFacade> = esvf.get_array();
-    ///     assert_eq!(arr.len(), 3);
-    /// }
+    ///
+    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// let esvf = rt.eval_sync("[1, 2, 3];", "test_get_array.es").ok().expect("script failed");
+    /// let arr: &Vec<EsValueFacade> = esvf.get_array();
+    /// assert_eq!(arr.len(), 3);
     /// ```
     pub fn get_array(&self) -> &Vec<EsValueFacade> {
         self.val_array.as_ref().unwrap()
@@ -554,18 +549,17 @@ impl EsValueFacade {
 
     /// invoke the function that was returned from the script engine
     /// # Example
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
-    /// fn test_invoke_function(){
-    ///     let rt = EsRuntimeWrapperBuilder::new().build();
-    ///     let func_esvf = rt.eval_sync("function(a){return a / 2;};", "test_invoke_function.es").ok().expect("script failed");
-    ///     // invoke the function with 18
-    ///     let res_esvf = func_esvf.invoke_function(vec![EsValueFacade::new_i32(18)]).ok().expect("function failed");
-    ///     // check that 19 / 2 = 9
-    ///     let res_i32 = res_esvf.get_i32();
-    ///     assert_eq!(res_i32, &9);
-    /// }
+    ///
+    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// let func_esvf = rt.eval_sync("(function(a){return (a / 2);});", "test_invoke_function.es").ok().expect("script failed");
+    /// // invoke the function with 18
+    /// let res_esvf = func_esvf.invoke_function(vec![EsValueFacade::new_i32(18)]).ok().expect("function failed");
+    /// // check that 19 / 2 = 9
+    /// let res_i32 = res_esvf.get_i32();
+    /// assert_eq!(res_i32, &9);
     /// ```
     pub fn invoke_function(&self, args: Vec<EsValueFacade>) -> Result<EsValueFacade, EsErrorInfo> {
         trace!("EsValueFacade.invoke_function()");

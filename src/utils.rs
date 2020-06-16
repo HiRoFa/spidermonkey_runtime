@@ -2,18 +2,17 @@ use std::collections::HashMap;
 
 /// AutoIdMap is a wrapper around HashMap which automatically creates a unique id for it's entries
 /// # Example
-/// ```rust
+/// ```no_run
 /// use es_runtime::utils::AutoIdMap;
-/// fn test_auto_id_map() {
-///     let mut map = AutoIdMap::new();
-///     let id1 = map.insert("hi");
-///     let id2 = map.insert("hi2");
-///     assert_ne!(id1, id2);
-///     assert_eq!(map.len(), 2);
-///     let s1 = map.remove(&id1);
-///     assert_eq!(s1, "hi");
-///     assert_eq!(map.len(), 1);
-/// }
+///
+/// let mut map = AutoIdMap::new();
+/// let id1 = map.insert("hi");
+/// let id2 = map.insert("hi2");
+/// assert_ne!(id1, id2);
+/// assert_eq!(map.len(), 2);
+/// let s1 = map.remove(&id1);
+/// assert_eq!(s1, "hi");
+/// assert_eq!(map.len(), 1);
 /// ```
 pub struct AutoIdMap<T> {
     last_id: usize,

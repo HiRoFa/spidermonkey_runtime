@@ -175,17 +175,16 @@ impl EsRuntimeWrapper {
     /// add a global function to the runtime which is callable just like any other js function
     ///
     /// # Example
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
-    /// fn test_add_global_sync_function(){
-    ///     let rt = EsRuntimeWrapperBuilder::new().build();
-    ///     rt.add_global_sync_function("test_add_global_sync", |_args| {
-    ///          Ok(EsValueFacade::new_i32(361))
-    ///     });
-    ///     let esvf = rt.eval_sync("test_add_global_sync();", "test_add_global_sync_function.es").ok().expect("test_add_global_sync_function failed");
-    ///     assert_eq!(esvf.get_i32(), &361);
-    /// }
+    ///
+    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// rt.add_global_sync_function("test_add_global_sync", |_args| {
+    ///      Ok(EsValueFacade::new_i32(361))
+    /// });
+    /// let esvf = rt.eval_sync("test_add_global_sync();", "test_add_global_sync_function.es").ok().expect("test_add_global_sync_function failed");
+    /// assert_eq!(esvf.get_i32(), &361);
     /// ```
     pub fn add_global_sync_function<F>(&self, name: &'static str, func: F)
     where
@@ -199,20 +198,19 @@ impl EsRuntimeWrapper {
     /// add a global function to the runtime which is callable just like any other js function
     /// this async variant will run the method in a separate thread and return the result as a Promise
     /// # Example
-    /// ```rust
+    /// ```no_run
     /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     /// use std::time::Duration;
-    /// fn test_add_global_sync_function(){
-    ///     let rt = EsRuntimeWrapperBuilder::new().build();
-    ///     rt.add_global_async_function("test_add_global_async", |_args| {
-    ///          Ok(EsValueFacade::new_i32(351))
-    ///     });
-    ///     let esvf = rt.eval_sync("test_add_global_async();", "test_add_global_async_function.es").ok().expect("test_add_global_async_function failed");
-    ///     assert!(esvf.is_promise());
-    ///     let prom_res = esvf.get_promise_result_blocking(Duration::from_secs(5)).ok().expect("promise timed out");
-    ///     assert_eq!(prom_res.ok().expect("test_add_global_async_function failed").get_i32(), &351);
-    /// }
+    ///
+    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// rt.add_global_async_function("test_add_global_async", |_args| {
+    ///     Ok(EsValueFacade::new_i32(351))
+    /// });
+    /// let esvf = rt.eval_sync("test_add_global_async();", "test_add_global_async_function.es").ok().expect("test_add_global_async_function failed");
+    /// assert!(esvf.is_promise());
+    /// let prom_res = esvf.get_promise_result_blocking(Duration::from_secs(5)).ok().expect("promise timed out");
+    /// assert_eq!(prom_res.ok().expect("test_add_global_async_function failed").get_i32(), &351);
     /// ```
     pub fn add_global_async_function<F>(&self, name: &'static str, func: F)
     where

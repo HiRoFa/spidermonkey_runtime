@@ -15,7 +15,7 @@
 //!
 //! Using EsValueFacade:
 //!
-//! ```rust
+//! ```no_run
 //!
 //! use es_runtime::esvaluefacade::EsValueFacade;
 //! use es_runtime::jsapi_utils::EsErrorInfo;
@@ -32,7 +32,7 @@
 //!
 //! you can also define a function in rust that may be called from script
 //!
-//! ```rust
+//! ```no_run
 //!
 //! use es_runtime::esvaluefacade::EsValueFacade;
 //! fn define_function(){
@@ -58,7 +58,7 @@
 //!
 //! Using JSAPI:
 //!
-//! ```rust
+//! ```no_run
 //!
 //! use mozjs::rust::{Runtime, HandleObject};
 //! use mozjs::jsapi::JSContext;
