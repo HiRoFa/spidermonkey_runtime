@@ -453,27 +453,37 @@ impl EsValueFacade {
         }
     }
 
+    /// get the String value
     pub fn get_string(&self) -> &String {
         self.val_string.as_ref().expect("not a string")
     }
+
+    /// get the i32 value
     pub fn get_i32(&self) -> &i32 {
         &self.val_i32.as_ref().expect("i am not a i32")
     }
+
+    /// get the f64 value
     pub fn get_f64(&self) -> &f64 {
         &self.val_f64.as_ref().expect("i am not a f64")
     }
+
+    /// get the boolean value
     pub fn get_boolean(&self) -> bool {
         self.val_boolean.expect("i am not a boolean")
     }
+
     pub fn get_managed_object_id(&self) -> i32 {
         let rmev: &RustManagedEsVar = self.val_managed_var.as_ref().expect("not a managed var");
         rmev.obj_id
     }
 
+    /// check if this esvf was a promise which was returned from the script engine
     pub fn is_promise(&self) -> bool {
         self.is_managed_object()
     }
 
+    /// check if this esvf was a promise which was initialized from rust by calling EsValueFacade::new_promise()
     pub fn is_prepped_promise(&self) -> bool {
         self.val_promise.is_some()
     }
@@ -510,14 +520,56 @@ impl EsValueFacade {
         rx.recv_timeout(timeout)
     }
 
+    /// get the value as a Map of EsValueFacades, this works when the value was an object in the script engine
+    /// # Example
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// fn test_get_object(){
+    ///     let rt = EsRuntimeWrapperBuilder::new().build();
+    ///     let esvf = rt.eval_sync("{a: 1, b: 2};", "test_get_object.es").ok().expect("script failed");
+    ///     let map = esvf.get_object();
+    ///     assert!(map.contains_key("a"));
+    ///     assert!(map.contains_key("b"));
+    ///
+    /// }
+    /// ```
     pub fn get_object(&self) -> &HashMap<String, EsValueFacade> {
         self.val_object.as_ref().unwrap()
     }
 
+    /// get the value as a Vec of EsValueFacades, this works when the value was an array in the script engine
+    /// # Example
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// fn test_get_array(){
+    ///     let rt = EsRuntimeWrapperBuilder::new().build();
+    ///     let esvf = rt.eval_sync("[1, 2, 3];", "test_get_array.es").ok().expect("script failed");
+    ///     let arr: &Vec<EsValueFacade> = esvf.get_array();
+    ///     assert_eq!(arr.len(), 3);
+    ///
+    /// }
+    /// ```
     pub fn get_array(&self) -> &Vec<EsValueFacade> {
         self.val_array.as_ref().unwrap()
     }
 
+    /// invoke the function that was returned from the script engine
+    /// # Example
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// fn test_invoke_function(){
+    ///     let rt = EsRuntimeWrapperBuilder::new().build();
+    ///     let func_esvf = rt.eval_sync("function(a){return a / 2;};", "test_invoke_function.es").ok().expect("script failed");
+    ///     // invoke the function with 18
+    ///     let res_esvf = func_esvf.invoke_function(vec![EsValueFacade::new_i32(18)]).ok().expect("function failed");
+    ///     // check that 19 / 2 = 9
+    ///     let res_i32 = res_esvf.get_i32();
+    ///     assert_eq!(res_i32, &9);
+    ///
+    /// }
+    /// ```
     pub fn invoke_function(&self, args: Vec<EsValueFacade>) -> Result<EsValueFacade, EsErrorInfo> {
         trace!("EsValueFacade.invoke_function()");
         let rt_arc = self.val_js_function.as_ref().unwrap().1.clone();
@@ -576,27 +628,42 @@ impl EsValueFacade {
         )
     }
 
+    /// check if the value is a String
     pub fn is_string(&self) -> bool {
         self.val_string.is_some()
     }
+
+    /// check if the value is a i32
     pub fn is_i32(&self) -> bool {
         self.val_i32.is_some()
     }
+
+    /// check if the value is a f64
     pub fn is_f64(&self) -> bool {
         self.val_f64.is_some()
     }
+
+    /// check if the value is a bool
     pub fn is_boolean(&self) -> bool {
         self.val_boolean.is_some()
     }
+
+    /// check if the value is a promise
     pub fn is_managed_object(&self) -> bool {
         self.val_managed_var.is_some()
     }
+
+    /// check if the value is an object
     pub fn is_object(&self) -> bool {
         self.val_object.is_some()
     }
+
+    /// check if the value is an array
     pub fn is_array(&self) -> bool {
         self.val_array.is_some()
     }
+
+    /// check if the value is an function
     pub fn is_function(&self) -> bool {
         self.val_js_function.is_some()
     }

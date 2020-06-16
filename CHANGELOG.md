@@ -5,6 +5,7 @@
   * SmRuntime::add_global_function
 * added EsProxy(Builder) for reflecting rust objects while using EsValueFacade as arguments and return types
 * changed the methods/getters for Proxy (rval: MutableHandleValue instead of returning a JSVal)
+* lots of inline documentation added
 
 # 0.3.4 / 0.3.5
 
