@@ -1,13 +1,14 @@
 use log::trace;
 
 use crate::debugmutex::DebugMutex;
+use crate::esruntimewrapper::EsRuntimeWrapper;
 use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
-use crate::jsapi_utils;
-use crate::jsapi_utils::arrays::{get_array_element, get_array_length, new_array};
+use crate::jsapi_utils::arrays::{get_array_element, get_array_length, new_array, object_is_array};
 use crate::jsapi_utils::rooting::EsPersistentRooted;
-use crate::jsapi_utils::EsErrorInfo;
+use crate::jsapi_utils::{objects, EsErrorInfo};
 use crate::spidermonkeyruntimewrapper::SmRuntime;
 use crate::utils::AutoIdMap;
+use crate::{jsapi_utils, spidermonkeyruntimewrapper};
 use either::Either;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
@@ -238,7 +239,7 @@ impl EsValueFacade {
                             sm_rt.do_with_jsapi(move|_rt, cx, _global| {
 
                                 let prom_obj: *mut JSObject = {
-                                    let prom_epr: EsPersistentRooted = crate::spidermonkeyruntimewrapper::consume_cached_object(prom_regged_id);
+                                    let prom_epr: EsPersistentRooted = spidermonkeyruntimewrapper::consume_cached_object(prom_regged_id);
                                     trace!("epr should drop here");
                                     prom_epr.get()
                                 };
@@ -288,7 +289,7 @@ impl EsValueFacade {
         trace!("spawning prom reso task for {}", id);
 
         // run task
-        crate::esruntimewrapper::EsRuntimeWrapper::add_helper_task(task);
+        EsRuntimeWrapper::add_helper_task(task);
 
         let mut ret = Self::undefined();
 
@@ -331,7 +332,7 @@ impl EsValueFacade {
             let obj: *mut JSObject = rval.to_object();
             rooted!(in(context) let obj_root = obj);
 
-            if jsapi_utils::arrays::object_is_array(context, obj_root.handle()) {
+            if object_is_array(context, obj_root.handle()) {
                 let mut vals = vec![];
                 // add vals
 
@@ -402,19 +403,18 @@ impl EsValueFacade {
             } else if jsapi_utils::functions::object_is_function(obj) {
                 // wrap function in persistentrooted
 
-                let rti_ref = crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
+                let rti_ref = spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
                     let sm_rt: &SmRuntime = &*sm_rt_rc.borrow();
                     sm_rt.clone_rtw_inner()
                 });
-                let cached_id =
-                    crate::spidermonkeyruntimewrapper::register_cached_object(context, obj);
+                let cached_id = spidermonkeyruntimewrapper::register_cached_object(context, obj);
                 val_js_function = Some((cached_id, rti_ref));
             } else {
                 let prop_names: Vec<String> =
-                    crate::jsapi_utils::objects::get_js_obj_prop_names(context, obj_root.handle());
+                    objects::get_js_obj_prop_names(context, obj_root.handle());
                 for prop_name in prop_names {
                     rooted!(in (context) let mut prop_val_root = UndefinedValue());
-                    let prop_val_res = crate::jsapi_utils::objects::get_es_obj_prop_val(
+                    let prop_val_res = objects::get_es_obj_prop_val(
                         context,
                         obj_root.handle(),
                         prop_name.as_str(),
@@ -589,34 +589,31 @@ impl EsValueFacade {
         args: Vec<EsValueFacade>,
     ) -> Result<EsValueFacade, EsErrorInfo> {
         trace!("EsValueFacade.invoke_function3()");
-        crate::spidermonkeyruntimewrapper::do_with_cached_object(
-            cached_id,
-            |epr: &EsPersistentRooted| {
-                let mut arguments_value_vec: Vec<JSVal> = vec![];
-                for arg_vf in &args {
-                    // todo root these
-                    arguments_value_vec.push(arg_vf.to_es_value(cx));
-                }
+        spidermonkeyruntimewrapper::do_with_cached_object(cached_id, |epr: &EsPersistentRooted| {
+            let mut arguments_value_vec: Vec<JSVal> = vec![];
+            for arg_vf in &args {
+                // todo root these
+                arguments_value_vec.push(arg_vf.to_es_value(cx));
+            }
 
-                rooted!(in (cx) let mut rval = UndefinedValue());
-                rooted!(in (cx) let scope = mozjs::jsval::NullValue().to_object_or_null());
-                rooted!(in (cx) let function_val = mozjs::jsval::ObjectValue(epr.get()));
+            rooted!(in (cx) let mut rval = UndefinedValue());
+            rooted!(in (cx) let scope = mozjs::jsval::NullValue().to_object_or_null());
+            rooted!(in (cx) let function_val = mozjs::jsval::ObjectValue(epr.get()));
 
-                let res2: Result<(), EsErrorInfo> = jsapi_utils::functions::call_method_value(
-                    cx,
-                    scope.handle(),
-                    function_val.handle(),
-                    arguments_value_vec,
-                    rval.handle_mut(),
-                );
+            let res2: Result<(), EsErrorInfo> = jsapi_utils::functions::call_method_value(
+                cx,
+                scope.handle(),
+                function_val.handle(),
+                arguments_value_vec,
+                rval.handle_mut(),
+            );
 
-                if res2.is_ok() {
-                    Ok(EsValueFacade::new_v(rt, cx, global, rval.handle()))
-                } else {
-                    Err(res2.err().unwrap())
-                }
-            },
-        )
+            if res2.is_ok() {
+                Ok(EsValueFacade::new_v(rt, cx, global, rval.handle()))
+            } else {
+                Err(res2.err().unwrap())
+            }
+        })
     }
 
     /// check if the value is a String
@@ -771,11 +768,10 @@ impl EsValueFacade {
                 trace!("set rooted Promise obj and weakref in right");
                 // set rooted Promise obj and weakref in right
 
-                let (pid, rti_ref) = crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
+                let (pid, rti_ref) = spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
                     let sm_rt: &SmRuntime = &*sm_rt_rc.borrow();
 
-                    let pid =
-                        crate::spidermonkeyruntimewrapper::register_cached_object(context, prom);
+                    let pid = spidermonkeyruntimewrapper::register_cached_object(context, prom);
 
                     let weakref = sm_rt.opt_es_rt_inner.as_ref().unwrap().clone();
 
@@ -852,7 +848,7 @@ impl Drop for EsValueFacade {
             let cached_obj_id = self.val_js_function.as_ref().unwrap().0;
 
             rt_arc.do_in_es_runtime_thread(move |_sm_rt| {
-                crate::spidermonkeyruntimewrapper::consume_cached_object(cached_obj_id);
+                spidermonkeyruntimewrapper::consume_cached_object(cached_obj_id);
             });
         }
     }
