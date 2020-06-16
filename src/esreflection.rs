@@ -97,10 +97,36 @@ pub struct EsProxyBuilder {
 }
 
 impl EsProxy {
+    /// create a builder struct to build an EsProxy
     pub fn builder(namespace: Vec<&'static str>, class_name: &'static str) -> EsProxyBuilder {
         EsProxyBuilder::new(namespace, class_name)
     }
-    // todo do we want sync variants which may return a veto boolean or an alterted EsValueFacade?
+    // todo do we want sync variants which may return a veto boolean or an altered EsValueFacade?
+    /// dispatch an event for an instance of the class
+    ///
+    /// you can pass an EsValueFacade as event obj
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esreflection::EsProxyBuilder;
+    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// fn test_dispatch_event(){
+    ///    let rt = EsRuntimeWrapperBuilder::default().build();
+    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///    .constructor(|args| {
+    ///        Ok(1)
+    ///    })
+    ///    .event("some_event").build(&rt);
+    ///    rt.eval_sync("let i = new my.biz.MyClass(); \
+    ///                  i.addEventListener('some_event', (evtObj) => {\
+    ///                      console.log('it happened!');\
+    ///                  });", "test_dispatch_event.es");
+    ///    es_proxy.dispatch_event(&rt, 1, "some_event", EsValueFacade::undefined());
+    ///
+    /// }
+    /// ```
     pub fn dispatch_event(
         &self,
         rt: &EsRuntimeWrapper,
@@ -118,6 +144,32 @@ impl EsProxy {
             });
         });
     }
+
+    /// dispatch an event for an instance of the class
+    ///
+    /// you can pass an EsValueFacade as event obj
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esreflection::EsProxyBuilder;
+    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// fn test_dispatch_event(){
+    ///    let rt = EsRuntimeWrapperBuilder::default().build();
+    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
+    ///    .constructor(|args| {
+    ///        Ok(1)
+    ///    })
+    ///    .event("some_event").build(&rt);
+    ///    rt.eval_sync("let i = new my.biz.MyClass(); \
+    ///                  i.addEventListener('some_event', (evtObj) => {\
+    ///                      console.log('it happened!');\
+    ///                  });", "test_dispatch_event.es");
+    ///    es_proxy.dispatch_event(&rt, 1, "some_event", EsValueFacade::undefined());
+    ///
+    /// }
+    /// ```
     pub fn dispatch_static_event(
         &self,
         rt: &EsRuntimeWrapper,
@@ -134,14 +186,44 @@ impl EsProxy {
             });
         });
     }
+
+    /// get the canonical name of the Proxy Class, this includes the namespace
+    /// e.g. "my.biz.MyApp"
+    /// # Example
+    ///
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esreflection::EsProxyBuilder;
+    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// fn test_canonical_name(){
+    ///    let rt = EsRuntimeWrapperBuilder::default().build();
+    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass").build(&rt);
+    ///    assert_eq!(es_proxy.get_canonical_name().as_str(), "my.biz.MyClass");
+    /// }
+    ///
+    /// ```
     pub fn get_canonical_name(&self) -> String {
         format!("{}.{}", self.namespace.join("."), self.class_name)
     }
 }
 
 impl EsProxyBuilder {
+    /// create a new EsProxyBuilder
+    /// you can pass a namespace as a Vec and a classname as str
+    /// if you want to create the class in the global scope you can pass an empty vec as namespace
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esreflection::EsProxyBuilder;
+    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// fn test_builder_new() {
+    ///    let rt = EsRuntimeWrapperBuilder::default().build();
+    ///    let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass").build(&rt);
+    /// }
+    /// ```
     pub fn new(namespace: Vec<&'static str>, class_name: &'static str) -> Self {
-        // todo, this needs it's own members with + Send trait, on build we construct a builder in the worker thread of the runtime
         EsProxyBuilder {
             namespace,
             class_name,
