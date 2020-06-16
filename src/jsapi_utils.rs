@@ -17,7 +17,7 @@
 //!     // you can use this method in the SmRuntime
 //!     sm_rt.do_with_jsapi(|rt, cx, global| {
 //!         // use jsapi_utils here
-//!         let there_is_a_pending_exception = jsapi_utils::report_es_ex(cx).is_some();         
+//!         let there_is_a_pending_exception = jsapi_utils::report_es_ex(cx).is_some();
 //!     })
 //! })
 //! ```
