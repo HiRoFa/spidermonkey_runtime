@@ -3,21 +3,23 @@
 //!
 //! Using rust data from script
 //!
-//! U can use the Proxy struct in es_utils::reflection to create a proxy object
+//! U can use the Proxy struct in jsapi_utils::reflection to create a proxy object
 //!
 //! ```rust
 //! use mozjs::rooted;
 //! use mozjs::rust::HandleValue;
 //! use mozjs::jsval::{Int32Value, UndefinedValue};
 //! use mozjs::jsapi::JSContext;
-//! use es_runtime::es_utils;
+//! use es_runtime::jsapi_utils;
 //! use log::debug;
 //! use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
 //! fn test_proxy() {
 //!     let rt = EsRuntimeWrapperBuilder::new().build();
+//!     // since we're working with jsapi we need to run in the workerthread of the runtime
 //!     rt.do_in_es_runtime_thread_sync(|sm_rt| {
+//!         // and then get our jsapi objects
 //!         sm_rt.do_with_jsapi(|_rt, cx, global|{
-//!             let proxy_arc = es_utils::reflection::ProxyBuilder::new(vec![], "TestClass1")
+//!             let proxy_arc = jsapi_utils::reflection::ProxyBuilder::new(vec![], "TestClass1")
 //!             // if you want to create a proxy that can be constructed you need to pass a constructor
 //!             // you need to generate an id here for your object
 //!             // if you don't pass a constructor you can only use the static_* methods to create events, properties and methods
@@ -79,8 +81,8 @@
 //! ```
 //!
 
-use crate::es_utils::rooting::EsPersistentRooted;
-use crate::es_utils::{es_jsid_to_string, EsErrorInfo};
+use crate::jsapi_utils::rooting::EsPersistentRooted;
+use crate::jsapi_utils::{es_jsid_to_string, EsErrorInfo};
 
 use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::HandleValueArray;
@@ -133,6 +135,7 @@ pub struct Proxy {
     static_event_listeners: RefCell<HashMap<&'static str, Vec<EsPersistentRooted>>>,
 }
 
+/// the builder struct for Proxy
 pub struct ProxyBuilder {
     pub namespace: Vec<&'static str>,
     pub class_name: &'static str,
@@ -154,7 +157,25 @@ thread_local! {
     static PROXIES: RefCell<HashMap<String, Arc<Proxy>>> = RefCell::new(HashMap::new());
 }
 
-/// find a ref to a proxy, use full canonical name as key
+/// find a ref to a proxy, use full canonical name as key, needs to run in the workerthread of the EsRuntimeWrapper
+/// # Example
+/// ```rust
+/// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+/// use es_runtime::jsapi_utils::reflection::{ProxyBuilder, get_proxy};
+/// fn test_get_proxy() {
+///     let rt = EsRuntimeWrapperBuilder::new().build();
+///     // since we're working with jsapi we need to run in the workerthread of the runtime
+///     rt.do_in_es_runtime_thread_sync(|sm_rt| {
+///         sm_rt.do_with_jsapi(|_rt, cx, global| {
+///             // create an example proxy
+///             let _proxy = ProxyBuilder::new(vec!["my", "biz"], "MyClass").build(cx, global);
+///             // get that proxy later
+///             let my_biz_MyClass_proxy_opt = get_proxy("my.biz.MyClass");
+///             assert!(my_biz_MyClass_proxy_opt.is_some());
+///         });
+///     });
+/// }
+/// ```
 pub fn get_proxy(canonical_name: &str) -> Option<Arc<Proxy>> {
     // get proxy from PROXIES
     PROXIES.with(|rc: &RefCell<HashMap<String, Arc<Proxy>>>| {
@@ -226,11 +247,11 @@ impl Proxy {
 
         // todo get_or_define with rval
         let pkg_obj =
-            crate::es_utils::objects::get_or_define_namespace(cx, scope, ret.namespace.clone());
+            crate::jsapi_utils::objects::get_or_define_namespace(cx, scope, ret.namespace.clone());
         rooted!(in (cx) let pkg_root = pkg_obj);
 
         let func: *mut mozjs::jsapi::JSFunction =
-            crate::es_utils::functions::define_native_constructor(
+            crate::jsapi_utils::functions::define_native_constructor(
                 cx,
                 pkg_root.handle(),
                 ret.class_name,
@@ -238,8 +259,8 @@ impl Proxy {
             );
 
         let cname = ret.get_canonical_name();
-        rooted!(in (cx) let cname_root = crate::es_utils::new_es_value_from_str(cx, cname.as_str()));
-        crate::es_utils::objects::set_es_obj_prop_val_permanent(
+        rooted!(in (cx) let cname_root = crate::jsapi_utils::new_es_value_from_str(cx, cname.as_str()));
+        crate::jsapi_utils::objects::set_es_obj_prop_val_permanent(
             cx,
             unsafe { HandleObject::from_marked_location(&(func as *mut JSObject)) },
             PROXY_PROP_CLASS_NAME,
@@ -281,9 +302,9 @@ impl Proxy {
 
         let namespace = vec!["a", "b", "Client"];
         let constructor_obj =
-            crate::es_utils::objects::get_or_define_namespace(cx, scope, namespace);
+            crate::jsapi_utils::objects::get_or_define_namespace(cx, scope, namespace);
         rooted!(in (cx) let constructor_root = ObjectValue(constructor_obj));
-        crate::es_utils::objects::new_from_constructor(
+        crate::jsapi_utils::objects::new_from_constructor(
             cx,
             constructor_root.handle(),
             args,
@@ -315,7 +336,7 @@ impl Proxy {
         for prop_name in self.static_properties.keys() {
             // https://doc.servo.org/mozjs/jsapi/fn.JS_DefineProperty1.html
             // mozjs::jsapi::JS_DefineProperty1
-            // todo move this to es_utils::object
+            // todo move this to jsapi_utils::object
             let n = format!("{}\0", prop_name);
 
             let ok = unsafe {
@@ -338,7 +359,7 @@ impl Proxy {
         trace!("init static methods for {}", self.class_name);
         for method_name in self.static_methods.keys() {
             trace!("init static method {} for {}", method_name, self.class_name);
-            crate::es_utils::functions::define_native_function(
+            crate::jsapi_utils::functions::define_native_function(
                 cx,
                 func,
                 method_name,
@@ -356,7 +377,7 @@ impl Proxy {
                 .get(native_method_name)
                 .cloned()
                 .unwrap();
-            crate::es_utils::functions::define_native_function(
+            crate::jsapi_utils::functions::define_native_function(
                 cx,
                 func,
                 native_method_name,
@@ -365,19 +386,19 @@ impl Proxy {
         }
     }
     fn init_static_events(&self, cx: *mut JSContext, func: HandleObject) {
-        crate::es_utils::functions::define_native_function(
+        crate::jsapi_utils::functions::define_native_function(
             cx,
             func,
             "addEventListener",
             Some(proxy_static_add_event_listener),
         );
-        crate::es_utils::functions::define_native_function(
+        crate::jsapi_utils::functions::define_native_function(
             cx,
             func,
             "removeEventListener",
             Some(proxy_static_remove_event_listener),
         );
-        crate::es_utils::functions::define_native_function(
+        crate::jsapi_utils::functions::define_native_function(
             cx,
             func,
             "dispatchEvent",
@@ -494,8 +515,8 @@ impl ProxyBuilder {
 
 #[cfg(test)]
 mod tests {
-    use crate::es_utils::es_value_to_str;
-    use crate::es_utils::reflection::*;
+    use crate::jsapi_utils::es_value_to_str;
+    use crate::jsapi_utils::reflection::*;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use log::debug;
     use mozjs::jsval::Int32Value;
@@ -676,8 +697,11 @@ unsafe extern "C" fn proxy_instance_resolve(
     trace!("reflection::resolve {}", prop_name);
 
     let rhandle = mozjs::rust::HandleObject::from_marked_location(&obj.get());
-    let class_name_res =
-        crate::es_utils::objects::get_es_obj_prop_val_as_string(cx, rhandle, PROXY_PROP_CLASS_NAME);
+    let class_name_res = crate::jsapi_utils::objects::get_es_obj_prop_val_as_string(
+        cx,
+        rhandle,
+        PROXY_PROP_CLASS_NAME,
+    );
     if let Ok(class_name) = class_name_res {
         PROXIES.with(|proxies_rc| {
             let proxies = &*proxies_rc.borrow();
@@ -688,7 +712,7 @@ unsafe extern "C" fn proxy_instance_resolve(
                     trace!("define addEventListener");
 
                     let robj = mozjs::rust::HandleObject::from_marked_location(&obj.get());
-                    crate::es_utils::functions::define_native_function(
+                    crate::jsapi_utils::functions::define_native_function(
                         cx,
                         robj,
                         "addEventListener",
@@ -701,7 +725,7 @@ unsafe extern "C" fn proxy_instance_resolve(
                     trace!("define removeEventListener");
 
                     let robj = mozjs::rust::HandleObject::from_marked_location(&obj.get());
-                    crate::es_utils::functions::define_native_function(
+                    crate::jsapi_utils::functions::define_native_function(
                         cx,
                         robj,
                         "removeEventListener",
@@ -714,7 +738,7 @@ unsafe extern "C" fn proxy_instance_resolve(
                     trace!("define dispatchEvent");
 
                     let robj = mozjs::rust::HandleObject::from_marked_location(&obj.get());
-                    crate::es_utils::functions::define_native_function(
+                    crate::jsapi_utils::functions::define_native_function(
                         cx,
                         robj,
                         "dispatchEvent",
@@ -732,7 +756,7 @@ unsafe extern "C" fn proxy_instance_resolve(
 
                     let n = format!("{}\0", prop_name);
 
-                    // todo move this to es_utils (objects::define_native_getter_setter)
+                    // todo move this to jsapi_utils (objects::define_native_getter_setter)
                     let ok = mozjs::jsapi::JS_DefineProperty1(
                         cx,
                         obj,
@@ -758,7 +782,7 @@ unsafe extern "C" fn proxy_instance_resolve(
                     );
 
                     let robj = mozjs::rust::HandleObject::from_marked_location(&obj.get());
-                    crate::es_utils::functions::define_native_function(
+                    crate::jsapi_utils::functions::define_native_function(
                         cx,
                         robj,
                         prop_name.as_str(),
@@ -782,7 +806,7 @@ unsafe extern "C" fn proxy_instance_resolve(
                         .cloned()
                         .unwrap();
 
-                    crate::es_utils::functions::define_native_function(
+                    crate::jsapi_utils::functions::define_native_function(
                         cx,
                         robj,
                         prop_name.as_str(),
@@ -816,7 +840,7 @@ unsafe extern "C" fn proxy_instance_getter(
             trace!("reflection::getter get for cn:{}", proxy.class_name);
 
             let callee: *mut JSObject = args.callee();
-            let prop_name_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+            let prop_name_res = crate::jsapi_utils::objects::get_es_obj_prop_val_as_string(
                 cx,
                 HandleObject::from_marked_location(&callee),
                 "name",
@@ -830,7 +854,7 @@ unsafe extern "C" fn proxy_instance_getter(
                 );
 
                 // get obj id
-                let obj_id = crate::es_utils::objects::get_es_obj_prop_val_as_i32(
+                let obj_id = crate::jsapi_utils::objects::get_es_obj_prop_val_as_i32(
                     cx,
                     obj_handle,
                     PROXY_PROP_OBJ_ID,
@@ -882,7 +906,7 @@ unsafe extern "C" fn proxy_static_getter(
             trace!("reflection::static_getter get for cn:{}", proxy.class_name);
 
             let callee: *mut JSObject = args.callee();
-            let prop_name_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+            let prop_name_res = crate::jsapi_utils::objects::get_es_obj_prop_val_as_string(
                 cx,
                 HandleObject::from_marked_location(&callee),
                 "name",
@@ -922,13 +946,13 @@ unsafe extern "C" fn proxy_static_getter(
 /// retrieve the object ID for an instance of a Proxy class
 pub fn get_obj_id_for(cx: *mut JSContext, obj: *mut JSObject) -> i32 {
     let obj_handle = unsafe { mozjs::rust::HandleObject::from_marked_location(&obj) };
-    crate::es_utils::objects::get_es_obj_prop_val_as_i32(cx, obj_handle, PROXY_PROP_OBJ_ID)
+    crate::jsapi_utils::objects::get_es_obj_prop_val_as_i32(cx, obj_handle, PROXY_PROP_OBJ_ID)
 }
 
 /// Get the Proxy of which an object is an instance
 pub fn get_proxy_for(cx: *mut JSContext, obj: *mut JSObject) -> Option<Arc<Proxy>> {
     let obj_handle = unsafe { mozjs::rust::HandleObject::from_marked_location(&obj) };
-    let cn_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+    let cn_res = crate::jsapi_utils::objects::get_es_obj_prop_val_as_string(
         cx,
         obj_handle,
         PROXY_PROP_CLASS_NAME,
@@ -945,7 +969,7 @@ pub fn get_proxy_for(cx: *mut JSContext, obj: *mut JSObject) -> Option<Arc<Proxy
 
 fn get_static_proxy_for(cx: *mut JSContext, obj: *mut JSObject) -> Option<Arc<Proxy>> {
     let obj_handle = unsafe { mozjs::rust::HandleObject::from_marked_location(&obj) };
-    let cn_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+    let cn_res = crate::jsapi_utils::objects::get_es_obj_prop_val_as_string(
         cx,
         obj_handle,
         PROXY_PROP_CLASS_NAME,
@@ -975,7 +999,7 @@ unsafe extern "C" fn proxy_instance_setter(
             trace!("reflection::setter get for cn:{}", &proxy.class_name);
 
             let callee: *mut JSObject = args.callee();
-            let prop_name_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+            let prop_name_res = crate::jsapi_utils::objects::get_es_obj_prop_val_as_string(
                 cx,
                 HandleObject::from_marked_location(&callee),
                 "name",
@@ -1029,7 +1053,7 @@ unsafe extern "C" fn proxy_static_setter(
             trace!("reflection::static_setter get for cn:{}", &proxy.class_name);
 
             let callee: *mut JSObject = args.callee();
-            let prop_name_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+            let prop_name_res = crate::jsapi_utils::objects::get_es_obj_prop_val_as_string(
                 cx,
                 HandleObject::from_marked_location(&callee),
                 "name",
@@ -1074,7 +1098,7 @@ unsafe extern "C" fn proxy_static_add_event_listener(
         let listener_obj: *mut JSObject = listener_handle_val.to_object();
 
         let listener_epr = EsPersistentRooted::new_from_obj(cx, listener_obj);
-        let type_str = crate::es_utils::es_value_to_str(cx, *type_handle_val)
+        let type_str = crate::jsapi_utils::es_value_to_str(cx, *type_handle_val)
             .ok()
             .unwrap();
 
@@ -1120,7 +1144,7 @@ unsafe extern "C" fn proxy_static_remove_event_listener(
 
         let listener_obj: *mut JSObject = listener_handle_val.to_object();
 
-        let type_str = crate::es_utils::es_value_to_str(cx, *type_handle_val)
+        let type_str = crate::jsapi_utils::es_value_to_str(cx, *type_handle_val)
             .ok()
             .unwrap();
 
@@ -1162,7 +1186,7 @@ unsafe extern "C" fn proxy_static_dispatch_event(
         let type_handle_val = args.index(0);
         let evt_obj_handle_val = args.index(1);
 
-        let type_str = crate::es_utils::es_value_to_str(cx, *type_handle_val)
+        let type_str = crate::jsapi_utils::es_value_to_str(cx, *type_handle_val)
             .ok()
             .unwrap();
 
@@ -1194,7 +1218,7 @@ unsafe extern "C" fn proxy_instance_add_event_listener(
         let listener_obj: *mut JSObject = listener_handle_val.to_object();
 
         let listener_epr = EsPersistentRooted::new_from_obj(cx, listener_obj);
-        let type_str = crate::es_utils::es_value_to_str(cx, *type_handle_val)
+        let type_str = crate::jsapi_utils::es_value_to_str(cx, *type_handle_val)
             .ok()
             .unwrap();
 
@@ -1239,7 +1263,7 @@ unsafe extern "C" fn proxy_instance_remove_event_listener(
 
         let listener_obj: *mut JSObject = listener_handle_val.to_object();
 
-        let type_str = crate::es_utils::es_value_to_str(cx, *type_handle_val)
+        let type_str = crate::jsapi_utils::es_value_to_str(cx, *type_handle_val)
             .ok()
             .unwrap();
 
@@ -1287,7 +1311,7 @@ unsafe extern "C" fn proxy_instance_dispatch_event(
         let type_handle_val = args.index(0);
         let evt_obj_handle_val = args.index(1);
 
-        let type_str = crate::es_utils::es_value_to_str(cx, *type_handle_val)
+        let type_str = crate::jsapi_utils::es_value_to_str(cx, *type_handle_val)
             .ok()
             .unwrap();
 
@@ -1329,7 +1353,7 @@ fn dispatch_event_for_proxy(
                 // todo why do we only have a call_method by val and not by HandleObject?
                 // the whole rooting func here could be avoided
                 rooted!(in (cx) let function_val = ObjectValue(func_obj));
-                crate::es_utils::functions::call_method_value(
+                crate::jsapi_utils::functions::call_method_value(
                     cx,
                     this_obj.handle(),
                     function_val.handle(),
@@ -1364,7 +1388,7 @@ fn dispatch_static_event_for_proxy(
             // todo why do we only have a call_method by val and not by HandleObject?
             // the whole rooting func here could be avoided
             rooted!(in (cx) let function_val = ObjectValue(func_obj));
-            crate::es_utils::functions::call_method_value(
+            crate::jsapi_utils::functions::call_method_value(
                 cx,
                 this_obj.handle(),
                 function_val.handle(),
@@ -1392,7 +1416,7 @@ unsafe extern "C" fn proxy_instance_method(
             trace!("reflection::method for cn:{}", &proxy.class_name);
 
             let callee: *mut JSObject = args.callee();
-            let prop_name_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+            let prop_name_res = crate::jsapi_utils::objects::get_es_obj_prop_val_as_string(
                 cx,
                 HandleObject::from_marked_location(&callee),
                 "name",
@@ -1450,7 +1474,7 @@ unsafe extern "C" fn proxy_static_method(
             trace!("reflection::static_method for cn:{}", &proxy.class_name);
 
             let callee: *mut JSObject = args.callee();
-            let prop_name_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+            let prop_name_res = crate::jsapi_utils::objects::get_es_obj_prop_val_as_string(
                 cx,
                 HandleObject::from_marked_location(&callee),
                 "name",
@@ -1534,7 +1558,7 @@ unsafe extern "C" fn proxy_construct(
 
     rooted!(in (cx) let constructor_root = args.calleev().to_object());
 
-    let class_name = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+    let class_name = crate::jsapi_utils::objects::get_es_obj_prop_val_as_string(
         cx,
         constructor_root.handle(),
         PROXY_PROP_CLASS_NAME,
@@ -1560,15 +1584,15 @@ unsafe extern "C" fn proxy_construct(
                 let ret: *mut JSObject = mozjs::jsapi::JS_NewObject(cx, &ES_PROXY_CLASS);
 
                 rooted!(in (cx) let ret_root = ret);
-                rooted!(in (cx) let pname_root = crate::es_utils::new_es_value_from_str(cx, &class_name));
+                rooted!(in (cx) let pname_root = crate::jsapi_utils::new_es_value_from_str(cx, &class_name));
                 rooted!(in (cx) let obj_id_root = mozjs::jsval::Int32Value(obj_id));
-                crate::es_utils::objects::set_es_obj_prop_val_permanent(
+                crate::jsapi_utils::objects::set_es_obj_prop_val_permanent(
                     cx,
                     ret_root.handle(),
                     PROXY_PROP_CLASS_NAME,
                     pname_root.handle(),
                 );
-                crate::es_utils::objects::set_es_obj_prop_val_permanent(
+                crate::jsapi_utils::objects::set_es_obj_prop_val_permanent(
                     cx,
                     ret_root.handle(),
                     PROXY_PROP_OBJ_ID,
@@ -1577,12 +1601,12 @@ unsafe extern "C" fn proxy_construct(
 
                 PROXY_INSTANCE_IDS.with(|piid_rc| {
                     let piid = &mut *piid_rc.borrow_mut();
-                    piid.insert(ret as usize, obj_id.clone());
+                    piid.insert(ret as usize, obj_id);
                 });
 
                 PROXY_INSTANCE_CLASSNAMES.with(|piid_rc| {
                     let piid = &mut *piid_rc.borrow_mut();
-                    piid.insert(obj_id.clone(), class_name.clone());
+                    piid.insert(obj_id, class_name.clone());
                 });
 
                 args.rval().set(ObjectValue(ret));

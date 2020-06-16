@@ -5,9 +5,9 @@ use std::sync::{Arc, Weak};
 use crate::es_sys_scripts;
 use crate::features;
 
-use crate::es_utils::EsErrorInfo;
 use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
 use crate::esvaluefacade::EsValueFacade;
+use crate::jsapi_utils::EsErrorInfo;
 
 use crate::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
@@ -227,9 +227,9 @@ impl EsRuntimeWrapper {
 #[cfg(test)]
 pub mod tests {
 
-    use crate::es_utils::EsErrorInfo;
     use crate::esruntimewrapper::EsRuntimeWrapper;
     use crate::esvaluefacade::EsValueFacade;
+    use crate::jsapi_utils::EsErrorInfo;
     use log::LevelFilter;
     use std::sync::Arc;
     use std::thread;
@@ -256,7 +256,7 @@ pub mod tests {
         rt.do_in_es_runtime_thread_sync(|sm_rt| {
             sm_rt.do_with_jsapi(|_rt, _cx, _global| {
                 // uncomment this to test with gc in sadistic mode
-                // crate::es_utils::set_gc_zeal_options(_cx);
+                // crate::jsapi_utils::set_gc_zeal_options(_cx);
             })
         });
 
@@ -281,7 +281,7 @@ pub mod tests {
                 .unwrap();
 
             let id = sm_rt.do_with_jsapi(|_rt, cx: *mut mozjs::jsapi::JSContext, _global| {
-                let new_obj = crate::es_utils::promises::new_promise(cx);
+                let new_obj = crate::jsapi_utils::promises::new_promise(cx);
 
                 crate::spidermonkeyruntimewrapper::register_cached_object(cx, new_obj)
             });
@@ -293,7 +293,7 @@ pub mod tests {
                 let p_obj = p.get();
                 rooted!(in (cx) let p_root = p_obj);
                 rooted!(in (cx) let mut rval = mozjs::jsval::UndefinedValue());
-                crate::es_utils::objects::get_es_obj_prop_val(
+                crate::jsapi_utils::objects::get_es_obj_prop_val(
                     cx,
                     p_root.handle(),
                     "then",

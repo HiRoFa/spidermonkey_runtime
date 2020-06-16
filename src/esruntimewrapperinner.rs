@@ -1,6 +1,6 @@
-use crate::es_utils::EsErrorInfo;
 use crate::esruntimewrapper::ModuleCodeLoader;
 use crate::esvaluefacade::EsValueFacade;
+use crate::jsapi_utils::EsErrorInfo;
 use crate::microtaskmanager::MicroTaskManager;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
 use log::{debug, trace};

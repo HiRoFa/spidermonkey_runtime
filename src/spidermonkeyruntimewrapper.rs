@@ -1,8 +1,8 @@
-use crate::es_utils;
-use crate::es_utils::rooting::EsPersistentRooted;
-use crate::es_utils::EsErrorInfo;
 use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
 use crate::esvaluefacade::EsValueFacade;
+use crate::jsapi_utils;
+use crate::jsapi_utils::rooting::EsPersistentRooted;
+use crate::jsapi_utils::EsErrorInfo;
 use crate::utils::AutoIdMap;
 
 use log::{debug, trace};
@@ -115,7 +115,7 @@ impl SmRuntime {
 
         self.do_with_jsapi(|_rt, cx, global| {
             // reg function
-            es_utils::functions::define_native_function(
+            jsapi_utils::functions::define_native_function(
                 cx,
                 global,
                 name,
@@ -224,7 +224,7 @@ impl SmRuntime {
         );
 
         self.do_with_jsapi(|_rt, cx, _global| {
-            let load_res = es_utils::modules::compile_module(cx, module_src, module_file_name);
+            let load_res = jsapi_utils::modules::compile_module(cx, module_src, module_file_name);
 
             if let Some(err) = load_res.err() {
                 return Err(err);
@@ -241,7 +241,7 @@ impl SmRuntime {
         self.do_with_jsapi(|rt, cx, global| {
             rooted!(in (cx) let mut rval = UndefinedValue());
             let eval_res: Result<(), EsErrorInfo> =
-                es_utils::eval(rt, global, eval_code, file_name, rval.handle_mut());
+                jsapi_utils::eval(rt, global, eval_code, file_name, rval.handle_mut());
 
             if eval_res.is_ok() {
                 Ok(EsValueFacade::new_v(rt, cx, global, rval.handle()))
@@ -262,7 +262,7 @@ impl SmRuntime {
         self.do_with_jsapi(|rt, cx, global| {
             rooted!(in (cx) let mut rval = UndefinedValue());
             let eval_res: Result<(), EsErrorInfo> =
-                es_utils::eval(rt, global, eval_code, file_name, rval.handle_mut());
+                jsapi_utils::eval(rt, global, eval_code, file_name, rval.handle_mut());
 
             if eval_res.is_ok() {
                 Ok(())
@@ -280,7 +280,7 @@ impl SmRuntime {
             {
                 rooted!(in (cx) let mut ret_val = UndefinedValue());
                 // run esses.cleanup();
-                let cleanup_res = es_utils::functions::call_obj_method_name(
+                let cleanup_res = jsapi_utils::functions::call_obj_method_name(
                     cx,
                     global,
                     vec!["esses"],
@@ -303,7 +303,7 @@ impl SmRuntime {
         });
         self.do_with_jsapi(|_rt, cx, _global| {
             trace!("running gc");
-            es_utils::gc(cx);
+            jsapi_utils::gc(cx);
             trace!("running gc / 2");
         });
 
@@ -344,7 +344,7 @@ impl SmRuntime {
 
         rooted!(in(context) let mut rval = UndefinedValue());
         do_with_rooted_esvf_vec(context, args, |hva| {
-            let res2: Result<(), EsErrorInfo> = es_utils::functions::call_obj_method_name2(
+            let res2: Result<(), EsErrorInfo> = jsapi_utils::functions::call_obj_method_name2(
                 context,
                 scope,
                 obj_names,
@@ -375,7 +375,7 @@ impl SmRuntime {
         rooted!(in(context) let mut rval = UndefinedValue());
 
         do_with_rooted_esvf_vec(context, args, |hva| {
-            let res2: Result<(), EsErrorInfo> = es_utils::functions::call_method_name2(
+            let res2: Result<(), EsErrorInfo> = jsapi_utils::functions::call_method_name2(
                 context,
                 scope,
                 function_name,
@@ -424,7 +424,7 @@ unsafe extern "C" fn global_op_native_method(
 
     let args = CallArgs::from_vp(vp, argc);
     let callee: *mut JSObject = args.callee();
-    let prop_name_res = crate::es_utils::objects::get_es_obj_prop_val_as_string(
+    let prop_name_res = crate::jsapi_utils::objects::get_es_obj_prop_val_as_string(
         cx,
         HandleObject::from_marked_location(&callee),
         "name",
@@ -529,7 +529,7 @@ unsafe extern "C" fn import_module(
     _reference_private: RawHandleValue,
     specifier: RawHandle<*mut JSString>,
 ) -> *mut JSObject {
-    let file_name = es_utils::es_jsstring_to_string(cx, *specifier);
+    let file_name = jsapi_utils::es_jsstring_to_string(cx, *specifier);
 
     // see if we have that module
     let cached: Option<*mut JSObject> = MODULE_CACHE.with(|cache_rc| {
@@ -556,7 +556,7 @@ unsafe extern "C" fn import_module(
     });
 
     let compiled_mod_obj_res =
-        es_utils::modules::compile_module(cx, module_src.as_str(), file_name.as_str());
+        jsapi_utils::modules::compile_module(cx, module_src.as_str(), file_name.as_str());
 
     if compiled_mod_obj_res.is_err() {
         let err = compiled_mod_obj_res.err().unwrap();
@@ -646,7 +646,7 @@ fn invoke_rust_op_esvf(
 
     let op_name_arg: mozjs::rust::HandleValue =
         unsafe { mozjs::rust::Handle::from_raw(args.get(0)) };
-    let op_name = es_utils::es_value_to_str(context, op_name_arg.get())
+    let op_name = jsapi_utils::es_value_to_str(context, op_name_arg.get())
         .ok()
         .unwrap();
 
@@ -730,7 +730,7 @@ unsafe extern "C" fn enqueue_promise_job(
                     trace!("checking cb.call res");
                     if call_res.is_err() {
                         debug!("job failed");
-                        if let Some(err) = es_utils::report_es_ex(cx) {
+                        if let Some(err) = jsapi_utils::report_es_ex(cx) {
                             panic!(
                                 "job failed {}:{}:{} -> {}",
                                 err.filename, err.lineno, err.column, err.message
@@ -864,9 +864,9 @@ impl CallbackFunction {
 
 #[cfg(test)]
 mod tests {
-    use crate::es_utils;
-    use crate::es_utils::EsErrorInfo;
     use crate::esvaluefacade::EsValueFacade;
+    use crate::jsapi_utils;
+    use crate::jsapi_utils::EsErrorInfo;
     use crate::spidermonkeyruntimewrapper::{do_with_rooted_esvf_vec, SmRuntime};
     use log::trace;
     use mozjs::jsval::UndefinedValue;
@@ -881,7 +881,7 @@ mod tests {
                 |sm_rt: &SmRuntime| {
                     sm_rt.do_with_jsapi(|rt, cx, global| {
                         rooted!(in(cx) let mut rval = UndefinedValue());
-                        let _eval_res = es_utils::eval(
+                        let _eval_res = jsapi_utils::eval(
                             rt,
                             global,
                             "this.test_func_1 = function test_func_1(a, b, c){return (a + '_' + b + '_' + c);};",
@@ -961,7 +961,7 @@ mod tests {
 
 
                         rooted!(in(cx) let mut rval = UndefinedValue());
-                        let _eval_res = es_utils::eval(
+                        let _eval_res = jsapi_utils::eval(
                             rt,
                             global,
                             "this.myobj = {sub: {}};myobj.sub.test_func_1 = function test_func_1(a, b, c){return (a + '_' + b + '_' + c);};",
@@ -1007,7 +1007,7 @@ mod tests {
                     sm_rt.do_with_jsapi(|rt, cx, global| {
                         rooted!(in (cx) let mut ret_val = UndefinedValue());
 
-                        es_utils::eval(rt, global, "({a: 1});", "test.es", ret_val.handle_mut())
+                        jsapi_utils::eval(rt, global, "({a: 1});", "test.es", ret_val.handle_mut())
                             .ok()
                             .unwrap();
                     })
@@ -1048,7 +1048,7 @@ mod tests {
                     trace!("test_hva_loop / 2");
                     ret = do_with_rooted_esvf_vec(cx, args, |hva: HandleValueArray| {
                         rooted!(in (cx) let mut rval = UndefinedValue());
-                        es_utils::functions::call_method_value2(
+                        jsapi_utils::functions::call_method_value2(
                             cx,
                             global,
                             func_root.handle(),
@@ -1057,7 +1057,7 @@ mod tests {
                         )
                         .ok()
                         .unwrap();
-                        es_utils::es_value_to_str(cx, *rval).ok().unwrap()
+                        jsapi_utils::es_value_to_str(cx, *rval).ok().unwrap()
                     });
                     trace!("test_hva_loop / 3");
                 }

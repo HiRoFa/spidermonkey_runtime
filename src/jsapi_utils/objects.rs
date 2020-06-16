@@ -1,4 +1,4 @@
-use crate::es_utils::{es_jsstring_to_string, es_value_to_str, report_es_ex, EsErrorInfo};
+use crate::jsapi_utils::{es_jsstring_to_string, es_value_to_str, report_es_ex, EsErrorInfo};
 use log::trace;
 use mozjs::glue::RUST_JSID_IS_STRING;
 use mozjs::glue::RUST_JSID_TO_STRING;
@@ -274,13 +274,13 @@ pub fn set_es_obj_prop_val_permanent(
 
 #[cfg(test)]
 mod tests {
-    use crate::es_utils;
-    use crate::es_utils::objects::{
-        get_es_obj_prop_val, get_js_obj_prop_names, get_or_define_namespace,
-    };
-    use crate::es_utils::{es_value_to_str, report_es_ex};
     use crate::esruntimewrapper::EsRuntimeWrapper;
     use crate::esvaluefacade::EsValueFacade;
+    use crate::jsapi_utils;
+    use crate::jsapi_utils::objects::{
+        get_es_obj_prop_val, get_js_obj_prop_names, get_or_define_namespace,
+    };
+    use crate::jsapi_utils::{es_value_to_str, report_es_ex};
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use mozjs::jsval::{JSVal, UndefinedValue};
     use std::borrow::Borrow;
@@ -299,7 +299,7 @@ mod tests {
                     trace!("1");
 
                     rooted!(in(cx) let mut rval = UndefinedValue());
-                    let _eval_res = es_utils::eval(
+                    let _eval_res = jsapi_utils::eval(
                         rt,
                         global,
                         "({a: '1', b: '2', c: '3'})",
@@ -373,7 +373,7 @@ mod tests {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
                 sm_rt.do_with_jsapi(|rt, cx, global| {
                     rooted!(in(cx) let mut rval = UndefinedValue());
-                    let eval_res = es_utils::eval(
+                    let eval_res = jsapi_utils::eval(
                         rt,
                         global,
                         "({a: 1, b: 2, c: 3});",
@@ -451,7 +451,7 @@ mod tests {
         let ok = rt.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
             sm_rt.do_with_jsapi(|rt, cx, global| {
                 rooted!(in (cx) let mut constructor_root = UndefinedValue());
-                let eval_res = es_utils::eval(
+                let eval_res = jsapi_utils::eval(
                     rt,
                     global,
                     "(class MyClass {constructor(){this.b = 5;} a(){return this.b;}});",
@@ -464,7 +464,7 @@ mod tests {
 
                 rooted!(in (cx) let mut b_instance_root = NullValue().to_object_or_null());
                 let args = HandleValueArray::new();
-                es_utils::objects::new_from_constructor(
+                jsapi_utils::objects::new_from_constructor(
                     cx,
                     constructor_root.handle(),
                     args,
@@ -474,7 +474,7 @@ mod tests {
                 .unwrap();
 
                 rooted!(in (cx) let mut ret_val = UndefinedValue());
-                es_utils::functions::call_method_name(
+                jsapi_utils::functions::call_method_name(
                     cx,
                     b_instance_root.handle(),
                     "a",

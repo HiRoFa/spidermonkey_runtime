@@ -1,11 +1,11 @@
 use log::trace;
 
 use crate::debugmutex::DebugMutex;
-use crate::es_utils;
-use crate::es_utils::arrays::{get_array_element, get_array_length, new_array};
-use crate::es_utils::rooting::EsPersistentRooted;
-use crate::es_utils::EsErrorInfo;
 use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
+use crate::jsapi_utils;
+use crate::jsapi_utils::arrays::{get_array_element, get_array_length, new_array};
+use crate::jsapi_utils::rooting::EsPersistentRooted;
+use crate::jsapi_utils::EsErrorInfo;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
 use crate::utils::AutoIdMap;
 use either::Either;
@@ -252,7 +252,7 @@ impl EsValueFacade {
                                     trace!("rooting result");
                                     rooted!(in (cx) let res_root = res.ok().unwrap().to_es_value(cx));
                                     trace!("resolving prom");
-                                    let resolve_prom_res = es_utils::promises::resolve_promise(
+                                    let resolve_prom_res = jsapi_utils::promises::resolve_promise(
                                         cx,
                                         prom_obj_root.handle(),
                                         res_root.handle(),
@@ -263,10 +263,10 @@ impl EsValueFacade {
                                 } else {
                                     trace!("rooting err result");
                                     let err_str = res.err().unwrap();
-                                    let err_val = es_utils::new_es_value_from_str(cx, err_str.as_str());
+                                    let err_val = jsapi_utils::new_es_value_from_str(cx, err_str.as_str());
                                     rooted!(in (cx) let res_root = err_val);
                                     trace!("rejecting prom");
-                                    let reject_prom_res = es_utils::promises::reject_promise(
+                                    let reject_prom_res = jsapi_utils::promises::reject_promise(
                                         cx,
                                         prom_obj_root.handle(),
                                         res_root.handle(),
@@ -323,7 +323,7 @@ impl EsValueFacade {
         } else if rval.is_double() {
             val_f64 = Some(rval.to_number());
         } else if rval.is_string() {
-            let es_str = es_utils::es_value_to_str(context, rval).ok().unwrap();
+            let es_str = jsapi_utils::es_value_to_str(context, rval).ok().unwrap();
 
             trace!("EsValueFacade::new got string {}", es_str);
 
@@ -333,7 +333,7 @@ impl EsValueFacade {
             let obj: *mut JSObject = rval.to_object();
             rooted!(in(context) let obj_root = obj);
 
-            if es_utils::arrays::object_is_array(context, obj_root.handle()) {
+            if jsapi_utils::arrays::object_is_array(context, obj_root.handle()) {
                 let mut vals = vec![];
                 // add vals
 
@@ -361,14 +361,14 @@ impl EsValueFacade {
                 }
 
                 val_array = Some(vals);
-            } else if es_utils::promises::object_is_promise(context, obj_root.handle()) {
+            } else if jsapi_utils::promises::object_is_promise(context, obj_root.handle()) {
                 // call esses.registerPromiseForResolutionInRust(prom);
 
                 rooted!(in (context) let mut id_val = UndefinedValue());
 
                 // ok it's a promise, now we're gonna call a method which will add then and catch to
                 // the promise so the result is reported to rust under an id
-                let reg_res: Result<(), EsErrorInfo> = es_utils::functions::call_obj_method_name(
+                let reg_res: Result<(), EsErrorInfo> = jsapi_utils::functions::call_obj_method_name(
                     context,
                     global,
                     vec!["esses"],
@@ -391,7 +391,7 @@ impl EsValueFacade {
                     PROMISE_RESOLUTION_TRANSMITTERS.with(move |rc| {
                         let map: &mut HashMap<i32, Sender<Result<EsValueFacade, EsValueFacade>>> =
                             &mut *rc.borrow_mut();
-                        map.insert(obj_id.clone(), tx);
+                        map.insert(obj_id, tx);
                     });
 
                     let rmev: RustManagedEsVar = RustManagedEsVar {
@@ -401,7 +401,7 @@ impl EsValueFacade {
 
                     val_managed_var = Some(rmev);
                 }
-            } else if es_utils::functions::object_is_function(obj) {
+            } else if jsapi_utils::functions::object_is_function(obj) {
                 // wrap function in persistentrooted
 
                 let rti_ref = crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
@@ -413,10 +413,10 @@ impl EsValueFacade {
                 val_js_function = Some((cached_id, rti_ref));
             } else {
                 let prop_names: Vec<String> =
-                    crate::es_utils::objects::get_js_obj_prop_names(context, obj_root.handle());
+                    crate::jsapi_utils::objects::get_js_obj_prop_names(context, obj_root.handle());
                 for prop_name in prop_names {
                     rooted!(in (context) let mut prop_val_root = UndefinedValue());
-                    let prop_val_res = crate::es_utils::objects::get_es_obj_prop_val(
+                    let prop_val_res = crate::jsapi_utils::objects::get_es_obj_prop_val(
                         context,
                         obj_root.handle(),
                         prop_name.as_str(),
@@ -530,7 +530,6 @@ impl EsValueFacade {
     ///     let map = esvf.get_object();
     ///     assert!(map.contains_key("a"));
     ///     assert!(map.contains_key("b"));
-    ///
     /// }
     /// ```
     pub fn get_object(&self) -> &HashMap<String, EsValueFacade> {
@@ -547,7 +546,6 @@ impl EsValueFacade {
     ///     let esvf = rt.eval_sync("[1, 2, 3];", "test_get_array.es").ok().expect("script failed");
     ///     let arr: &Vec<EsValueFacade> = esvf.get_array();
     ///     assert_eq!(arr.len(), 3);
-    ///
     /// }
     /// ```
     pub fn get_array(&self) -> &Vec<EsValueFacade> {
@@ -567,7 +565,6 @@ impl EsValueFacade {
     ///     // check that 19 / 2 = 9
     ///     let res_i32 = res_esvf.get_i32();
     ///     assert_eq!(res_i32, &9);
-    ///
     /// }
     /// ```
     pub fn invoke_function(&self, args: Vec<EsValueFacade>) -> Result<EsValueFacade, EsErrorInfo> {
@@ -611,7 +608,7 @@ impl EsValueFacade {
                 rooted!(in (cx) let scope = mozjs::jsval::NullValue().to_object_or_null());
                 rooted!(in (cx) let function_val = mozjs::jsval::ObjectValue(epr.get()));
 
-                let res2: Result<(), EsErrorInfo> = es_utils::functions::call_method_value(
+                let res2: Result<(), EsErrorInfo> = jsapi_utils::functions::call_method_value(
                     cx,
                     scope.handle(),
                     function_val.handle(),
@@ -723,7 +720,7 @@ impl EsValueFacade {
             BooleanValue(self.get_boolean())
         } else if self.is_string() {
             trace!("to_es_value.5");
-            es_utils::new_es_value_from_str(context, self.get_string())
+            jsapi_utils::new_es_value_from_str(context, self.get_string())
         } else if self.is_array() {
             let mut items = vec![];
             for item in self.val_array.as_ref().unwrap() {
@@ -737,7 +734,7 @@ impl EsValueFacade {
             val
         } else if self.is_object() {
             trace!("to_es_value.6");
-            let obj: *mut JSObject = es_utils::objects::new_object(context);
+            let obj: *mut JSObject = jsapi_utils::objects::new_object(context);
             rooted!(in(context) let mut obj_root = obj);
             let map = self.get_object();
             for prop in map {
@@ -745,7 +742,7 @@ impl EsValueFacade {
                 let prop_esvf = prop.1;
                 let prop_val: mozjs::jsapi::Value = prop_esvf.to_es_value(context);
                 rooted!(in(context) let mut val_root = prop_val);
-                es_utils::objects::set_es_obj_prop_val(
+                jsapi_utils::objects::set_es_obj_prop_val(
                     context,
                     obj_root.handle(),
                     prop_name,
@@ -772,7 +769,7 @@ impl EsValueFacade {
         if let Some(opt) = map.get(id) {
             trace!("create promise");
             // create promise
-            let prom = es_utils::promises::new_promise(context);
+            let prom = jsapi_utils::promises::new_promise(context);
             trace!("rooting promise");
             rooted!(in (context) let prom_root = prom);
 
@@ -800,7 +797,7 @@ impl EsValueFacade {
                     let res = eith.left().unwrap();
                     if res.is_ok() {
                         rooted!(in (context) let res_root = res.ok().unwrap().to_es_value(context));
-                        let prom_reso_res = es_utils::promises::resolve_promise(
+                        let prom_reso_res = jsapi_utils::promises::resolve_promise(
                             context,
                             prom_root.handle(),
                             res_root.handle(),
@@ -814,10 +811,10 @@ impl EsValueFacade {
                     } else {
                         // reject prom
                         let err_str = res.err().unwrap();
-                        let err_val = es_utils::new_es_value_from_str(context, err_str.as_str());
+                        let err_val = jsapi_utils::new_es_value_from_str(context, err_str.as_str());
                         rooted!(in (context) let res_root = err_val);
 
-                        let prom_reje_res = es_utils::promises::reject_promise(
+                        let prom_reje_res = jsapi_utils::promises::reject_promise(
                             context,
                             prom_root.handle(),
                             res_root.handle(),
@@ -870,10 +867,10 @@ impl Drop for EsValueFacade {
 #[cfg(test)]
 mod tests {
 
-    use crate::es_utils::EsErrorInfo;
     use crate::esruntimewrapper::EsRuntimeWrapper;
     use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
     use crate::esvaluefacade::EsValueFacade;
+    use crate::jsapi_utils::EsErrorInfo;
     use std::collections::HashMap;
     use std::sync::Arc;
     use std::time::Duration;

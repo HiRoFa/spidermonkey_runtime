@@ -1,5 +1,5 @@
-use crate::es_utils::objects::get_es_obj_prop_val;
-use crate::es_utils::{get_type_of, report_es_ex, EsErrorInfo};
+use crate::jsapi_utils::objects::get_es_obj_prop_val;
+use crate::jsapi_utils::{get_type_of, report_es_ex, EsErrorInfo};
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSFunction;
 use mozjs::jsapi::JSNative;
@@ -313,10 +313,12 @@ pub fn new_native_constructor(
 
 #[cfg(test)]
 mod tests {
-    use crate::es_utils;
-    use crate::es_utils::functions::{call_method_name, call_obj_method_name, value_is_function};
-    use crate::es_utils::report_es_ex;
-    use crate::es_utils::tests::test_with_sm_rt;
+    use crate::jsapi_utils;
+    use crate::jsapi_utils::functions::{
+        call_method_name, call_obj_method_name, value_is_function,
+    };
+    use crate::jsapi_utils::report_es_ex;
+    use crate::jsapi_utils::tests::test_with_sm_rt;
     use mozjs::jsval::{Int32Value, JSVal, UndefinedValue};
 
     #[test]
@@ -326,7 +328,7 @@ mod tests {
             sm_rt.do_with_jsapi(|rt, cx, global| {
                 rooted!(in(cx) let mut rval = UndefinedValue());
                 println!("evalling new func");
-                let res = es_utils::eval(
+                let res = jsapi_utils::eval(
                     rt,
                     global,
                     "(function test_func(){});",
@@ -356,7 +358,7 @@ mod tests {
             sm_rt.do_with_jsapi(|rt, cx, global| {
                 rooted!(in(cx) let mut rval = UndefinedValue());
 
-                let _res = es_utils::eval(
+                let _res = jsapi_utils::eval(
                     rt,
                     global,
                     "this.test_method_by_name_func = function(a, b){return a * b;};",
@@ -400,7 +402,7 @@ mod tests {
 
                 rooted!(in(cx) let mut rval = UndefinedValue());
 
-                let res = es_utils::eval(
+                let res = jsapi_utils::eval(
                     rt,
                     global,
                     "this.test_obj_method_by_name = {test_obj_method_by_name_func :function(a, b){return a * b;}};", "test_method_by_name.es",

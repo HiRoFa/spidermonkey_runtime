@@ -18,7 +18,7 @@
 //! ```rust
 //!
 //! use es_runtime::esvaluefacade::EsValueFacade;
-//! use es_runtime::es_utils::EsErrorInfo;
+//! use es_runtime::jsapi_utils::EsErrorInfo;
 //! fn use_es_value_facade() {
 //!     let rt = es_runtime::esruntimewrapper::EsRuntimeWrapper::builder().build();
 //!     rt.eval_sync("let my_public_method = function(a, b){console.log(\"my_public_method called with: a=%s b=%s\", a, b);};", "my_script.es");
@@ -52,7 +52,7 @@
 //!
 //! There is also number of utils which allow you to use the JSAPI, these can be accessed by calling EsRuntimeWrapper.do_in_es_runtime_thread(_sync).
 //!
-//! utils can be found in the es_runtime::es_utils package.
+//! utils can be found in the es_runtime::jsapi_utils package.
 //!
 //! ### Examples
 //!
@@ -75,7 +75,7 @@
 //!         sm_rt.do_with_jsapi(|runtime: &Runtime, context: *mut JSContext, global_handle: HandleObject| {
 //!
 //!             // work with JSAPI methods here
-//!             // there are utils in es_utils.rs with examples of working with JSAPI objects and functions.
+//!             // there are utils in jsapi_utils.rs with examples of working with JSAPI objects and functions.
 //!     
 //!             // return a value
 //!             true
@@ -109,13 +109,13 @@ mod es_sys_scripts;
 #[macro_use]
 
 pub mod utils;
-pub mod es_utils;
 pub mod esreflection;
 pub mod esruntimewrapper;
 pub mod esruntimewrapperbuilder;
 pub mod esruntimewrapperinner;
 pub mod esvaluefacade;
 mod features;
+pub mod jsapi_utils;
 mod microtaskmanager;
 pub mod spidermonkeyruntimewrapper;
 mod taskmanager;

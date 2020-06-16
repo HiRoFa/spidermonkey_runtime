@@ -1,5 +1,5 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
-use crate::es_utils::objects::{get_es_obj_prop_val_as_i32, get_es_obj_prop_val_as_string};
+use crate::jsapi_utils::objects::{get_es_obj_prop_val_as_i32, get_es_obj_prop_val_as_string};
 use log::{debug, trace};
 use mozjs::conversions::jsstr_to_string;
 use mozjs::glue::{RUST_JSID_IS_STRING, RUST_JSID_TO_STRING};
@@ -202,10 +202,10 @@ pub fn gc(context: *mut JSContext) {
 
 #[cfg(test)]
 mod tests {
-    use crate::es_utils::{es_value_to_str, report_es_ex, EsErrorInfo};
+    use crate::jsapi_utils::{es_value_to_str, report_es_ex, EsErrorInfo};
 
-    use crate::es_utils;
     use crate::esvaluefacade::EsValueFacade;
+    use crate::jsapi_utils;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use mozjs::jsval::UndefinedValue;
 
@@ -280,7 +280,7 @@ mod tests {
                     rooted!(in(cx) let mut rval = UndefinedValue());
 
                     trace!("test_report_exception 3");
-                    let eval_res = es_utils::eval(
+                    let eval_res = jsapi_utils::eval(
                         rt,
                         global,
                         "let b = quibus * 12;",

@@ -1,4 +1,4 @@
-use crate::es_utils::{report_es_ex, EsErrorInfo};
+use crate::jsapi_utils::{report_es_ex, EsErrorInfo};
 
 use log::trace;
 use mozjs::jsapi::JSContext;
@@ -50,8 +50,8 @@ pub fn compile_module(
 #[cfg(test)]
 mod tests {
 
-    use crate::es_utils::modules::compile_module;
-    use crate::es_utils::tests::test_with_sm_rt;
+    use crate::jsapi_utils::modules::compile_module;
+    use crate::jsapi_utils::tests::test_with_sm_rt;
 
     #[test]
     fn test_module() {

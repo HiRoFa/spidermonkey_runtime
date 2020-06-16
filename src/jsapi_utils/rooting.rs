@@ -65,7 +65,7 @@ impl Drop for EsPersistentRooted {
 
 #[cfg(test)]
 mod tests {
-    use crate::es_utils::rooting::EsPersistentRooted;
+    use crate::jsapi_utils::rooting::EsPersistentRooted;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use mozjs::jsval::Int32Value;
 
@@ -79,9 +79,9 @@ mod tests {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
                 let mut vec = vec![];
                 sm_rt.do_with_jsapi(|_rt, cx, _global| {
-                    //crate::es_utils::set_gc_zeal_options(cx);
-                    crate::es_utils::gc(cx);
-                    let my_obj = crate::es_utils::objects::new_object(cx);
+                    //crate::jsapi_utils::set_gc_zeal_options(cx);
+                    crate::jsapi_utils::gc(cx);
+                    let my_obj = crate::jsapi_utils::objects::new_object(cx);
                     let mut r = EsPersistentRooted::new();
                     unsafe { r.init(cx, my_obj) };
                     // let r = EsRootedObject::new(cx, my_obj);
@@ -91,7 +91,7 @@ mod tests {
                 sm_rt.do_with_jsapi(|_rt, cx, _global| {
                     rooted!(in (cx) let my_obj_pval = Int32Value(123));
                     rooted!(in (cx) let my_obj_root = vec.get(0).unwrap().get());
-                    crate::es_utils::objects::set_es_obj_prop_val(
+                    crate::jsapi_utils::objects::set_es_obj_prop_val(
                         cx,
                         my_obj_root.handle(),
                         "p1",
@@ -100,11 +100,11 @@ mod tests {
                 });
                 for _x in 0..100 {
                     sm_rt.do_with_jsapi(|_rt, cx, _global| {
-                        crate::es_utils::gc(cx);
+                        crate::jsapi_utils::gc(cx);
                         rooted!(in (cx) let my_obj_root = vec.get(0).unwrap().get());
                         // my_obj should be quite dead here if rooting is borked
                         {
-                            let i = crate::es_utils::objects::get_es_obj_prop_val_as_i32(
+                            let i = crate::jsapi_utils::objects::get_es_obj_prop_val_as_i32(
                                 cx,
                                 my_obj_root.handle(),
                                 "p1",

@@ -1,5 +1,5 @@
-use crate::es_utils;
 use crate::esruntimewrapper::EsRuntimeWrapper;
+use crate::jsapi_utils;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
 use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::JSContext;
@@ -18,13 +18,13 @@ pub(crate) fn init(rt: &EsRuntimeWrapper) {
 
         sm_rt.do_with_jsapi(|_rt, context, global| {
             // todo write a define_function method which uses JS_DefineFunction which will effectively do the same as create and set prop
-            let console_obj: *mut JSObject = crate::es_utils::objects::new_object(context);
+            let console_obj: *mut JSObject = crate::jsapi_utils::objects::new_object(context);
             let console_obj_val: JSVal = ObjectValue(console_obj);
 
             rooted!(in(context) let console_obj_val_root = console_obj_val);
             rooted!(in(context) let console_obj_root = console_obj);
 
-            crate::es_utils::objects::set_es_obj_prop_val(
+            crate::jsapi_utils::objects::set_es_obj_prop_val(
                 context,
                 global,
                 "console",
@@ -129,7 +129,7 @@ fn parse_field(context: *mut JSContext, field: String, value: JSVal) -> String {
     let js_str: *mut mozjs::jsapi::JSString =
         unsafe { mozjs::rust::ToString(context, val_root.handle()) };
     // convert jsstring to rust string
-    let str_val = es_utils::es_jsstring_to_string(context, js_str);
+    let str_val = jsapi_utils::es_jsstring_to_string(context, js_str);
 
     // return string
     parse_field_value(field, str_val)
@@ -235,7 +235,7 @@ fn parse_line2(context: *mut JSContext, args: Vec<JSVal>) -> String {
     }
     let mut args = args;
     let arg1: JSVal = args.remove(0);
-    let message = es_utils::es_value_to_str(context, arg1).ok().unwrap();
+    let message = jsapi_utils::es_value_to_str(context, arg1).ok().unwrap();
 
     let mut output = String::new();
     let mut field_code = String::new();

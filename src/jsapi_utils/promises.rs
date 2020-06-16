@@ -1,5 +1,5 @@
-use crate::es_utils::objects::{get_constructor, get_es_obj_prop_val_as_string};
-use crate::es_utils::{report_es_ex, EsErrorInfo};
+use crate::jsapi_utils::objects::{get_constructor, get_es_obj_prop_val_as_string};
+use crate::jsapi_utils::{report_es_ex, EsErrorInfo};
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsval::NullValue;
@@ -80,10 +80,10 @@ pub fn reject_promise(
 
 #[cfg(test)]
 mod tests {
-    use crate::es_utils;
-    use crate::es_utils::promises::object_is_promise;
-    use crate::es_utils::report_es_ex;
-    use crate::es_utils::tests::test_with_sm_rt;
+    use crate::jsapi_utils;
+    use crate::jsapi_utils::promises::object_is_promise;
+    use crate::jsapi_utils::report_es_ex;
+    use crate::jsapi_utils::tests::test_with_sm_rt;
     use log::trace;
     use mozjs::jsval::UndefinedValue;
 
@@ -102,7 +102,7 @@ mod tests {
             sm_rt.do_with_jsapi(|rt, cx, global| {
                 rooted!(in(cx) let mut rval = UndefinedValue());
                 trace!("evalling new promise obj");
-                let res = es_utils::eval(
+                let res = jsapi_utils::eval(
                     rt,
                     global,
                     "new Promise((res, rej) => {});",
@@ -135,7 +135,7 @@ mod tests {
             sm_rt.do_with_jsapi(|rt, cx, global| {
                 rooted!(in(cx) let mut rval = UndefinedValue());
                 trace!("evalling some obj");
-                let res = es_utils::eval(
+                let res = jsapi_utils::eval(
                     rt,
                     global,
                     "({some: 'obj'});",

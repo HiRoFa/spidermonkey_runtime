@@ -30,7 +30,7 @@ pub(crate) fn init(rt: &EsRuntimeWrapper) {
 
             let func_val_handle = args.get(0);
             let func_val = *func_val_handle;
-            let is_func = crate::es_utils::functions::value_is_function(cx, func_val);
+            let is_func = crate::jsapi_utils::functions::value_is_function(cx, func_val);
             if !is_func {
                 unsafe {
                     JS_ReportErrorASCII(
@@ -60,7 +60,7 @@ pub(crate) fn init(rt: &EsRuntimeWrapper) {
                     let val = ObjectValue(func_obj);
                     rooted!(in (cx) let mut val_root = val);
 
-                    let res = crate::es_utils::functions::call_method_value(
+                    let res = crate::jsapi_utils::functions::call_method_value(
                         cx,
                         global,
                         val_root.handle(),

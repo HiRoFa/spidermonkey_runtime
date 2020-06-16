@@ -1,4 +1,4 @@
-use crate::es_utils::{report_es_ex, EsErrorInfo};
+use crate::jsapi_utils::{report_es_ex, EsErrorInfo};
 use log::trace;
 use mozjs::conversions::ConversionBehavior;
 use mozjs::conversions::FromJSValConvertible;
@@ -131,14 +131,14 @@ pub fn to_i32_array<T>(context: *mut JSContext, obj: MutableHandleValue, vec: Ve
 
 #[cfg(test)]
 mod tests {
-    use crate::es_utils::arrays::{
+    use crate::jsapi_utils::arrays::{
         get_array_element, get_array_length, new_array, object_is_array, push_array_element,
         set_array_element,
     };
-    use crate::es_utils::functions::call_method_value;
-    use crate::es_utils::objects::get_es_obj_prop_val;
-    use crate::es_utils::tests::test_with_sm_rt;
-    use crate::es_utils::{es_value_to_str, report_es_ex};
+    use crate::jsapi_utils::functions::call_method_value;
+    use crate::jsapi_utils::objects::get_es_obj_prop_val;
+    use crate::jsapi_utils::tests::test_with_sm_rt;
+    use crate::jsapi_utils::{es_value_to_str, report_es_ex};
     use mozjs::jsval::JSVal;
     use mozjs::jsval::UndefinedValue;
     use mozjs::jsval::{Int32Value, ObjectValue};

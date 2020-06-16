@@ -58,9 +58,9 @@
 //! ```
 //!
 //!
-use crate::es_utils::reflection::{get_proxy, ProxyBuilder};
 use crate::esruntimewrapper::EsRuntimeWrapper;
 use crate::esvaluefacade::EsValueFacade;
+use crate::jsapi_utils::reflection::{get_proxy, ProxyBuilder};
 use mozjs::jsval::JSVal;
 use std::collections::{HashMap, HashSet};
 use std::ptr::replace;
