@@ -49,13 +49,15 @@ pub type OP =
 
 pub type GlobalOp = dyn Fn(*mut JSContext, CallArgs) -> bool + Send + 'static;
 
-/// wrapper for the SpiderMonkey runtime
+/// wrapper for the SpiderMonkey runtime, this struct only lives as a thread_local in the worker
+/// thread of an EsRuntime
+/// since it can only be accessed from that thread all methods here are sync
 pub struct SmRuntime {
     runtime: mozjs::rust::Runtime,
     global_obj: *mut JSObject,
     // todo remove
     op_container: HashMap<String, OP>,
-    pub(crate) opt_es_rt_inner: Option<Weak<EsRuntimeInner>>,
+    pub(crate) opt_esrt_inner: Option<Weak<EsRuntimeInner>>,
 }
 
 thread_local! {
@@ -67,14 +69,14 @@ thread_local! {
 
 impl SmRuntime {
     pub fn clone_esrt_inner(&self) -> Arc<EsRuntimeInner> {
-        self.opt_es_rt_inner
+        self.opt_esrt_inner
             .as_ref()
-            .expect("not initted yet")
+            .expect("not initialized yet")
             .upgrade()
-            .expect("parent EsRuntimeWrapperInner was dropped")
+            .expect("parent EsRuntimeInner was dropped")
     }
 
-    pub fn clone_current_rtwi_arc() -> Arc<EsRuntimeInner> {
+    pub fn clone_current_esrt_inner_arc() -> Arc<EsRuntimeInner> {
         SM_RT.with(|sm_rt_rc| {
             let sm_rt = &*sm_rt_rc.borrow();
             sm_rt.clone_esrt_inner()
@@ -147,7 +149,7 @@ impl SmRuntime {
             runtime,
             global_obj,
             op_container: HashMap::new(),
-            opt_es_rt_inner: None,
+            opt_esrt_inner: None,
         };
 
         ret.init_native_ops();
@@ -198,7 +200,8 @@ impl SmRuntime {
         });
     }
 
-    /// call a function by name
+    // call a function by name
+    // todo this should not be here, SmRuntime should not return EsValueFacades
     pub fn call(
         &self,
         obj_names: Vec<&str>,
@@ -212,6 +215,7 @@ impl SmRuntime {
         })
     }
 
+    /// load and execute a script module
     pub fn load_module(&self, module_src: &str, module_file_name: &str) -> Result<(), EsErrorInfo> {
         trace!(
             "smrt.load_module {} in thread {}",
@@ -231,6 +235,7 @@ impl SmRuntime {
     }
 
     /// eval a piece of script and return the result as a EsValueFacade
+    // todo, this should not return an EsValueFacade, refactor to rval
     pub fn eval(&self, eval_code: &str, file_name: &str) -> Result<EsValueFacade, EsErrorInfo> {
         trace!("smrt.eval {} in thread {}", file_name, thread_id::get());
 
@@ -688,7 +693,7 @@ fn invoke_rust_op_esvf(
 impl Drop for SmRuntime {
     fn drop(&mut self) {
         trace!("dropping SmRuntime in thread {}", thread_id::get());
-        self.opt_es_rt_inner = None;
+        self.opt_esrt_inner = None;
         trace!("dropping SmRuntime 2 in thread {}", thread_id::get());
     }
 }
@@ -740,7 +745,7 @@ unsafe extern "C" fn enqueue_promise_job(
 
         SM_RT.with(move |sm_rt_rc| {
             let sm_rt = &*sm_rt_rc.borrow();
-            let esrt_inner_opt = sm_rt.opt_es_rt_inner.as_ref().unwrap().upgrade();
+            let esrt_inner_opt = sm_rt.opt_esrt_inner.as_ref().unwrap().upgrade();
             let esrt_inner: Arc<EsRuntimeInner> = esrt_inner_opt.unwrap();
             let tm = esrt_inner.task_manager.clone();
             tm.add_task_from_worker(task);

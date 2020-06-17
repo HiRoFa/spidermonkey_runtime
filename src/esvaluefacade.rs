@@ -783,7 +783,7 @@ impl EsValueFacade {
 
                     let pid = spidermonkeyruntimewrapper::register_cached_object(context, prom);
 
-                    let weakref = sm_rt.opt_es_rt_inner.as_ref().unwrap().clone();
+                    let weakref = sm_rt.opt_esrt_inner.as_ref().unwrap().clone();
 
                     (pid, weakref)
                 });

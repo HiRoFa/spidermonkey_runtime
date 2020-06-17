@@ -49,7 +49,7 @@ pub(crate) fn init(rt: &EsRuntime) {
             // todo support args
 
             // invoke later
-            let rt = crate::spidermonkeyruntimewrapper::SmRuntime::clone_current_rtwi_arc();
+            let rt = crate::spidermonkeyruntimewrapper::SmRuntime::clone_current_esrt_inner_arc();
             rt.do_in_es_runtime_thread(move |sm_rt| {
                 sm_rt.do_with_jsapi(|_rt, cx, global| {
                     let func_epr =

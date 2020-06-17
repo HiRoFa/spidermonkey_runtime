@@ -46,7 +46,7 @@ impl EsRuntime {
 
             crate::spidermonkeyruntimewrapper::SM_RT.with(move |sm_rc: &RefCell<SmRuntime>| {
                 let sm_rt = &mut *sm_rc.borrow_mut();
-                sm_rt.opt_es_rt_inner = Some(sm_ref_inner);
+                sm_rt.opt_esrt_inner = Some(sm_ref_inner);
             });
         });
 
