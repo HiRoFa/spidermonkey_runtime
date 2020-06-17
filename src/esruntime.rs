@@ -5,11 +5,11 @@ use std::sync::{Arc, Weak};
 use crate::es_sys_scripts;
 use crate::features;
 
-use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
+use crate::esruntimeinner::EsRuntimeInner;
 use crate::esvaluefacade::EsValueFacade;
 use crate::jsapi_utils::EsErrorInfo;
 
-use crate::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+use crate::esruntimebuilder::EsRuntimeBuilder;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
 use crate::taskmanager::TaskManager;
 use std::cell::RefCell;
@@ -20,23 +20,23 @@ lazy_static! {
     static ref HELPER_TASKS: Arc<TaskManager> = Arc::new(TaskManager::new(std::cmp::max(2, num_cpus::get())));
 }
 
-/// the EsRuntimeWrapper is a facade that adds all script todo's to the SmRuntimeWrapper's MicroTaskManager so they are invoked in a single worker thread
+/// the EsRuntime is a facade that adds all script todo's to the SmRuntimeWrapper's MicroTaskManager so they are invoked in a single worker thread
 /// you can wait for those tasks to complete by calling the _sync variants of the public methods here
-pub struct EsRuntimeWrapper {
-    inner: Arc<EsRuntimeWrapperInner>,
+pub struct EsRuntime {
+    inner: Arc<EsRuntimeInner>,
 }
 
 pub type ModuleCodeLoader = dyn Fn(&str) -> String + Send + Sync + 'static;
 
-impl EsRuntimeWrapper {
-    pub fn builder() -> EsRuntimeWrapperBuilder {
-        EsRuntimeWrapperBuilder::new()
+impl EsRuntime {
+    pub fn builder() -> EsRuntimeBuilder {
+        EsRuntimeBuilder::new()
     }
 
-    pub(crate) fn new_inner(inner: EsRuntimeWrapperInner) -> Self {
+    pub(crate) fn new_inner(inner: EsRuntimeInner) -> Self {
         let arc_inner = Arc::new(inner);
-        let sm_ref_inner: Weak<EsRuntimeWrapperInner> = Arc::downgrade(&arc_inner);
-        let rt = EsRuntimeWrapper { inner: arc_inner };
+        let sm_ref_inner: Weak<EsRuntimeInner> = Arc::downgrade(&arc_inner);
+        let rt = EsRuntime { inner: arc_inner };
 
         // pass arc around inner to sm_rt thread
 
@@ -67,8 +67,8 @@ impl EsRuntimeWrapper {
             if let Some(arc) = arc_opt {
                 arc.cleanup_sync();
             } else {
-                // arc to inner dropped, stop deamon loop
-                log::trace!("stopping esruntimewrapper clanup deamon loop...");
+                // arc to inner dropped, stop demon loop
+                log::trace!("stopping EsRuntime cleanup demon loop...");
                 break;
             }
         });
@@ -137,7 +137,7 @@ impl EsRuntimeWrapper {
         self.do_with_inner(move |inner| inner.call(obj_names, function_name, args))
     }
 
-    pub fn do_with_inner<R, F: FnOnce(&EsRuntimeWrapperInner) -> R>(&self, f: F) -> R {
+    pub fn do_with_inner<R, F: FnOnce(&EsRuntimeInner) -> R>(&self, f: F) -> R {
         let inner = self.inner.clone();
         f(&*inner)
     }
@@ -176,10 +176,10 @@ impl EsRuntimeWrapper {
     ///
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     ///
-    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// let rt = EsRuntimeBuilder::new().build();
     /// rt.add_global_sync_function("test_add_global_sync", |_args| {
     ///      Ok(EsValueFacade::new_i32(361))
     /// });
@@ -199,11 +199,11 @@ impl EsRuntimeWrapper {
     /// this async variant will run the method in a separate thread and return the result as a Promise
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     /// use std::time::Duration;
     ///
-    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// let rt = EsRuntimeBuilder::new().build();
     /// rt.add_global_async_function("test_add_global_async", |_args| {
     ///     Ok(EsValueFacade::new_i32(351))
     /// });
@@ -225,7 +225,7 @@ impl EsRuntimeWrapper {
 #[cfg(test)]
 pub mod tests {
 
-    use crate::esruntimewrapper::EsRuntimeWrapper;
+    use crate::esruntime::EsRuntime;
     use crate::esvaluefacade::EsValueFacade;
     use crate::jsapi_utils::EsErrorInfo;
     use log::LevelFilter;
@@ -234,10 +234,10 @@ pub mod tests {
     use std::time::Duration;
 
     lazy_static! {
-        pub static ref TEST_RT: Arc<EsRuntimeWrapper> = init_test_runtime();
+        pub static ref TEST_RT: Arc<EsRuntime> = init_test_runtime();
     }
 
-    fn init_test_runtime() -> Arc<EsRuntimeWrapper> {
+    fn init_test_runtime() -> Arc<EsRuntime> {
         log::info!("test: init_test_runtime");
         simple_logging::log_to_file("esruntimewrapper.log", LevelFilter::Trace)
             .ok()
@@ -246,7 +246,7 @@ pub mod tests {
         let module_code_loader = |file_name: &str| {
             format!("export default () => 123; export const other = Math.sqrt(8); console.log('running imported test module'); \n\nconsole.log('parsing a module from code loader for filename: {}');", file_name)
         };
-        let rt = EsRuntimeWrapper::builder()
+        let rt = EsRuntime::builder()
             .gc_interval(Duration::from_secs(2))
             .module_code_loader(Box::new(module_code_loader))
             .build();
@@ -268,7 +268,7 @@ pub mod tests {
             .ok()
             .unwrap();
 
-        let rt = EsRuntimeWrapper::builder()
+        let rt = EsRuntime::builder()
             .gc_interval(Duration::from_secs(1))
             .build();
 
@@ -313,7 +313,7 @@ pub mod tests {
     #[test]
     fn test_module() {
         log::info!("test: test_module");
-        let esrt: Arc<EsRuntimeWrapper> = TEST_RT.clone();
+        let esrt: Arc<EsRuntime> = TEST_RT.clone();
 
         let load_mod_res = esrt.load_module_sync("import {other} from 'foo_test_mod.mes';\n\nlet test_method_0 = (a) => {return a * 11;};\n\nesses.test_method_1 = (a) => {return a * 12;};", "test_module_rt.mes");
 
@@ -348,7 +348,7 @@ pub mod tests {
     #[test]
     fn call_method() {
         log::info!("test: call_method");
-        let rt: Arc<EsRuntimeWrapper> = TEST_RT.clone();
+        let rt: Arc<EsRuntime> = TEST_RT.clone();
         rt.eval_sync(
             "this.myObj = {childObj: {myMethod: function(a, b){return a*b;}}};",
             "call_method",
@@ -369,7 +369,7 @@ pub mod tests {
     #[test]
     fn test_async_await() {
         log::info!("test: test_async_await");
-        let rt: Arc<EsRuntimeWrapper> = TEST_RT.clone();
+        let rt: Arc<EsRuntime> = TEST_RT.clone();
 
         let code = "\
                     let async_method = async function(){\

@@ -1,9 +1,9 @@
-use crate::esruntimewrapper::EsRuntimeWrapper;
+use crate::esruntime::EsRuntime;
 use log::{error, trace};
 use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsval::ObjectValue;
 
-pub(crate) fn init(rt: &EsRuntimeWrapper) {
+pub(crate) fn init(rt: &EsRuntime) {
     rt.do_in_es_runtime_thread_sync(|sm_rt| {
         sm_rt.add_global_function("setImmediate", |cx, args| {
             if args.argc_ == 0 {
@@ -85,11 +85,11 @@ pub(crate) fn init(rt: &EsRuntimeWrapper) {
 
 #[cfg(test)]
 pub mod tests {
-    use crate::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    use crate::esruntimebuilder::EsRuntimeBuilder;
 
     #[test]
     fn test_set_immediate() {
-        let rt = EsRuntimeWrapperBuilder::new().build();
+        let rt = EsRuntimeBuilder::new().build();
         let res = rt.eval_sync(
             "setImmediate(function(){console.log('logging immediate');});",
             "test_set_immediate.es",

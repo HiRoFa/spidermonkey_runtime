@@ -1,5 +1,5 @@
-use crate::esruntimewrapper::{EsRuntimeWrapper, ModuleCodeLoader};
-use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
+use crate::esruntime::{EsRuntime, ModuleCodeLoader};
+use crate::esruntimeinner::EsRuntimeInner;
 use std::time::Duration;
 
 /// The EsRuntimeWrapperBuilder struct can be used to initialize a new EsRuntimeWrapper
@@ -7,24 +7,24 @@ use std::time::Duration;
 /// # Example
 ///
 /// ```no_run
-/// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
 ///
-/// let rt = EsRuntimeWrapperBuilder::default().build();
+/// let rt = EsRuntimeBuilder::default().build();
 /// ```
 ///
 
 #[derive(Default)]
-pub struct EsRuntimeWrapperBuilder {
+pub struct EsRuntimeBuilder {
     gc_interval: Option<Duration>,
     pub(crate) module_code_loader: Option<Box<ModuleCodeLoader>>,
     pub(crate) module_cache_size: usize,
     built: bool,
 }
 
-impl EsRuntimeWrapperBuilder {
+impl EsRuntimeBuilder {
     /// create a new instance of a EsRuntimeWrapperBuilder with it's default options
     pub fn new() -> Self {
-        EsRuntimeWrapperBuilder {
+        EsRuntimeBuilder {
             gc_interval: None,
             module_code_loader: None,
             module_cache_size: 50,
@@ -53,7 +53,7 @@ impl EsRuntimeWrapperBuilder {
 
     /// build a new EsRuntimeWrapper based on the settings of this builder
     /// please note that this can be used only once
-    pub fn build(&mut self) -> EsRuntimeWrapper {
+    pub fn build(&mut self) -> EsRuntime {
         if self.built {
             panic!("cannot reuse builder");
         }
@@ -68,8 +68,8 @@ impl EsRuntimeWrapperBuilder {
             None
         };
 
-        let inner = EsRuntimeWrapperInner::build(mcl_opt, self.module_cache_size);
-        let wrapper = EsRuntimeWrapper::new_inner(inner);
+        let inner = EsRuntimeInner::build(mcl_opt, self.module_cache_size);
+        let wrapper = EsRuntime::new_inner(inner);
         if self.gc_interval.is_some() {
             wrapper.start_gc_deamon(self.gc_interval.unwrap());
         }

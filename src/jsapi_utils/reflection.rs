@@ -12,9 +12,9 @@
 //! use mozjs::jsapi::JSContext;
 //! use es_runtime::jsapi_utils;
 //! use log::debug;
-//! use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+//! use es_runtime::esruntimebuilder::EsRuntimeBuilder;
 //!
-//! let rt = EsRuntimeWrapperBuilder::new().build();
+//! let rt = EsRuntimeBuilder::new().build();
 //! // since we're working with jsapi we need to run in the workerthread of the runtime
 //! rt.do_in_es_runtime_thread_sync(|sm_rt| {
 //!     // and then get our jsapi objects
@@ -158,10 +158,10 @@ thread_local! {
 /// find a ref to a proxy, use full canonical name as key, needs to run in the workerthread of the EsRuntimeWrapper
 /// # Example
 /// ```no_run
-/// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
 /// use es_runtime::jsapi_utils::reflection::{ProxyBuilder, get_proxy};
 ///
-/// let rt = EsRuntimeWrapperBuilder::new().build();
+/// let rt = EsRuntimeBuilder::new().build();
 /// // since we're working with jsapi we need to run in the workerthread of the runtime
 /// rt.do_in_es_runtime_thread_sync(|sm_rt| {
 ///     sm_rt.do_with_jsapi(|_rt, cx, global| {
@@ -414,10 +414,10 @@ impl ProxyBuilder {
     /// create a new builder for a Proxy
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::jsapi_utils::reflection::ProxyBuilder;
     ///
-    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// let rt = EsRuntimeBuilder::new().build();
     /// rt.do_in_es_runtime_thread_sync(|sm_rt| {
     ///     sm_rt.do_with_jsapi(|_rt, cx, global|{
     ///         let _proxy = ProxyBuilder::new(vec!["com", "mybiz"], "MyClass")
@@ -446,10 +446,10 @@ impl ProxyBuilder {
     /// please not that if you do not add a constructor you can only use the static methods, getters, setters and events
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::jsapi_utils::reflection::ProxyBuilder;
     ///
-    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// let rt = EsRuntimeBuilder::new().build();
     /// rt.do_in_es_runtime_thread_sync(|sm_rt| {
     ///     sm_rt.do_with_jsapi(|_rt, cx, global|{
     ///         let _proxy = ProxyBuilder::new(vec!["com", "mybiz"], "MyClass")
@@ -507,10 +507,10 @@ impl ProxyBuilder {
     /// thse can be called from js as if it were members of the instance
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::jsapi_utils::reflection::ProxyBuilder;
     ///
-    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// let rt = EsRuntimeBuilder::new().build();
     /// rt.do_in_es_runtime_thread_sync(|sm_rt| {
     ///     sm_rt.do_with_jsapi(|_rt, cx, global|{
     ///         let _proxy = ProxyBuilder::new(vec!["com", "mybiz"], "MyClass")
@@ -588,7 +588,7 @@ mod tests {
     #[test]
     fn test_proxy() {
         log::info!("test_proxy");
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
 
         rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
@@ -666,7 +666,7 @@ mod tests {
     #[test]
     fn test_static_proxy() {
         log::info!("test_static_proxy");
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
 
         rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {

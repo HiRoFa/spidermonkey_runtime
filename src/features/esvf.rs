@@ -1,14 +1,14 @@
 use log::{debug, trace};
 
-use crate::esruntimewrapper::EsRuntimeWrapper;
-use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
+use crate::esruntime::EsRuntime;
+use crate::esruntimeinner::EsRuntimeInner;
 use crate::esvaluefacade::EsValueFacade;
 use std::sync::Arc;
 
-pub(crate) fn init(rt: &EsRuntimeWrapper) {
+pub(crate) fn init(rt: &EsRuntime) {
     rt.register_op(
         "resolve_waiting_esvf_future",
-        Arc::new(|_rt: &EsRuntimeWrapperInner, args: Vec<EsValueFacade>| {
+        Arc::new(|_rt: &EsRuntimeInner, args: Vec<EsValueFacade>| {
             let mut args = args;
             debug!(
                 "running op resolve_waiting_esvf_future in rust with rt with {} args",
@@ -34,7 +34,7 @@ pub(crate) fn init(rt: &EsRuntimeWrapper) {
 
     rt.register_op(
         "reject_waiting_esvf_future",
-        Arc::new(|_rt: &EsRuntimeWrapperInner, args: Vec<EsValueFacade>| {
+        Arc::new(|_rt: &EsRuntimeInner, args: Vec<EsValueFacade>| {
             let mut args = args;
             debug!(
                 "running op reject_waiting_esvf_future in rust with rt with {} args",

@@ -73,7 +73,7 @@ mod tests {
     fn test_rooting1() {
         log::info!("test_rooting1 ");
 
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
 
         let res = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {

@@ -1,4 +1,4 @@
-use crate::esruntimewrapper::ModuleCodeLoader;
+use crate::esruntime::ModuleCodeLoader;
 use crate::esvaluefacade::EsValueFacade;
 use crate::jsapi_utils::EsErrorInfo;
 use crate::microtaskmanager::MicroTaskManager;
@@ -8,19 +8,19 @@ use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::JS_ReportErrorASCII;
 use std::sync::Arc;
 
-pub struct EsRuntimeWrapperInner {
+pub struct EsRuntimeInner {
     pub(crate) task_manager: Arc<MicroTaskManager>,
-    pub(crate) _pre_cleanup_tasks: Vec<Box<dyn Fn(&EsRuntimeWrapperInner) -> () + Send + Sync>>,
+    pub(crate) _pre_cleanup_tasks: Vec<Box<dyn Fn(&EsRuntimeInner) -> () + Send + Sync>>,
     pub(crate) module_source_loader: Option<Box<dyn Fn(&str) -> String + Send + Sync>>,
     pub(crate) module_cache_size: usize,
 }
 
-impl EsRuntimeWrapperInner {
+impl EsRuntimeInner {
     pub(crate) fn build(
         module_source_loader: Option<Box<ModuleCodeLoader>>,
         module_cache_size: usize,
     ) -> Self {
-        EsRuntimeWrapperInner {
+        EsRuntimeInner {
             task_manager: MicroTaskManager::new(),
             _pre_cleanup_tasks: vec![],
             module_source_loader,
@@ -243,7 +243,7 @@ impl EsRuntimeWrapperInner {
     }
 }
 
-impl Drop for EsRuntimeWrapperInner {
+impl Drop for EsRuntimeInner {
     fn drop(&mut self) {
         self.do_in_es_runtime_thread_mut_sync(Box::new(|_sm_rt: &mut SmRuntime| {
             debug!("dropping EsRuntimeWrapperInner");

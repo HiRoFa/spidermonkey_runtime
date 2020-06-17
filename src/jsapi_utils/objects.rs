@@ -274,7 +274,7 @@ pub fn set_es_obj_prop_val_permanent(
 
 #[cfg(test)]
 mod tests {
-    use crate::esruntimewrapper::EsRuntimeWrapper;
+    use crate::esruntime::EsRuntime;
     use crate::esvaluefacade::EsValueFacade;
     use crate::jsapi_utils;
     use crate::jsapi_utils::objects::{
@@ -291,7 +291,7 @@ mod tests {
     fn test_get_js_obj_prop_values() {
         log::info!("test: test_get_js_obj_prop_values");
         use log::trace;
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
 
         let test_vec = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
@@ -367,7 +367,7 @@ mod tests {
         log::info!("test: test_get_js_obj_prop_names");
         use mozjs::jsapi::JSObject;
 
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
 
         let test_vec = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
@@ -404,8 +404,8 @@ mod tests {
     #[test]
     fn test_get_or_define_package() {
         log::info!("test: test_get_or_define_package");
-        let rt_arc: Arc<EsRuntimeWrapper> = crate::esruntimewrapper::tests::TEST_RT.clone();
-        let rt: &EsRuntimeWrapper = rt_arc.borrow();
+        let rt_arc: Arc<EsRuntime> = crate::esruntime::tests::TEST_RT.clone();
+        let rt: &EsRuntime = rt_arc.borrow();
         let res = rt.do_in_es_runtime_thread_sync(|sm_rt| {
             sm_rt.do_with_jsapi(|_rt, cx, global| {
                 get_or_define_namespace(cx, global, vec!["test_get_or_define_package", "a", "b"]);
@@ -432,7 +432,7 @@ mod tests {
     #[test]
     fn test_get_obj_props() {
         log::info!("test: test_get_obj_props");
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
         let res = rt.eval_sync("({a: 1, b: 'abc', c: true, d: 'much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string much larger string'});", "test_get_obj_props");
         assert!(res.is_ok());
         let map = res.ok().unwrap();
@@ -446,8 +446,8 @@ mod tests {
         use mozjs::jsapi::HandleValueArray;
         use mozjs::jsval::NullValue;
 
-        let rt_arc: Arc<EsRuntimeWrapper> = crate::esruntimewrapper::tests::TEST_RT.clone();
-        let rt: &EsRuntimeWrapper = rt_arc.borrow();
+        let rt_arc: Arc<EsRuntime> = crate::esruntime::tests::TEST_RT.clone();
+        let rt: &EsRuntime = rt_arc.borrow();
         let ok = rt.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
             sm_rt.do_with_jsapi(|rt, cx, global| {
                 rooted!(in (cx) let mut constructor_root = UndefinedValue());

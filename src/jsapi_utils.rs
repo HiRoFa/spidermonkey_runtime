@@ -7,10 +7,10 @@
 //! # Example
 //!
 //! ```no_run
-//!     use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+//!     use es_runtime::esruntimebuilder::EsRuntimeBuilder;
 //!     use es_runtime::jsapi_utils;
 //!
-//! let rt = EsRuntimeWrapperBuilder::new().build();
+//! let rt = EsRuntimeBuilder::new().build();
 //! rt.do_in_es_runtime_thread_sync(|sm_rt| {
 //!     // use jsapi_utils here
 //!     // if you need the Runtime, JSContext or Global object (which you almost allways will)
@@ -238,14 +238,14 @@ mod tests {
     where
         F: FnOnce(&SmRuntime) -> R + Send + 'static,
     {
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
 
         rt.do_with_inner(|inner| inner.do_in_es_runtime_thread_sync(Box::new(test_fn)))
     }
 
     #[test]
     fn test_es_value_to_string() {
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
 
         let test_string: String = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
@@ -279,7 +279,7 @@ mod tests {
 
     #[test]
     fn test_eval() {
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
         let res: String = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
                 let res: Result<EsValueFacade, EsErrorInfo> =
@@ -296,7 +296,7 @@ mod tests {
         use log::trace;
         //simple_logger::init().unwrap();
 
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
         let res = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
                 sm_rt.do_with_jsapi(|rt, cx, global| {

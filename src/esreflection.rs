@@ -7,11 +7,11 @@
 //! ```no_run
 //!
 //! use es_runtime::esreflection::EsProxy;
-//! use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+//! use es_runtime::esruntimebuilder::EsRuntimeBuilder;
 //! use es_runtime::esvaluefacade::EsValueFacade;
 //! use std::collections::HashMap;
 //!
-//!     let rt = EsRuntimeWrapperBuilder::new().build();
+//!     let rt = EsRuntimeBuilder::new().build();
 //!
 //!     let proxy: EsProxy = EsProxy::builder(vec!["com", "my", "biz"], "MyClass")
 //!     .constructor(|args| {
@@ -54,7 +54,7 @@
 //! ```
 //!
 //!
-use crate::esruntimewrapper::EsRuntimeWrapper;
+use crate::esruntime::EsRuntime;
 use crate::esvaluefacade::EsValueFacade;
 use crate::jsapi_utils::reflection::{get_proxy, ProxyBuilder};
 use mozjs::jsval::JSVal;
@@ -105,11 +105,11 @@ impl EsProxy {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     ///
-    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
     ///.constructor(|args| {
     ///    Ok(1)
@@ -123,7 +123,7 @@ impl EsProxy {
     /// ```
     pub fn dispatch_event(
         &self,
-        rt: &EsRuntimeWrapper,
+        rt: &EsRuntime,
         obj_id: i32,
         event_name: &'static str,
         event_obj: EsValueFacade,
@@ -146,11 +146,11 @@ impl EsProxy {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     ///
-    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
     ///.constructor(|args| {
     ///    Ok(1)
@@ -164,7 +164,7 @@ impl EsProxy {
     /// ```
     pub fn dispatch_static_event(
         &self,
-        rt: &EsRuntimeWrapper,
+        rt: &EsRuntime,
         event_name: &'static str,
         event_obj: EsValueFacade,
     ) {
@@ -184,11 +184,11 @@ impl EsProxy {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     ///
-    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass").build(&rt);
     ///assert_eq!(es_proxy.get_canonical_name().as_str(), "my.biz.MyClass");
     /// ```
@@ -205,11 +205,11 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     ///
-    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass").build(&rt);
     /// ```
     pub fn new(namespace: Vec<&'static str>, class_name: &'static str) -> Self {
@@ -233,11 +233,11 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     ///
-    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
     ///    .constructor(|args| {
     ///         println!("create a new instance");
@@ -266,11 +266,11 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     ///
-    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
     ///    .finalizer(|obj_id| {
     ///         println!("do cleanup for objId {}", obj_id);
@@ -296,11 +296,11 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     ///
-    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
     ///    .constructor(|args| {
     ///         Ok(1)
@@ -329,11 +329,11 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     ///
-    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
     ///    .constructor(|args| {
     ///         Ok(1)
@@ -369,11 +369,11 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     ///
-    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
     ///    .constructor(|args| {
     ///          // use id one as obj id
@@ -403,11 +403,11 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     ///
-    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
     ///    .static_event("itHappened")
     ///    .build(&rt);
@@ -430,11 +430,11 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     ///
-    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
     ///    .static_property("someProp", || {
     ///         println!("getting some_prop");
@@ -466,11 +466,11 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esreflection::EsProxyBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     ///
-    ///let rt = EsRuntimeWrapperBuilder::default().build();
+    ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
     ///    .static_method("doSomethingStatic", |_args| {
     ///        println!("did something static");
@@ -491,7 +491,7 @@ impl EsProxyBuilder {
     }
 
     /// build the EsProxy this adds the proxy class to the runtime and return an EsProxy object
-    pub fn build(&mut self, rt: &EsRuntimeWrapper) -> EsProxy {
+    pub fn build(&mut self, rt: &EsRuntime) -> EsProxy {
         let cn = self.class_name;
         let ns = self.namespace.clone();
         let constructor_opt = unsafe { replace(&mut self.constructor, None) };

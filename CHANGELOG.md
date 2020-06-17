@@ -1,12 +1,13 @@
 # 0.4.0 (work in progress)
 
 * changed the way you add and invoke rust methods 
-  * EsRuntimeWrapper::add_global_(a)sync_function
+  * EsRuntime::add_global_(a)sync_function
   * SmRuntime::add_global_function
 * added EsProxy(Builder) for reflecting rust objects while using EsValueFacade as arguments and return types
 * changed the methods/getters for Proxy (rval: MutableHandleValue instead of returning a JSVal)
 * lots of inline documentation added
 * renamed es_utils to jsapi_utils
+* renamed EsRuntimeWrapper(Builder/Inner) to EsRuntime(Builder/Inner)
 
 # 0.3.4 / 0.3.5
 

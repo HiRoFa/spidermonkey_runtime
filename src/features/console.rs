@@ -1,4 +1,4 @@
-use crate::esruntimewrapper::EsRuntimeWrapper;
+use crate::esruntime::EsRuntime;
 use crate::jsapi_utils;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
 use mozjs::jsapi::CallArgs;
@@ -10,7 +10,7 @@ use mozjs::jsval::{JSVal, ObjectValue, UndefinedValue};
 use mozjs::rust::HandleValue;
 use std::str::FromStr;
 
-pub(crate) fn init(rt: &EsRuntimeWrapper) {
+pub(crate) fn init(rt: &EsRuntime) {
     rt.do_in_es_runtime_thread_mut_sync(Box::new(|sm_rt: &mut SmRuntime| {
         // todo move this to a new_object_in_global method in sm_rt
         // that should return a persistentrooted
@@ -414,7 +414,7 @@ mod tests {
 
     #[test]
     fn test_console() {
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
         let console: EsValueFacade = rt.eval_sync("(console);", "test_console.es").ok().unwrap();
 
         assert!(console.is_object());

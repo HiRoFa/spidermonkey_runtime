@@ -1,8 +1,8 @@
 use log::trace;
 
 use crate::debugmutex::DebugMutex;
-use crate::esruntimewrapper::EsRuntimeWrapper;
-use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
+use crate::esruntime::EsRuntime;
+use crate::esruntimeinner::EsRuntimeInner;
 use crate::jsapi_utils::arrays::{get_array_element, get_array_length, new_array, object_is_array};
 use crate::jsapi_utils::rooting::EsPersistentRooted;
 use crate::jsapi_utils::{objects, EsErrorInfo};
@@ -31,9 +31,9 @@ struct RustManagedEsVar {
 /// # Example
 ///
 /// ```no_run
-/// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
 ///
-/// let rt = EsRuntimeWrapperBuilder::default().build();
+/// let rt = EsRuntimeBuilder::default().build();
 /// let esvf = rt.eval_sync("123", "test_es_value_facade.es").ok().unwrap();
 /// assert!(esvf.is_i32());
 /// assert_eq!(esvf.get_i32(), &123);
@@ -47,7 +47,7 @@ pub struct EsValueFacade {
     val_object: Option<HashMap<String, EsValueFacade>>,
     val_array: Option<Vec<EsValueFacade>>,
     val_promise: Option<usize>,
-    val_js_function: Option<(usize, Arc<EsRuntimeWrapperInner>)>,
+    val_js_function: Option<(usize, Arc<EsRuntimeInner>)>,
 }
 
 thread_local! {
@@ -142,11 +142,11 @@ impl EsValueFacade {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     /// use std::time::Duration;
     ///
-    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// let rt = EsRuntimeBuilder::new().build();
     /// rt.eval_sync("let myFunc = function(a){\
     ///     a.then((res) => {\
     ///         console.log('a resolved with %s', res);\
@@ -294,7 +294,7 @@ impl EsValueFacade {
         trace!("spawning prom reso task for {}", id);
 
         // run task
-        EsRuntimeWrapper::add_helper_task(task);
+        EsRuntime::add_helper_task(task);
 
         let mut ret = Self::undefined();
 
@@ -410,7 +410,7 @@ impl EsValueFacade {
 
                 let rti_ref = spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
                     let sm_rt: &SmRuntime = &*sm_rt_rc.borrow();
-                    sm_rt.clone_rtw_inner()
+                    sm_rt.clone_esrt_inner()
                 });
                 let cached_id = spidermonkeyruntimewrapper::register_cached_object(context, obj);
                 val_js_function = Some((cached_id, rti_ref));
@@ -494,10 +494,10 @@ impl EsValueFacade {
     /// wait for a promise to resolve in rust
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use std::time::Duration;
     ///
-    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// let rt = EsRuntimeBuilder::new().build();
     /// // run the script and fail if script fails
     /// let esvf_prom = rt.eval_sync(
     ///     "let p = new Promise((resolve, reject) => {setImmediate(() => {resolve(123);});}); p;",
@@ -528,9 +528,9 @@ impl EsValueFacade {
     /// get the value as a Map of EsValueFacades, this works when the value was an object in the script engine
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     ///
-    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// let rt = EsRuntimeBuilder::new().build();
     /// let esvf = rt.eval_sync("{a: 1, b: 2};", "test_get_object.es").ok().expect("script failed");
     /// let map = esvf.get_object();
     /// assert!(map.contains_key("a"));
@@ -543,10 +543,10 @@ impl EsValueFacade {
     /// get the value as a Vec of EsValueFacades, this works when the value was an array in the script engine
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     ///
-    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// let rt = EsRuntimeBuilder::new().build();
     /// let esvf = rt.eval_sync("[1, 2, 3];", "test_get_array.es").ok().expect("script failed");
     /// let arr: &Vec<EsValueFacade> = esvf.get_array();
     /// assert_eq!(arr.len(), 3);
@@ -558,10 +558,10 @@ impl EsValueFacade {
     /// invoke the function that was returned from the script engine
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use es_runtime::esvaluefacade::EsValueFacade;
     ///
-    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// let rt = EsRuntimeBuilder::new().build();
     /// let func_esvf = rt.eval_sync("(function(a){return (a / 2);});", "test_invoke_function.es")
     ///     .ok().expect("script failed");
     /// // invoke the function with 18
@@ -837,8 +837,7 @@ impl EsValueFacade {
     }
 }
 
-type PromiseResultContainer =
-    Either<Result<EsValueFacade, String>, (usize, Weak<EsRuntimeWrapperInner>)>;
+type PromiseResultContainer = Either<Result<EsValueFacade, String>, (usize, Weak<EsRuntimeInner>)>;
 type PromiseResultContainerOption = Option<PromiseResultContainer>;
 
 impl Drop for EsValueFacade {
@@ -867,8 +866,8 @@ impl Drop for EsValueFacade {
 #[cfg(test)]
 mod tests {
 
-    use crate::esruntimewrapper::EsRuntimeWrapper;
-    use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
+    use crate::esruntime::EsRuntime;
+    use crate::esruntimeinner::EsRuntimeInner;
     use crate::esvaluefacade::EsValueFacade;
     use crate::jsapi_utils::EsErrorInfo;
     use std::collections::HashMap;
@@ -880,11 +879,11 @@ mod tests {
     fn in_and_output_vars() {
         log::info!("test: in_and_output_vars");
 
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
         rt.do_with_inner(|inner| {
             inner.register_op(
                 "test_op_0",
-                Arc::new(|_rt: &EsRuntimeWrapperInner, args: Vec<EsValueFacade>| {
+                Arc::new(|_rt: &EsRuntimeInner, args: Vec<EsValueFacade>| {
                     let args1 = args.get(0).expect("did not get a first arg");
                     let args2 = args.get(1).expect("did not get a second arg");
 
@@ -896,7 +895,7 @@ mod tests {
             );
             inner.register_op(
                 "test_op_1",
-                Arc::new(|_rt: &EsRuntimeWrapperInner, args: Vec<EsValueFacade>| {
+                Arc::new(|_rt: &EsRuntimeInner, args: Vec<EsValueFacade>| {
                     let args1 = args.get(0).expect("did not get a first arg");
                     let args2 = args.get(1).expect("did not get a second arg");
 
@@ -909,7 +908,7 @@ mod tests {
 
             inner.register_op(
                 "test_op_2",
-                Arc::new(|_rt: &EsRuntimeWrapperInner, args: Vec<EsValueFacade>| {
+                Arc::new(|_rt: &EsRuntimeInner, args: Vec<EsValueFacade>| {
                     let args1 = args.get(0).expect("did not get a first arg");
                     let args2 = args.get(1).expect("did not get a second arg");
 
@@ -922,7 +921,7 @@ mod tests {
 
             inner.register_op(
                 "test_op_3",
-                Arc::new(|_rt: &EsRuntimeWrapperInner, args: Vec<EsValueFacade>| {
+                Arc::new(|_rt: &EsRuntimeInner, args: Vec<EsValueFacade>| {
                     let args1 = args.get(0).expect("did not get a first arg");
                     let args2 = args.get(1).expect("did not get a second arg");
 
@@ -966,11 +965,11 @@ mod tests {
     fn in_and_output_vars2() {
         log::info!("test: in_and_output_vars2");
 
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
-        rt.do_with_inner(|inner: &EsRuntimeWrapperInner| {
+        let rt = crate::esruntime::tests::TEST_RT.clone();
+        rt.do_with_inner(|inner: &EsRuntimeInner| {
             inner.register_op(
                 "test_op_4",
-                Arc::new(|_rt: &EsRuntimeWrapperInner, args: Vec<EsValueFacade>| {
+                Arc::new(|_rt: &EsRuntimeInner, args: Vec<EsValueFacade>| {
                     let func = args.get(0).expect("need at least one arg");
 
                     assert!(func.is_function());
@@ -1003,7 +1002,7 @@ mod tests {
     fn test_wait_for_native_prom() {
         log::info!("test: test_wait_for_native_prom");
 
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
         let esvf_prom = rt
             .eval_sync(
                 "let p = new Promise((resolve, reject) => {resolve(123);});p = p.then((v) => {return v;});p = p.then((v) => {return v;});p = p.then((v) => {return v;});p = p.then((v) => {return v;});p = p.then((v) => {return v;});p = p.then((v) => {return v;}); p;",
@@ -1027,7 +1026,7 @@ mod tests {
     fn test_wait_for_prom() {
         log::info!("test: test_wait_for_prom");
 
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
         let esvf_prom = rt
             .eval_sync(
                 "let test_wait_for_prom_prom = new Promise((resolve, reject) => {resolve(123);}); test_wait_for_prom_prom;",
@@ -1051,7 +1050,7 @@ mod tests {
     fn test_wait_for_prom2() {
         log::info!("test: test_wait_for_prom2");
 
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
 
         let esvf_prom_res: Result<EsValueFacade, EsErrorInfo> = rt
             .eval_sync(
@@ -1085,7 +1084,7 @@ mod tests {
     fn test_wait_for_prom3() {
         log::info!("test: test_wait_for_prom3");
 
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
 
         let my_slow_prom_esvf = EsValueFacade::new_promise(|| {
             std::thread::sleep(Duration::from_secs(10));
@@ -1118,7 +1117,7 @@ mod tests {
     #[test]
     fn test_get_object() {
         log::info!("test: test_get_object");
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
         let esvf = rt
             .eval_sync(
                 "({a: 1, b: true, c: 'hello', d: {a: 2}});",
@@ -1140,7 +1139,7 @@ mod tests {
     #[test]
     fn test_getset_array() {
         log::info!("test: test_getset_array");
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
         let esvf = rt
             .eval_sync("([5, 7, 9]);", "test_getset_array.es")
             .ok()
@@ -1179,7 +1178,7 @@ mod tests {
     #[test]
     fn test_set_object() {
         log::info!("test: test_set_object");
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
         let _esvf = rt
             .eval_sync(
                 "this.test_set_object = function test_set_object(obj, prop){return obj[prop];};",
@@ -1209,7 +1208,7 @@ mod tests {
     #[test]
     fn test_prepped_prom() {
         log::info!("test: test_prepped_prom");
-        let rt: &EsRuntimeWrapper = &*crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt: &EsRuntime = &*crate::esruntime::tests::TEST_RT.clone();
 
         let my_prep_func = || {
             std::thread::sleep(Duration::from_secs(5));
@@ -1259,7 +1258,7 @@ mod tests {
     #[test]
     fn test_prepped_prom_resolve() {
         log::info!("test: test_prepped_prom_resolve");
-        let rt: &EsRuntimeWrapper = &*crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt: &EsRuntime = &*crate::esruntime::tests::TEST_RT.clone();
 
         let my_prep_func = || {
             std::thread::sleep(Duration::from_secs(5));

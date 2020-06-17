@@ -1,4 +1,4 @@
-use crate::esruntimewrapperinner::EsRuntimeWrapperInner;
+use crate::esruntimeinner::EsRuntimeInner;
 use crate::esvaluefacade::EsValueFacade;
 use crate::jsapi_utils;
 use crate::jsapi_utils::rooting::EsPersistentRooted;
@@ -44,11 +44,8 @@ use std::sync::{Arc, Weak};
 
 /// the type for registering rust_ops in the script engine
 // todo remove
-pub type OP = Arc<
-    dyn Fn(&EsRuntimeWrapperInner, Vec<EsValueFacade>) -> Result<EsValueFacade, String>
-        + Send
-        + Sync,
->;
+pub type OP =
+    Arc<dyn Fn(&EsRuntimeInner, Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send + Sync>;
 
 pub type GlobalOp = dyn Fn(*mut JSContext, CallArgs) -> bool + Send + 'static;
 
@@ -58,7 +55,7 @@ pub struct SmRuntime {
     global_obj: *mut JSObject,
     // todo remove
     op_container: HashMap<String, OP>,
-    pub(crate) opt_es_rt_inner: Option<Weak<EsRuntimeWrapperInner>>,
+    pub(crate) opt_es_rt_inner: Option<Weak<EsRuntimeInner>>,
 }
 
 thread_local! {
@@ -69,7 +66,7 @@ thread_local! {
 }
 
 impl SmRuntime {
-    pub fn clone_rtw_inner(&self) -> Arc<EsRuntimeWrapperInner> {
+    pub fn clone_esrt_inner(&self) -> Arc<EsRuntimeInner> {
         self.opt_es_rt_inner
             .as_ref()
             .expect("not initted yet")
@@ -77,10 +74,10 @@ impl SmRuntime {
             .expect("parent EsRuntimeWrapperInner was dropped")
     }
 
-    pub fn clone_current_rtwi_arc() -> Arc<EsRuntimeWrapperInner> {
+    pub fn clone_current_rtwi_arc() -> Arc<EsRuntimeInner> {
         SM_RT.with(|sm_rt_rc| {
             let sm_rt = &*sm_rt_rc.borrow();
-            sm_rt.clone_rtw_inner()
+            sm_rt.clone_esrt_inner()
         })
     }
 
@@ -88,11 +85,11 @@ impl SmRuntime {
     /// this function will be callable from javascript just by using func_name();
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use mozjs::jsval::Int32Value;
     /// use mozjs::jsapi::CallArgs;
     ///
-    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// let rt = EsRuntimeBuilder::new().build();
     /// rt.do_in_es_runtime_thread_sync(|sm_rt| {
     ///     sm_rt.add_global_function("my_function", |_cx, args: CallArgs| {
     ///         // impl method here
@@ -320,7 +317,7 @@ impl SmRuntime {
         let op_map = &self.op_container;
         let op = op_map.get(&name).expect("no such op");
 
-        let rt = self.clone_rtw_inner();
+        let rt = self.clone_esrt_inner();
         op(rt.borrow(), args)
     }
 
@@ -516,7 +513,7 @@ thread_local! {
 fn init_cache() -> LruCache<String, EsPersistentRooted> {
     let ct = SM_RT.with(|sm_rt_rc| {
         let sm_rt = &*sm_rt_rc.borrow();
-        sm_rt.clone_rtw_inner().module_cache_size
+        sm_rt.clone_esrt_inner().module_cache_size
     });
 
     LruCache::new(ct)
@@ -547,8 +544,8 @@ unsafe extern "C" fn import_module(
     // see if we got a module code loader
     let module_src = SM_RT.with(|sm_rt_rc| {
         let sm_rt = sm_rt_rc.borrow();
-        let es_rt_wrapper_inner = sm_rt.clone_rtw_inner();
-        if let Some(module_source_loader) = &es_rt_wrapper_inner.module_source_loader {
+        let es_rt_inner = sm_rt.clone_esrt_inner();
+        if let Some(module_source_loader) = &es_rt_inner.module_source_loader {
             return module_source_loader(file_name.as_str());
         }
         return format!("");
@@ -673,7 +670,7 @@ fn invoke_rust_op_esvf(
         }
 
         if as_promise {
-            let rt = sm_rt.clone_rtw_inner();
+            let rt = sm_rt.clone_esrt_inner();
             let op = sm_rt
                 .op_container
                 .get(&op_name)
@@ -743,9 +740,9 @@ unsafe extern "C" fn enqueue_promise_job(
 
         SM_RT.with(move |sm_rt_rc| {
             let sm_rt = &*sm_rt_rc.borrow();
-            let esrtwi_opt = sm_rt.opt_es_rt_inner.as_ref().unwrap().upgrade();
-            let esrtwi: Arc<EsRuntimeWrapperInner> = esrtwi_opt.unwrap();
-            let tm = esrtwi.task_manager.clone();
+            let esrt_inner_opt = sm_rt.opt_es_rt_inner.as_ref().unwrap().upgrade();
+            let esrt_inner: Arc<EsRuntimeInner> = esrt_inner_opt.unwrap();
+            let tm = esrt_inner.task_manager.clone();
             tm.add_task_from_worker(task);
         });
         result = true
@@ -780,7 +777,7 @@ unsafe extern "C" fn empty(_extra: *const c_void) -> bool {
     wrap_panic(&mut || {
         result = SM_RT.with(|sm_rt_rc| {
             let sm_rt = &*sm_rt_rc.borrow();
-            sm_rt.clone_rtw_inner().task_manager.is_empty()
+            sm_rt.clone_esrt_inner().task_manager.is_empty()
         })
     });
     result
@@ -873,7 +870,7 @@ mod tests {
     #[test]
     fn test_call_method_name() {
         log::info!("test: test_call_method_name");
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
         let res = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(
 
@@ -919,7 +916,7 @@ mod tests {
 
     fn _test_import() {
         log::info!("test: test_import");
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
         let import_res: Result<EsValueFacade, EsErrorInfo> = rt.eval_sync(
             "import {foo, bar} from 'test_module';\n\n'ok';",
             "test_import.es",
@@ -935,7 +932,7 @@ mod tests {
     /// dynamic imports don't seem to be implemented in our version of JSAPI, so we'll skip this for now
     fn _test_dynamic_import() {
         log::info!("test: test_dynamic_import");
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
         let import_res: Result<EsValueFacade, EsErrorInfo> = rt.eval_sync(
             "import('test_module').then((answer) => {console.log('imported module: ' + JSON.stringify(answer));});\n\n'ok';",
             "test_dynamic_import.es",
@@ -951,7 +948,7 @@ mod tests {
     #[test]
     fn test_call_method_obj_name() {
         log::info!("test: test_call_method_obj_name");
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
         let res = rt.do_with_inner(|inner| {
             inner.do_in_es_runtime_thread_sync(
 
@@ -999,7 +996,7 @@ mod tests {
     // used for testing with gc_zeal opts
     // #[test]
     fn _test_simple_inner() {
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
         rt.do_with_inner(|inner| {
             for _x in 0..5000 {
                 inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
@@ -1021,7 +1018,7 @@ mod tests {
         log::info!("test: test_hva");
         use mozjs::jsapi::HandleValueArray;
 
-        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+        let rt = crate::esruntime::tests::TEST_RT.clone();
         let ret = rt.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
             sm_rt.do_with_jsapi(|rt, cx, global| {
                 rooted!(in (cx) let mut func_root = UndefinedValue());

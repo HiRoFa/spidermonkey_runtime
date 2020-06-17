@@ -20,7 +20,7 @@
 //! use es_runtime::esvaluefacade::EsValueFacade;
 //! use es_runtime::jsapi_utils::EsErrorInfo;
 //! fn use_es_value_facade() {
-//!     let rt = es_runtime::esruntimewrapper::EsRuntimeWrapper::builder().build();
+//!     let rt = es_runtime::esruntime::EsRuntime::builder().build();
 //!     rt.eval_sync("let my_public_method = function(a, b){console.log(\"my_public_method called with: a=%s b=%s\", a, b);};", "my_script.es");
 //!     let a = EsValueFacade::new_str(format!("abc"));
 //!     let b = EsValueFacade::new_str(format!("def"));
@@ -36,7 +36,7 @@
 //!
 //! use es_runtime::esvaluefacade::EsValueFacade;
 //! fn define_function(){
-//!     let rt = es_runtime::esruntimewrapper::EsRuntimeWrapper::builder().build();
+//!     let rt = es_runtime::esruntime::EsRuntime::builder().build();
 //!     // using the async variant means the function will return as a Promise
 //!     rt.add_global_async_function("my_function", |args: Vec<EsValueFacade>| {
 //!          println!("rust closure was called from script");
@@ -65,7 +65,7 @@
 //! use es_runtime::spidermonkeyruntimewrapper::SmRuntime;
 //!
 //! fn use_jsapi() {
-//!     let rt = es_runtime::esruntimewrapper::EsRuntimeWrapper::builder().build();
+//!     let rt = es_runtime::esruntime::EsRuntime::builder().build();
 //!     // first of all we need to run a closure in the worker thread for the engine
 //!     let res = rt.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
 //!         // then we tell the SmRuntime we want to use the JSAPI
@@ -110,9 +110,9 @@ mod es_sys_scripts;
 
 pub mod utils;
 pub mod esreflection;
-pub mod esruntimewrapper;
-pub mod esruntimewrapperbuilder;
-pub mod esruntimewrapperinner;
+pub mod esruntime;
+pub mod esruntimebuilder;
+pub mod esruntimeinner;
 pub mod esvaluefacade;
 mod features;
 pub mod jsapi_utils;
