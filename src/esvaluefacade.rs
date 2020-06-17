@@ -68,7 +68,12 @@ impl EsValueFacade {
                 &mut *rc.borrow_mut();
             let opt: Option<Sender<Result<EsValueFacade, EsValueFacade>>> = map.remove(&man_obj_id);
             if let Some(opt_c) = opt {
-                opt_c.send(res).expect("could not send res");
+                // todo, if get_result_blocking times out, does this panic and crash the server?
+                let send_res = opt_c.send(res);
+                if send_res.is_err() {
+                    // esvaluefacade was dropped
+                    log::debug!("could not send res, maybe the EsValueFacade was dropped");
+                }
             } else {
                 panic!("no transmitter found {}", man_obj_id);
             }
@@ -1069,6 +1074,40 @@ mod tests {
 
             assert_eq!(esvf_prom_resolved.get_string(), "foo");
         }
+    }
+
+    #[test]
+    fn test_wait_for_prom3() {
+        log::info!("test: test_wait_for_prom3");
+
+        let rt = crate::esruntimewrapper::tests::TEST_RT.clone();
+
+        let my_slow_prom_esvf = EsValueFacade::new_promise(|| {
+            std::thread::sleep(Duration::from_secs(10));
+            Ok(EsValueFacade::new_i32(12345))
+        });
+
+        rt.eval_sync(
+            "this.p3waitmethod = function(p){return p.then((res) => {return (res * 2);});};",
+            "testp3.es",
+        )
+        .ok()
+        .expect("p3 script failed");
+        let prom_esvf_res = rt.call_sync(vec![], "p3waitmethod", vec![my_slow_prom_esvf]);
+
+        if prom_esvf_res.is_err() {
+            let err: EsErrorInfo = prom_esvf_res.err().unwrap();
+            panic!("p3 call failed: {}", err.err_msg());
+        }
+
+        let prom_esvf = prom_esvf_res.ok().unwrap();
+
+        let res = prom_esvf.get_promise_result_blocking(Duration::from_secs(2));
+        assert!(res.is_err());
+        drop(prom_esvf);
+        std::thread::sleep(Duration::from_secs(10));
+        // rt should still be ok here
+        let _ = rt.eval_sync("true;", "p3ok.es").ok().expect("p3 not ok");
     }
 
     #[test]
