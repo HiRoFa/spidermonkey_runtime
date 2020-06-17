@@ -245,7 +245,7 @@ impl EsRuntimeInner {
 
 impl Drop for EsRuntimeInner {
     fn drop(&mut self) {
-        self.do_in_es_runtime_thread_mut_sync(Box::new(|_sm_rt: &mut SmRuntime| {
+        self.do_in_es_runtime_thread_sync(Box::new(|_sm_rt: &SmRuntime| {
             debug!("dropping EsRuntimeWrapperInner");
         }));
     }

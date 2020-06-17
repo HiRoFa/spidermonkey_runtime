@@ -29,6 +29,7 @@ pub struct EsRuntime {
 pub type ModuleCodeLoader = dyn Fn(&str) -> String + Send + Sync + 'static;
 
 impl EsRuntime {
+    /// create a builder to instantiate an EsRuntime
     pub fn builder() -> EsRuntimeBuilder {
         EsRuntimeBuilder::new()
     }
@@ -99,6 +100,13 @@ impl EsRuntime {
         self.do_with_inner(move |inner| inner.eval_sync(code, file_name))
     }
 
+    /// load a script module and run it
+    /// # Example
+    /// ```rust
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// let rt = EsRuntimeBuilder::new().build();
+    /// rt.load_module_sync("console.log('running a module, you can import and export in and from modules');", "test_module.mes");
+    /// ```
     pub fn load_module_sync(
         &self,
         module_src: &str,
@@ -113,6 +121,14 @@ impl EsRuntime {
     }
 
     /// call a function by name and wait for it to complete
+    /// # Example
+    /// ```rust
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+    ///
+    /// let rt = EsRuntimeBuilder::new().build();
+    /// rt.eval_sync("this.com = {stuff: {method: function(){console.log('my func');}}}", "test_call_sync.es").ok().expect("script failed");
+    /// rt.call_sync(vec!["com", "stuff"], "method", vec![]).ok().expect("call method failed");
+    /// ```
     pub fn call_sync(
         &self,
         obj_names: Vec<&'static str>,
@@ -142,6 +158,8 @@ impl EsRuntime {
         f(&*inner)
     }
 
+    /// run a closure in the worker thread of this runtime, this is needed
+    /// if you want to use the inner SmRuntime on which u can use the jsapi_utils
     pub fn do_in_es_runtime_thread<J>(&self, immutable_job: J)
     where
         J: FnOnce(&SmRuntime) -> () + Send + 'static,
@@ -149,6 +167,8 @@ impl EsRuntime {
         self.do_with_inner(|inner| inner.do_in_es_runtime_thread(immutable_job))
     }
 
+    /// run a closure in the worker thread of this runtime and wait for it to complete,
+    /// this is needed if you want to use the inner SmRuntime on which u can use the jsapi_utils
     pub fn do_in_es_runtime_thread_sync<R: Send + 'static, J>(&self, immutable_job: J) -> R
     where
         J: FnOnce(&SmRuntime) -> R + Send + 'static,
@@ -156,6 +176,7 @@ impl EsRuntime {
         self.do_with_inner(|inner| inner.do_in_es_runtime_thread_sync(immutable_job))
     }
 
+    /// legacy method which will be removed in #18
     pub fn do_in_es_runtime_thread_mut_sync<R: Send + 'static, J>(&self, mutable_job: J) -> R
     where
         J: FnOnce(&mut SmRuntime) -> R + Send + 'static,
@@ -163,6 +184,7 @@ impl EsRuntime {
         self.do_with_inner(|inner| inner.do_in_es_runtime_thread_mut_sync(mutable_job))
     }
 
+    /// add a task the the "helper" thread pool
     pub fn add_helper_task<T>(task: T)
     where
         T: FnOnce() -> () + Send + 'static,

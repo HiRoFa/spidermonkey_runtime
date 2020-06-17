@@ -11,7 +11,7 @@ use mozjs::rust::HandleValue;
 use std::str::FromStr;
 
 pub(crate) fn init(rt: &EsRuntime) {
-    rt.do_in_es_runtime_thread_mut_sync(Box::new(|sm_rt: &mut SmRuntime| {
+    rt.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
         // todo move this to a new_object_in_global method in sm_rt
         // that should return a persistentrooted
         // then also create a add_property method
