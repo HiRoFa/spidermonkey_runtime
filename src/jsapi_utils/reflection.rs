@@ -284,10 +284,13 @@ impl Proxy {
         ret_arc
     }
 
+    /// get the canonical name of the proxy class, this includes the namespace
+    /// e.g. "my.biz.MyApp"
     pub fn get_canonical_name(&self) -> String {
         format!("{}.{}", self.namespace.join("."), self.class_name)
     }
 
+    /// instantiate a new instance of the proxy class
     pub fn new_instance(
         &self,
         cx: *mut JSContext,
@@ -309,6 +312,7 @@ impl Proxy {
         )
     }
 
+    /// dispatch an event for a specific instance of the proxy class
     pub fn dispatch_event(
         &self,
         obj_id: i32,
@@ -319,6 +323,7 @@ impl Proxy {
         dispatch_event_for_proxy(cx, self, obj_id, event_name, event_obj);
     }
 
+    /// dispatch a static event for the proxy class
     pub fn dispatch_static_event(
         &self,
         event_name: &str,
@@ -406,6 +411,20 @@ impl Proxy {
 
 /// Builder struct to create a Proxy object in script
 impl ProxyBuilder {
+    /// create a new builder for a Proxy
+    /// # Example
+    /// ```no_run
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::jsapi_utils::reflection::ProxyBuilder;
+    ///
+    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// rt.do_in_es_runtime_thread_sync(|sm_rt| {
+    ///     sm_rt.do_with_jsapi(|_rt, cx, global|{
+    ///         let _proxy = ProxyBuilder::new(vec!["com", "mybiz"], "MyClass")
+    ///         .build(cx, global);
+    ///     })
+    /// });
+    /// ```
     pub fn new(namespace: Vec<&'static str>, class_name: &'static str) -> Self {
         ProxyBuilder {
             namespace,
@@ -425,6 +444,25 @@ impl ProxyBuilder {
 
     /// function to call when the Proxy is constructed
     /// please not that if you do not add a constructor you can only use the static methods, getters, setters and events
+    /// # Example
+    /// ```no_run
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::jsapi_utils::reflection::ProxyBuilder;
+    ///
+    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// rt.do_in_es_runtime_thread_sync(|sm_rt| {
+    ///     sm_rt.do_with_jsapi(|_rt, cx, global|{
+    ///         let _proxy = ProxyBuilder::new(vec!["com", "mybiz"], "MyClass")
+    ///         .constructor(|cx, args| {
+    ///             Ok(1)
+    ///         })
+    ///         .build(cx, global);
+    ///     })
+    /// });
+    /// rt.eval_sync("let i = new com.mybiz.MyClass();",
+    ///     "test_jsapi_proxy_constructor.es")
+    ///     .ok().expect("script failed");
+    /// ```
     pub fn constructor<C>(&mut self, constructor: C) -> &mut Self
     where
         C: Fn(*mut JSContext, Vec<HandleValue>) -> Result<i32, String> + 'static,
@@ -434,7 +472,7 @@ impl ProxyBuilder {
     }
 
     /// this closure is called when the instance of the Proxy is garbage collected,
-    /// you should use this to cleanup anny instances you may have created in rust
+    /// you should use this to cleanup any instances you may have created in rust
     pub fn finalizer<F>(&mut self, finalizer: F) -> &mut Self
     where
         F: Fn(i32) -> () + 'static,
@@ -465,7 +503,31 @@ impl ProxyBuilder {
         self
     }
 
-    /// add a method
+    /// add a method to the proxy class
+    /// thse can be called from js as if it were members of the instance
+    /// # Example
+    /// ```no_run
+    /// use es_runtime::esruntimewrapperbuilder::EsRuntimeWrapperBuilder;
+    /// use es_runtime::jsapi_utils::reflection::ProxyBuilder;
+    ///
+    /// let rt = EsRuntimeWrapperBuilder::new().build();
+    /// rt.do_in_es_runtime_thread_sync(|sm_rt| {
+    ///     sm_rt.do_with_jsapi(|_rt, cx, global|{
+    ///         let _proxy = ProxyBuilder::new(vec!["com", "mybiz"], "MyClass")
+    ///         .constructor(|cx, args| {
+    ///             Ok(1)
+    ///         })
+    ///         .method("doSomething", |_cx, obj_id, _args, _rval|{
+    ///             println!("do something for obj: {}", obj_id);
+    ///             Ok(())
+    ///         })
+    ///         .build(cx, global);
+    ///     })
+    /// });
+    /// rt.eval_sync("let i = new com.mybiz.MyClass(); i.doSomething();",
+    ///     "test_jsapi_proxy_method.es")
+    ///     .ok().expect("script failed");
+    /// ```
     pub fn method<M>(&mut self, name: &'static str, method: M) -> &mut Self
     where
         M: Fn(*mut JSContext, i32, Vec<HandleValue>, MutableHandleValue) -> Result<(), String>
@@ -490,20 +552,24 @@ impl ProxyBuilder {
         self
     }
 
+    /// add a static native method
     pub fn static_native_method(&mut self, name: &'static str, method: JSNative) -> &mut Self {
         self.static_native_methods.insert(name, method);
         self
     }
 
+    /// create the proxy class, please not that this can only be used once on a builder
     pub fn build(&mut self, cx: *mut JSContext, scope: HandleObject) -> Arc<Proxy> {
         Proxy::new(cx, scope, self)
     }
 
+    /// define an event_type for this proxy class
     pub fn event(&mut self, evt_type: &'static str) -> &mut Self {
         self.events.insert(evt_type);
         self
     }
 
+    /// define a static event_type for this proxy class
     pub fn static_event(&mut self, evt_type: &'static str) -> &mut Self {
         self.static_events.insert(evt_type);
         self

@@ -692,7 +692,7 @@ impl EsProxyBuilder {
         }
     }
 
-    /// get the canonical name of the Proxy Class, this includes the namespace
+    /// get the canonical name of the proxy class, this includes the namespace
     /// e.g. "my.biz.MyApp"
     pub fn get_canonical_name(&self) -> String {
         format!("{}.{}", self.namespace.join("."), self.class_name)

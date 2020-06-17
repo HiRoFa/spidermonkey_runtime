@@ -499,9 +499,12 @@ impl EsValueFacade {
     ///
     /// let rt = EsRuntimeWrapperBuilder::new().build();
     /// // run the script and fail if script fails
-    /// let esvf_prom = rt.eval_sync("let p = new Promise((resolve, reject) => {setImmediate(() => {resolve(123);});}); p;", "test_get_promise_result_blocking.es").ok().expect("script failed");
+    /// let esvf_prom = rt.eval_sync(
+    ///     "let p = new Promise((resolve, reject) => {setImmediate(() => {resolve(123);});}); p;",
+    ///     "test_get_promise_result_blocking.es").ok().expect("script failed");
     /// // wait for the promise or fail on timeout
-    /// let wait_res = esvf_prom.get_promise_result_blocking(Duration::from_secs(1)).ok().expect("promise timed out");
+    /// let wait_res = esvf_prom.get_promise_result_blocking(Duration::from_secs(1))
+    ///     .ok().expect("promise timed out");
     /// // get the ok result, fail is promise was rejected
     /// let esvf = wait_res.ok().expect("promise was rejected");
     /// // check the result
@@ -559,9 +562,11 @@ impl EsValueFacade {
     /// use es_runtime::esvaluefacade::EsValueFacade;
     ///
     /// let rt = EsRuntimeWrapperBuilder::new().build();
-    /// let func_esvf = rt.eval_sync("(function(a){return (a / 2);});", "test_invoke_function.es").ok().expect("script failed");
+    /// let func_esvf = rt.eval_sync("(function(a){return (a / 2);});", "test_invoke_function.es")
+    ///     .ok().expect("script failed");
     /// // invoke the function with 18
-    /// let res_esvf = func_esvf.invoke_function(vec![EsValueFacade::new_i32(18)]).ok().expect("function failed");
+    /// let res_esvf = func_esvf.invoke_function(vec![EsValueFacade::new_i32(18)])
+    ///     .ok().expect("function failed");
     /// // check that 19 / 2 = 9
     /// let res_i32 = res_esvf.get_i32();
     /// assert_eq!(res_i32, &9);
