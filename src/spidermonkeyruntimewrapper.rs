@@ -296,13 +296,7 @@ impl SmRuntime {
                 );
                 if cleanup_res.is_err() {
                     let err = cleanup_res.err().unwrap();
-                    log::error!(
-                        "cleanup failed: {}:{}:{} -> {}",
-                        err.filename,
-                        err.lineno,
-                        err.column,
-                        err.message
-                    );
+                    log::error!("cleanup failed: {}", err.err_msg());
                 }
             }
             trace!("running gc cleanup / 2");
@@ -536,11 +530,13 @@ unsafe extern "C" fn module_dynamic_import(
     specifier: RawHandle<*mut JSString>,
     promise: RawHandle<*mut JSObject>,
 ) -> bool {
-    // doe snot work yet
+    // does not work yet
     // whats this?
     // https://doc.servo.org/mozjs/jsapi/fn.FinishDynamicModuleImport.html
     // need to finish or abort?
     // https://hg.mozilla.org/mozilla-unified/rev/41812db6caba#l7.77
+    // see sequence here, totaly different
+    // https://github.com/marco-c/gecko-dev-comments-removed/blob/ab0d099cf83e6da81c541e69a4c171f7832c031d/js/src/shell/ModuleLoader.cpp#L101
 
     // ok, so we get a promise here which should be resolved when the module is loaded..
     // lets just always do this async
