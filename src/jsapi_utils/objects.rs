@@ -20,6 +20,7 @@ use mozjs::rust::{
 };
 use std::ptr;
 
+/// get a namespace object and create any part that is not yet defined
 pub fn get_or_define_namespace(
     context: *mut JSContext,
     obj: HandleObject,
@@ -89,6 +90,7 @@ pub fn get_es_obj_prop_val(
     Ok(())
 }
 
+/// util method to quickly get a property of a JSObject as String
 pub fn get_es_obj_prop_val_as_string(
     context: *mut JSContext,
     obj: HandleObject,
@@ -103,6 +105,7 @@ pub fn get_es_obj_prop_val_as_string(
     es_value_to_str(context, *rval)
 }
 
+/// util method to quickly get a property of a JSObject as i32
 pub fn get_es_obj_prop_val_as_i32(
     context: *mut JSContext,
     obj: HandleObject,
@@ -144,7 +147,7 @@ pub fn new_object_from_prototype(
     }
 }
 
-/// constrcut a new object based on a constructor
+/// construct a new object based on a constructor
 pub fn new_from_constructor(
     context: *mut JSContext,
     constructor: HandleValue,

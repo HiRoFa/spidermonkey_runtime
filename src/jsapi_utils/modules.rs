@@ -6,6 +6,7 @@ use mozjs::jsapi::JSObject;
 use mozjs::rust::transform_u16_to_source_text;
 use std::ffi::CString;
 
+// compile a module script, this does not cache the module, use SmRuntime::load_module for that
 pub fn compile_module(
     context: *mut JSContext,
     src: &str,

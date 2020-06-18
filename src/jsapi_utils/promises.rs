@@ -8,6 +8,7 @@ use mozjs::rust::jsapi_wrapped::RejectPromise;
 use mozjs::rust::jsapi_wrapped::ResolvePromise;
 use mozjs::rust::{HandleObject, HandleValue};
 
+/// see if a JSObject is an instance of Promise
 pub fn object_is_promise(context: *mut JSContext, obj: HandleObject) -> bool {
     // todo this is not the best way of doing this, we need to get the promise object of the global scope and see if that is the same as the objects constructor
 
@@ -25,7 +26,7 @@ pub fn object_is_promise(context: *mut JSContext, obj: HandleObject) -> bool {
     false
 }
 
-/// create a new Promise, this will be used later by invoke_rust_op
+/// create a new Promise, this can be resolved later from rust
 pub fn new_promise(context: *mut JSContext) -> *mut JSObject {
     // second is executor
 
@@ -34,10 +35,16 @@ pub fn new_promise(context: *mut JSContext) -> *mut JSObject {
     unsafe { NewPromiseObject(context, null_handle) }
 }
 
+/// create a new Promise, this will run the executor function with 2 args (resolve, reject)
+/// this is the rust equivalent of the script
+/// ```javascript
+/// new promise(function(resolve, reject){});
+/// ```
 pub fn new_promise_with_exe(context: *mut JSContext, executor: HandleObject) -> *mut JSObject {
     unsafe { NewPromiseObject(context, executor) }
 }
 
+/// resolve a Promise with a given resolution value
 pub fn resolve_promise(
     context: *mut JSContext,
     promise: HandleObject,
@@ -58,6 +65,7 @@ pub fn resolve_promise(
     }
 }
 
+/// resolve a Promise with a given rejection value
 pub fn reject_promise(
     context: *mut JSContext,
     promise: HandleObject,

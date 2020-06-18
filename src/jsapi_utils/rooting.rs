@@ -8,6 +8,8 @@ use mozjs::jsval::{JSVal, ObjectValue};
 use mozjs::rust::Runtime;
 use std::ffi::CString;
 
+/// the EsPersistentRooted struct is used to keep an Object rooted while there are no references to it in the script Runtime
+/// the root will be released when this struct is dropped
 pub struct EsPersistentRooted {
     /// The underlying `JSObject`.
     heap_obj: Box<Heap<*mut JSObject>>,
@@ -28,12 +30,15 @@ impl EsPersistentRooted {
         }
     }
 
+    /// create a new instance of EsPersistentRooted with a given JSObject
+    /// this will init the EsPersistentRooted and thus the obejct wille be rooted after calling this method
     pub fn new_from_obj(cx: *mut JSContext, obj: *mut JSObject) -> Self {
         let mut ret = Self::new();
         unsafe { ret.init(cx, obj) };
         ret
     }
 
+    /// get the JSObject rooted by this instance of EsPersistentRooted
     pub fn get(&self) -> *mut JSObject {
         self.heap_obj.get()
     }
