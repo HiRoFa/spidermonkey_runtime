@@ -49,6 +49,7 @@ pub fn get_array_length(
     Ok(l)
 }
 
+/// set an element of an Array
 pub fn set_array_element(
     context: *mut JSContext,
     arr_obj: HandleObject,
@@ -65,6 +66,7 @@ pub fn set_array_element(
     Ok(())
 }
 
+/// add an element to an Array
 pub fn push_array_element(
     context: *mut JSContext,
     arr_obj: HandleObject,

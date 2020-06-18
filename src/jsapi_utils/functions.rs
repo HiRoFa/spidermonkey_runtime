@@ -18,7 +18,7 @@ use mozjs::jsval::JSVal;
 use mozjs::jsval::UndefinedValue;
 use mozjs::rust::{HandleObject, HandleValue, MutableHandleValue};
 
-/// call a method by name
+/// call a method by namespace and name
 pub fn call_method_name(
     context: *mut JSContext,
     scope: HandleObject,
@@ -126,6 +126,7 @@ pub fn call_method_value2(
     }
 }
 
+/// call a method by namespace and name
 pub fn call_obj_method_name(
     context: *mut JSContext,
     scope: HandleObject,
@@ -215,13 +216,14 @@ pub fn value_is_function(context: *mut JSContext, val: JSVal) -> bool {
     js_type == JSType::JSTYPE_FUNCTION
 }
 
-/// check whether an object is a function
+/// check whether an Object is a function
 pub fn object_is_function(obj: *mut JSObject) -> bool {
     unsafe { JS_ObjectIsFunction(obj) }
 }
 
 /// define a new native function on an object
 /// JSNative = Option<unsafe extern "C" fn(*mut JSContext, u32, *mut Value) -> bool>
+// todo refactor to accept MutableHandleValue #26
 pub fn define_native_function(
     cx: *mut JSContext,
     obj: HandleObject,
@@ -248,6 +250,7 @@ pub fn define_native_function(
 
 /// define a new native function on an object
 /// JSNative = Option<unsafe extern "C" fn(*mut JSContext, u32, *mut Value) -> bool>
+// todo refactor #27
 pub fn define_native_constructor(
     cx: *mut JSContext,
     obj: HandleObject,
@@ -274,6 +277,7 @@ pub fn define_native_constructor(
 
 /// define a new native function
 /// JSNative = Option<unsafe extern "C" fn(*mut JSContext, u32, *mut Value) -> bool>
+// todo refactor #28
 pub fn new_native_function(
     cx: *mut JSContext,
     function_name: &str,

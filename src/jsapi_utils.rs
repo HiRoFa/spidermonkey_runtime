@@ -50,6 +50,7 @@ pub mod reflection;
 pub mod rooting;
 
 /// get the type of a JSVal
+/// this is the equivalent of calling ```typeof val``` in script
 pub fn get_type_of(context: *mut JSContext, val: JSVal) -> JSType {
     rooted!(in(context) let val_root = val);
     unsafe { JS_TypeOfValue(context, val_root.handle().into()) }
@@ -70,7 +71,7 @@ pub fn set_gc_zeal_options(_cx: *mut JSContext) {
     debug!("not setting gc_zeal_options");
 }
 
-/// see if there is a pending exception and return it
+/// see if there is a pending exception and return it as an EsErrorInfo
 #[allow(dead_code)]
 pub fn report_es_ex(context: *mut JSContext) -> Option<EsErrorInfo> {
     trace!("report_es_ex");
@@ -180,7 +181,8 @@ pub fn eval(
     }
 }
 
-/// convert a string to a StringValue so it can be used in the engine
+/// convert a str to a StringValue so it can be used in the engine
+// todo, refactor to accept rval #25
 #[allow(dead_code)]
 pub fn new_es_value_from_str(context: *mut JSContext, s: &str) -> mozjs::jsapi::Value {
     let js_string: *mut JSString =
