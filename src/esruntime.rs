@@ -261,7 +261,7 @@ pub mod tests {
 
     fn init_test_runtime() -> Arc<EsRuntime> {
         log::info!("test: init_test_runtime");
-        simple_logging::log_to_file("esruntimewrapper.log", LevelFilter::Trace)
+        simple_logging::log_to_file("esruntime.log", LevelFilter::Trace)
             .ok()
             .unwrap();
 
