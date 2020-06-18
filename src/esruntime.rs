@@ -26,7 +26,7 @@ pub struct EsRuntime {
     inner: Arc<EsRuntimeInner>,
 }
 
-pub type ModuleCodeLoader = dyn Fn(&str) -> String + Send + Sync + 'static;
+pub type ModuleCodeLoader = dyn Fn(&str) -> Option<String> + Send + Sync + 'static;
 
 impl EsRuntime {
     /// create a builder to instantiate an EsRuntime
@@ -266,7 +266,7 @@ pub mod tests {
             .unwrap();
 
         let module_code_loader = |file_name: &str| {
-            format!("export default () => 123; export const other = Math.sqrt(8); console.log('running imported test module'); \n\nconsole.log('parsing a module from code loader for filename: {}');", file_name)
+            Some(format!("export default () => 123; export const other = Math.sqrt(8); console.log('running imported test module'); \n\nconsole.log('parsing a module from code loader for filename: {}');", file_name))
         };
         let rt = EsRuntime::builder()
             .gc_interval(Duration::from_secs(2))
@@ -286,7 +286,7 @@ pub mod tests {
     #[test]
     fn test_gc() {
         log::info!("test: test_gc");
-        simple_logging::log_to_file("esruntimewrapper.log", LevelFilter::Trace)
+        simple_logging::log_to_file("esruntime.log", LevelFilter::Trace)
             .ok()
             .unwrap();
 

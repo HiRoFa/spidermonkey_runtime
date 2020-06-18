@@ -11,7 +11,7 @@ use std::sync::Arc;
 pub struct EsRuntimeInner {
     pub(crate) task_manager: Arc<MicroTaskManager>,
     pub(crate) _pre_cleanup_tasks: Vec<Box<dyn Fn(&EsRuntimeInner) -> () + Send + Sync>>,
-    pub(crate) module_source_loader: Option<Box<dyn Fn(&str) -> String + Send + Sync>>,
+    pub(crate) module_source_loader: Option<Box<dyn Fn(&str) -> Option<String> + Send + Sync>>,
     pub(crate) module_cache_size: usize,
 }
 

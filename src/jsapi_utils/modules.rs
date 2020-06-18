@@ -53,6 +53,7 @@ mod tests {
 
     use crate::jsapi_utils::modules::compile_module;
     use crate::jsapi_utils::tests::test_with_sm_rt;
+    use std::time::Duration;
 
     #[test]
     fn test_module() {
@@ -131,5 +132,24 @@ mod tests {
             true
         });
         assert_eq!(res, true);
+    }
+
+    #[test]
+    fn test_dynamic_import() {
+        log::info!("test: test_dynamic_import");
+        let _res = test_with_sm_rt(|sm_rt| {
+            let eval_res = sm_rt
+                .eval(
+                    "let mod_prom = import('foo_test_mod_dyn.mes'); mod_prom.then((res) => {console.log('dynamic import done: %s %s', 'def:' + res.default, 'other:' + res.other);}).catch((pex) => {console.log('dynamic import prom failed: %s', pex + '')});",
+                    "test_dynamic_import.es",
+                );
+
+            if let Err(err) = eval_res {
+                panic!("script failed: {}", err.err_msg())
+            }
+        });
+        std::thread::sleep(Duration::from_secs(1));
+        log::debug!("test_dynamic_import: import should be done now");
+        // 'foo_test_mod.mes'
     }
 }

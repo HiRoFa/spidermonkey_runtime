@@ -22,6 +22,7 @@ use mozjs::jsapi::JS_NewGlobalObject;
 use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::OnNewGlobalHookOption;
 use mozjs::jsapi::SetJobQueue;
+use mozjs::jsapi::SetModuleDynamicImportHook;
 use mozjs::jsapi::SetModuleResolveHook;
 use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsval::{NullValue, ObjectValue, UndefinedValue};
@@ -37,6 +38,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::os::raw::c_void;
 
+use crate::esruntime::EsRuntime;
 use std::ptr;
 use std::rc::Rc;
 use std::str;
@@ -196,7 +198,10 @@ impl SmRuntime {
         // this tells the runtime how to resolve modules
         let js_runtime = &mut self.runtime.rt();
         self.do_with_jsapi(|_rt, _cx, _global| {
-            unsafe { SetModuleResolveHook(*js_runtime, Some(import_module)) };
+            unsafe {
+                SetModuleResolveHook(*js_runtime, Some(import_module));
+                SetModuleDynamicImportHook(*js_runtime, Some(module_dynamic_import));
+            };
         });
     }
 
@@ -524,6 +529,123 @@ fn init_cache() -> LruCache<String, EsPersistentRooted> {
     LruCache::new(ct)
 }
 
+/// native function used for dynamic imports
+unsafe extern "C" fn module_dynamic_import(
+    cx: *mut JSContext,
+    _reference_private: RawHandleValue,
+    specifier: RawHandle<*mut JSString>,
+    promise: RawHandle<*mut JSObject>,
+) -> bool {
+    // doe snot work yet
+    // whats this?
+    // https://doc.servo.org/mozjs/jsapi/fn.FinishDynamicModuleImport.html
+    // need to finish or abort?
+    // https://hg.mozilla.org/mozilla-unified/rev/41812db6caba#l7.77
+
+    // ok, so we get a promise here which should be resolved when the module is loaded..
+    // lets just always do this async
+    let file_name = jsapi_utils::es_jsstring_to_string(cx, *specifier);
+    let prom_id = register_cached_object(cx, *promise);
+    let rt_arc = SmRuntime::clone_current_esrt_inner_arc();
+
+    // todo if the module is already cache we could just run an async job via
+    // rt_arc.do_in_es_runtime_thread
+    // instead of stepping into a different thread
+
+    let load_task = move || {
+        // load mod code here (in helper thread)
+        let script: Option<String> = if let Some(loader) = &rt_arc.module_source_loader {
+            loader(file_name.as_str())
+        } else {
+            None
+        };
+
+        rt_arc.do_in_es_runtime_thread(move |sm_rt| {
+            // compile module / get from cache here
+            // resolve or reject promise here (in esrt_worker_thread)
+            sm_rt.do_with_jsapi(|_rt, cx, _global| {
+                // check if was cached async
+                let opt_cached = MODULE_CACHE.with(|cache_rc| {
+                    let cache = &mut *cache_rc.borrow_mut();
+                    if let Some(epr) = cache.get(&file_name) {
+                        Some(epr.get())
+                    } else {
+                        None
+                    }
+                });
+
+                let prom_epr = crate::spidermonkeyruntimewrapper::consume_cached_object(prom_id);
+                rooted!(in (cx) let promise_root = prom_epr.get());
+
+                if let Some(mod_obj) = opt_cached {
+                    // resolve promise
+                    rooted!(in (cx) let mod_obj_root_val = ObjectValue(mod_obj));
+                    trace!("resolving dynamic module promise: was cached");
+                    jsapi_utils::promises::resolve_promise(
+                        cx,
+                        promise_root.handle(),
+                        mod_obj_root_val.handle(),
+                    )
+                    .ok()
+                    .expect("promise resolve failed / 1");
+                } else if let Some(script_str) = script {
+                    let compiled_mod_obj_res = jsapi_utils::modules::compile_module(
+                        cx,
+                        script_str.as_str(),
+                        file_name.as_str(),
+                    );
+
+                    if let Ok(compiled_mod_obj) = compiled_mod_obj_res {
+                        MODULE_CACHE.with(|cache_rc| {
+                            let cache = &mut *cache_rc.borrow_mut();
+                            let mod_epr = EsPersistentRooted::new_from_obj(cx, compiled_mod_obj);
+                            cache.put(file_name, mod_epr);
+                        });
+
+                        // resolve promise
+                        trace!("resolving dynamic module promise: was compiled");
+                        rooted!(in (cx) let mod_obj_root_val = ObjectValue(compiled_mod_obj));
+                        jsapi_utils::promises::resolve_promise(
+                            cx,
+                            promise_root.handle(),
+                            mod_obj_root_val.handle(),
+                        )
+                        .ok()
+                        .expect("promise resolve failed / 2");
+                    } else {
+                        // reject promise
+                        let err_str= format!("module failed to compile: {}", compiled_mod_obj_res.err().unwrap().err_msg());
+                        rooted!(in (cx) let prom_reject_val = jsapi_utils::new_es_value_from_str(cx, err_str.as_str()));
+                        trace!("rejecting dynamic module promise: failed {}", err_str);
+                        jsapi_utils::promises::reject_promise(
+                            cx,
+                            promise_root.handle(),
+                            prom_reject_val.handle(),
+                        )
+                            .ok()
+                            .expect("promise rejection failed / 1");
+                    }
+                } else {
+                    // reject promise
+                    let err_str= format!("module not found: {}", file_name);
+                    trace!("rejecting dynamic module promise: failed {}", err_str);
+                    rooted!(in (cx) let prom_reject_val = jsapi_utils::new_es_value_from_str(cx, err_str.as_str()));
+                    jsapi_utils::promises::reject_promise(
+                        cx,
+                        promise_root.handle(),
+                        prom_reject_val.handle(),
+                    )
+                        .ok()
+                        .expect("promise rejection failed / 2");
+                }
+            });
+        });
+    };
+    EsRuntime::add_helper_task(load_task);
+
+    true
+}
+
 /// native function used a import function for module loading
 unsafe extern "C" fn import_module(
     cx: *mut JSContext,
@@ -551,13 +673,14 @@ unsafe extern "C" fn import_module(
         let sm_rt = sm_rt_rc.borrow();
         let es_rt_inner = sm_rt.clone_esrt_inner();
         if let Some(module_source_loader) = &es_rt_inner.module_source_loader {
-            return module_source_loader(file_name.as_str());
+            module_source_loader(file_name.as_str())
+        } else {
+            Some(format!(""))
         }
-        return format!("");
     });
 
     let compiled_mod_obj_res =
-        jsapi_utils::modules::compile_module(cx, module_src.as_str(), file_name.as_str());
+        jsapi_utils::modules::compile_module(cx, module_src.unwrap().as_str(), file_name.as_str());
 
     if compiled_mod_obj_res.is_err() {
         let err = compiled_mod_obj_res.err().unwrap();
