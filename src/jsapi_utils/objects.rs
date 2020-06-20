@@ -6,6 +6,7 @@ use mozjs::jsapi::HandleValueArray;
 use mozjs::jsapi::JSClass;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
+use mozjs::jsapi::JS_DefineProperty;
 use mozjs::jsapi::JS_GetConstructor;
 use mozjs::jsapi::JS_GetProperty;
 use mozjs::jsapi::JS_GetPrototype;
@@ -14,7 +15,6 @@ use mozjs::jsapi::JS_NewPlainObject;
 use mozjs::jsapi::JSITER_OWNONLY;
 use mozjs::jsval::{JSVal, ObjectValue, UndefinedValue};
 use mozjs::rust::jsapi_wrapped::GetPropertyKeys;
-use mozjs::rust::wrappers::JS_DefineProperty;
 use mozjs::rust::{
     HandleObject, HandleValue, IdVector, IntoHandle, MutableHandleObject, MutableHandleValue,
 };
@@ -48,7 +48,7 @@ pub fn get_or_define_namespace(
                 name
             );
             rooted!(in(context) let mut new_obj_val_root = ObjectValue(new_obj));
-            set_es_obj_prop_val(context, cur_root.handle(), name, new_obj_val_root.handle());
+            set_es_obj_prop_val_raw(context, cur_root.handle(), name, new_obj_val_root.handle());
             trace!(
                 "get_or_define_package, loop step: {} is null, prop_set",
                 name
@@ -239,9 +239,9 @@ pub fn get_js_obj_prop_names(context: *mut JSContext, obj: HandleObject) -> Vec<
 #[allow(dead_code)]
 pub fn set_es_obj_prop_val(
     context: *mut JSContext,
-    obj: HandleObject,
+    obj: mozjs::jsapi::HandleObject,
     prop_name: &str,
-    prop_val: HandleValue,
+    prop_val: mozjs::jsapi::HandleValue,
 ) {
     let prop_name_str = format!("{}\0", prop_name);
     unsafe {
@@ -250,6 +250,26 @@ pub fn set_es_obj_prop_val(
             obj,
             prop_name_str.as_ptr() as *const libc::c_char,
             prop_val,
+            mozjs::jsapi::JSPROP_ENUMERATE as u32,
+        );
+    }
+}
+
+/// set a property of an object
+#[allow(dead_code)]
+pub fn set_es_obj_prop_val_raw(
+    context: *mut JSContext,
+    obj: HandleObject,
+    prop_name: &str,
+    prop_val: HandleValue,
+) {
+    let prop_name_str = format!("{}\0", prop_name);
+    unsafe {
+        JS_DefineProperty(
+            context,
+            obj.into(),
+            prop_name_str.as_ptr() as *const libc::c_char,
+            prop_val.into(),
             mozjs::jsapi::JSPROP_ENUMERATE as u32,
         );
     }
@@ -267,9 +287,9 @@ pub fn set_es_obj_prop_val_permanent(
     unsafe {
         JS_DefineProperty(
             context,
-            obj,
+            obj.into(),
             prop_name_str.as_ptr() as *const libc::c_char,
-            prop_val,
+            prop_val.into(),
             (mozjs::jsapi::JSPROP_PERMANENT & mozjs::jsapi::JSPROP_READONLY) as u32,
         );
     }

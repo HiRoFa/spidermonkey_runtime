@@ -743,7 +743,7 @@ impl EsValueFacade {
                 let prop_esvf = prop.1;
                 let prop_val: mozjs::jsapi::Value = prop_esvf.to_es_value(context);
                 rooted!(in(context) let mut val_root = prop_val);
-                jsapi_utils::objects::set_es_obj_prop_val(
+                jsapi_utils::objects::set_es_obj_prop_val_raw(
                     context,
                     obj_root.handle(),
                     prop_name,

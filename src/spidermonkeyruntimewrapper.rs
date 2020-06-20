@@ -10,6 +10,7 @@ use lru::LruCache;
 
 use mozjs::glue::{CreateJobQueue, JobQueueTraps};
 use mozjs::jsapi::CallArgs;
+use mozjs::jsapi::FinishDynamicModuleImport;
 use mozjs::jsapi::Handle as RawHandle;
 use mozjs::jsapi::HandleValue as RawHandleValue;
 use mozjs::jsapi::JSAutoRealm;
@@ -25,7 +26,7 @@ use mozjs::jsapi::SetJobQueue;
 use mozjs::jsapi::SetModuleDynamicImportHook;
 use mozjs::jsapi::SetModuleResolveHook;
 use mozjs::jsapi::JS::HandleValueArray;
-use mozjs::jsval::{NullValue, ObjectValue, UndefinedValue};
+use mozjs::jsval::{NullValue, ObjectValue, StringValue, UndefinedValue};
 use mozjs::panic::wrap_panic;
 use mozjs::rust::wrappers::JS_CallFunctionValue;
 use mozjs::rust::HandleObject;
@@ -526,22 +527,37 @@ fn init_cache() -> LruCache<String, EsPersistentRooted> {
 /// native function used for dynamic imports
 unsafe extern "C" fn module_dynamic_import(
     cx: *mut JSContext,
-    _reference_private: RawHandleValue,
+    reference_private: RawHandleValue,
     specifier: RawHandle<*mut JSString>,
     promise: RawHandle<*mut JSObject>,
 ) -> bool {
-    // does not work yet
-    // whats this?
-    // https://doc.servo.org/mozjs/jsapi/fn.FinishDynamicModuleImport.html
-    // need to finish or abort?
-    // https://hg.mozilla.org/mozilla-unified/rev/41812db6caba#l7.77
-    // see sequence here, totaly different
+    // see sequence here in c
     // https://github.com/marco-c/gecko-dev-comments-removed/blob/ab0d099cf83e6da81c541e69a4c171f7832c031d/js/src/shell/ModuleLoader.cpp#L101
 
-    // ok, so we get a promise here which should be resolved when the module is loaded..
-    // lets just always do this async
+    rooted!(in (cx) let mut closure_root = jsapi_utils::objects::new_object(cx));
+    rooted!(in (cx) let promise_val_root = ObjectValue(*promise));
+    rooted!(in (cx) let specifier_val_root = StringValue(&**specifier));
+    jsapi_utils::objects::set_es_obj_prop_val_raw(
+        cx,
+        closure_root.handle(),
+        "promise",
+        promise_val_root.handle(),
+    );
+    jsapi_utils::objects::set_es_obj_prop_val(
+        cx,
+        closure_root.handle().into(),
+        "reference_private",
+        reference_private,
+    );
+    jsapi_utils::objects::set_es_obj_prop_val_raw(
+        cx,
+        closure_root.handle(),
+        "specifier",
+        specifier_val_root.handle(),
+    );
+
     let file_name = jsapi_utils::es_jsstring_to_string(cx, *specifier);
-    let prom_id = register_cached_object(cx, *promise);
+    let closure_id = register_cached_object(cx, *closure_root);
     let rt_arc = SmRuntime::clone_current_esrt_inner_arc();
 
     // todo if the module is already cache we could just run an async job via
@@ -561,29 +577,29 @@ unsafe extern "C" fn module_dynamic_import(
             // resolve or reject promise here (in esrt_worker_thread)
             sm_rt.do_with_jsapi(|_rt, cx, _global| {
                 // check if was cached async
-                let opt_cached = MODULE_CACHE.with(|cache_rc| {
-                    let cache = &mut *cache_rc.borrow_mut();
-                    if let Some(epr) = cache.get(&file_name) {
-                        Some(epr.get())
-                    } else {
-                        None
-                    }
+                // todo replace with a bool
+                let is_cached = MODULE_CACHE.with(|cache_rc| {
+                    let cache = &*cache_rc.borrow();
+                    cache.contains(&file_name)
                 });
 
-                let prom_epr = crate::spidermonkeyruntimewrapper::consume_cached_object(prom_id);
-                rooted!(in (cx) let promise_root = prom_epr.get());
+                let closure_epr = crate::spidermonkeyruntimewrapper::consume_cached_object(closure_id);
+                rooted!(in (cx) let closure_root = closure_epr.get());
+                rooted!(in (cx) let mut promise_val_root = NullValue());
+                rooted!(in (cx) let mut specifier_val_root = NullValue());
+                rooted!(in (cx) let mut reference_private_val_root = NullValue());
+                jsapi_utils::objects::get_es_obj_prop_val(cx, closure_root.handle(), "promise", promise_val_root.handle_mut()).ok().expect("could not get promise prop from closure");
+                jsapi_utils::objects::get_es_obj_prop_val(cx, closure_root.handle(), "specifier", specifier_val_root.handle_mut()).ok().expect("could not get specifier prop from closure");
+                jsapi_utils::objects::get_es_obj_prop_val(cx, closure_root.handle(), "reference_private", reference_private_val_root.handle_mut()).ok().expect("could not get reference_private prop from closure");
+                rooted!(in (cx) let mut promise_root = promise_val_root.to_object());
+                rooted!(in (cx) let mut specifier_root = specifier_val_root.to_string());
 
-                if let Some(mod_obj) = opt_cached {
+
+                if is_cached {
                     // resolve promise
-                    rooted!(in (cx) let mod_obj_root_val = ObjectValue(mod_obj));
-                    trace!("resolving dynamic module promise: was cached");
-                    jsapi_utils::promises::resolve_promise(
-                        cx,
-                        promise_root.handle(),
-                        mod_obj_root_val.handle(),
-                    )
-                    .ok()
-                    .expect("promise resolve failed / 1");
+
+                    FinishDynamicModuleImport(cx, reference_private_val_root.handle().into(), specifier_root.handle().into(), promise_root.handle().into());
+
                 } else if let Some(script_str) = script {
                     let compiled_mod_obj_res = jsapi_utils::modules::compile_module(
                         cx,
@@ -598,16 +614,8 @@ unsafe extern "C" fn module_dynamic_import(
                             cache.put(file_name, mod_epr);
                         });
 
-                        // resolve promise
-                        trace!("resolving dynamic module promise: was compiled");
-                        rooted!(in (cx) let mod_obj_root_val = ObjectValue(compiled_mod_obj));
-                        jsapi_utils::promises::resolve_promise(
-                            cx,
-                            promise_root.handle(),
-                            mod_obj_root_val.handle(),
-                        )
-                        .ok()
-                        .expect("promise resolve failed / 2");
+                        FinishDynamicModuleImport(cx, reference_private_val_root.handle().into(), specifier_root.handle().into(), promise_root.handle().into());
+
                     } else {
                         // reject promise
                         let err_str= format!("module failed to compile: {}", compiled_mod_obj_res.err().unwrap().err_msg());

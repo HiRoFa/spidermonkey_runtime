@@ -24,7 +24,7 @@ pub(crate) fn init(rt: &EsRuntime) {
             rooted!(in(context) let console_obj_val_root = console_obj_val);
             rooted!(in(context) let console_obj_root = console_obj);
 
-            crate::jsapi_utils::objects::set_es_obj_prop_val(
+            crate::jsapi_utils::objects::set_es_obj_prop_val_raw(
                 context,
                 global,
                 "console",

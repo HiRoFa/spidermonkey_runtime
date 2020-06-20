@@ -96,7 +96,7 @@ mod tests {
                 sm_rt.do_with_jsapi(|_rt, cx, _global| {
                     rooted!(in (cx) let my_obj_pval = Int32Value(123));
                     rooted!(in (cx) let my_obj_root = vec.get(0).unwrap().get());
-                    crate::jsapi_utils::objects::set_es_obj_prop_val(
+                    crate::jsapi_utils::objects::set_es_obj_prop_val_raw(
                         cx,
                         my_obj_root.handle(),
                         "p1",
