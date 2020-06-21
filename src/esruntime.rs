@@ -189,6 +189,8 @@ impl EsRuntime {
     where
         T: FnOnce() -> () + Send + 'static,
     {
+        log::trace!("adding a helper task");
+
         let tm = HELPER_TASKS.clone();
 
         tm.add_task(task);
@@ -266,7 +268,16 @@ pub mod tests {
             .unwrap();
 
         let module_code_loader = |file_name: &str| {
-            Some(format!("export default () => 123; export const other = Math.sqrt(8); console.log('running imported test module'); \n\nconsole.log('parsing a module from code loader for filename: {}');", file_name))
+            if file_name.eq("dontfind.mes") {
+                None
+            } else if file_name.eq("buggy.mes") {
+                Some(format!(
+                    "i'm a little teapot short and stout, Tip me over and pour me out!, {}",
+                    file_name
+                ))
+            } else {
+                Some(format!("export default () => 123; export const other = Math.sqrt(8); console.log('running imported test module'); \n\nconsole.log('parsing a module from code loader for filename: {}');", file_name))
+            }
         };
         let rt = EsRuntime::builder()
             .gc_interval(Duration::from_secs(2))

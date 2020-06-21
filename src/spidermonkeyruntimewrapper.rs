@@ -534,6 +534,8 @@ unsafe extern "C" fn module_dynamic_import(
     // see sequence here in c
     // https://github.com/marco-c/gecko-dev-comments-removed/blob/ab0d099cf83e6da81c541e69a4c171f7832c031d/js/src/shell/ModuleLoader.cpp#L101
 
+    trace!("module_dynamic_import called");
+
     rooted!(in (cx) let mut closure_root = jsapi_utils::objects::new_object(cx));
     rooted!(in (cx) let promise_val_root = ObjectValue(*promise));
     rooted!(in (cx) let specifier_val_root = StringValue(&**specifier));
@@ -557,6 +559,9 @@ unsafe extern "C" fn module_dynamic_import(
     );
 
     let file_name = jsapi_utils::es_jsstring_to_string(cx, *specifier);
+
+    trace!("module_dynamic_import called: {}", file_name);
+
     let closure_id = register_cached_object(cx, *closure_root);
     let rt_arc = SmRuntime::clone_current_esrt_inner_arc();
 
@@ -565,6 +570,10 @@ unsafe extern "C" fn module_dynamic_import(
     // instead of stepping into a different thread
 
     let load_task = move || {
+        trace!(
+            "module_dynamic_import: {}, load_task running",
+            file_name.as_str()
+        );
         // load mod code here (in helper thread)
         let script: Option<String> = if let Some(loader) = &rt_arc.module_source_loader {
             loader(file_name.as_str())
@@ -572,12 +581,27 @@ unsafe extern "C" fn module_dynamic_import(
             None
         };
 
+        trace!(
+            "module_dynamic_import: {}, load_task: loaded",
+            file_name.as_str()
+        );
+
         rt_arc.do_in_es_runtime_thread(move |sm_rt| {
             // compile module / get from cache here
             // resolve or reject promise here (in esrt_worker_thread)
+            trace!(
+                "module_dynamic_import: {}, load_task: back in do_in_es_runtime_thread",
+                file_name.as_str()
+            );
             sm_rt.do_with_jsapi(|_rt, cx, _global| {
                 // check if was cached async
                 // todo replace with a bool
+
+                trace!(
+                    "module_dynamic_import: {}, load_task: back in do_in_es_runtime_thread, check cache",
+                    file_name.as_str()
+                );
+
                 let is_cached = MODULE_CACHE.with(|cache_rc| {
                     let cache = &*cache_rc.borrow();
                     cache.contains(&file_name)
@@ -597,10 +621,13 @@ unsafe extern "C" fn module_dynamic_import(
 
                 if is_cached {
                     // resolve promise
-
+                    trace!("dyn module {} was cached, finish import", file_name.as_str());
                     FinishDynamicModuleImport(cx, reference_private_val_root.handle().into(), specifier_root.handle().into(), promise_root.handle().into());
 
                 } else if let Some(script_str) = script {
+
+                    trace!("dyn module {} was loaded, compile", file_name.as_str());
+
                     let compiled_mod_obj_res = jsapi_utils::modules::compile_module(
                         cx,
                         script_str.as_str(),
@@ -611,13 +638,18 @@ unsafe extern "C" fn module_dynamic_import(
                         MODULE_CACHE.with(|cache_rc| {
                             let cache = &mut *cache_rc.borrow_mut();
                             let mod_epr = EsPersistentRooted::new_from_obj(cx, compiled_mod_obj);
-                            cache.put(file_name, mod_epr);
+                            cache.put(file_name.clone(), mod_epr);
                         });
+
+                        trace!("dyn module {} was loaded, compiled and cached, finish", file_name.as_str());
 
                         FinishDynamicModuleImport(cx, reference_private_val_root.handle().into(), specifier_root.handle().into(), promise_root.handle().into());
 
                     } else {
                         // reject promise
+
+                        trace!("dyn module {} was not compiled ok, rejecting promise", file_name.as_str());
+
                         let err_str= format!("module failed to compile: {}", compiled_mod_obj_res.err().unwrap().err_msg());
                         rooted!(in (cx) let prom_reject_val = jsapi_utils::new_es_value_from_str(cx, err_str.as_str()));
                         trace!("rejecting dynamic module promise: failed {}", err_str);
@@ -688,10 +720,7 @@ unsafe extern "C" fn import_module(
 
     if compiled_mod_obj_res.is_err() {
         let err = compiled_mod_obj_res.err().unwrap();
-        let err_str = format!(
-            "error loading module: at {}:{}:{} > {}\n",
-            err.filename, err.lineno, err.column, err.message
-        );
+        let err_str = format!("error loading module: {}\0", err.err_msg());
         JS_ReportErrorASCII(cx, err_str.as_ptr() as *const libc::c_char);
         debug!("error loading module, returning null: {}", &err_str);
         return *ptr::null_mut::<*mut JSObject>();

@@ -90,9 +90,14 @@ impl MicroTaskManager {
         };
         self.add_task(job);
         trace!("MicroTaskManager::exe_task / receive");
-        let ret = receiver.recv().unwrap();
+        let res = receiver.recv();
         trace!("MicroTaskManager::exe_task / received");
-        ret
+        match res {
+            Ok(ret) => ret,
+            Err(e) => {
+                panic!("task failed: {}", e);
+            }
+        }
     }
 
     /// method for adding tasks from worker, these do not need to impl Send
@@ -125,6 +130,15 @@ impl MicroTaskManager {
             let local_jobs = &*rc.borrow();
             !local_jobs.is_empty()
         })
+    }
+
+    pub fn looks_like_worker_thread() -> bool {
+        let handle = thread::current();
+        if let Some(handle_name) = handle.name() {
+            handle_name.starts_with("sttm_wt_")
+        } else {
+            false
+        }
     }
 
     pub fn is_worker_thread(&self) -> bool {

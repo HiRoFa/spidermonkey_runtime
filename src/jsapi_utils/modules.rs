@@ -29,13 +29,37 @@ pub fn compile_module(
 
     rooted!(in(context) let mut module_script_root = compiled_module);
 
+    // see ModuleInstantiate
+    if module_script_root.is_null() {
+        // failed
+        if let Some(err) = report_es_ex(context) {
+            return Err(err);
+        }
+        return Err(EsErrorInfo {
+            message: "CompileModule failed unknown".to_string(),
+            filename: "".to_string(),
+            lineno: 0,
+            column: 0,
+        });
+    }
+
+    trace!("ModuleInstantiate: {}", file_name);
+
     let res =
         unsafe { mozjs::rust::wrappers::ModuleInstantiate(context, module_script_root.handle()) };
     if !res {
         if let Some(err) = report_es_ex(context) {
             return Err(err);
         }
+        return Err(EsErrorInfo {
+            message: "ModuleInstantiate failed unknown".to_string(),
+            filename: "".to_string(),
+            lineno: 0,
+            column: 0,
+        });
     }
+
+    trace!("ModuleEvaluate: {}", file_name);
 
     let res =
         unsafe { mozjs::rust::wrappers::ModuleEvaluate(context, module_script_root.handle()) };
@@ -43,6 +67,12 @@ pub fn compile_module(
         if let Some(err) = report_es_ex(context) {
             return Err(err);
         }
+        return Err(EsErrorInfo {
+            message: "ModuleEvaluate failed unknown".to_string(),
+            filename: "".to_string(),
+            lineno: 0,
+            column: 0,
+        });
     }
 
     Ok(compiled_module)
@@ -137,18 +167,139 @@ mod tests {
     #[test]
     fn test_dynamic_import() {
         log::info!("test: test_dynamic_import");
-        let _res = test_with_sm_rt(|sm_rt| {
-            let eval_res = sm_rt
-                .eval(
-                    "let mod_prom = import('foo_test_mod_dyn.mes'); mod_prom.then((res) => {console.log('dynamic import done: %s %s', 'def:' + res.default, 'other:' + res.other);}).catch((pex) => {console.log('dynamic import prom failed: %s', pex + '')});",
-                    "test_dynamic_import.es",
-                );
+        let prom_esvf = test_with_sm_rt(|sm_rt| {
+            let eval_res = sm_rt.eval(
+                "let test_dynamic_import_mod_prom = import('foo_test_mod_dyn.mes').then((res) => {return ('ok' + res.other);})\
+                              .catch((pex) => {return ('err' + pex);});\
+                              test_dynamic_import_mod_prom;",
+                "test_dynamic_import.es",
+            );
 
-            if let Err(err) = eval_res {
-                panic!("script failed: {}", err.err_msg())
+            match eval_res {
+                Ok(ok_esvf) => {
+                    assert!(ok_esvf.is_promise());
+                    ok_esvf
+                }
+                Err(err) => panic!("script failed 2: {}", err.err_msg()),
             }
         });
-        std::thread::sleep(Duration::from_secs(1));
+
+        let prom_res = prom_esvf
+            .get_promise_result_blocking(Duration::from_secs(60))
+            .expect("promise timed out");
+        match prom_res {
+            Ok(s) => {
+                assert!(s.is_string());
+                assert!(s.get_string().starts_with("ok"))
+            }
+            Err(err) => panic!("script failed 1: {}", err.get_string()),
+        }
+
+        log::debug!("test_dynamic_import: import should be done now");
+        // 'foo_test_mod.mes'
+    }
+    #[test]
+    // see if 404 module works as expected
+    fn test_dynamic_import2() {
+        log::info!("test: test_dynamic_import2");
+        let prom_esvf = test_with_sm_rt(|sm_rt| {
+            let eval_res = sm_rt.eval(
+                "let test_dynamic_import_mod2_prom = import('dontfind.mes').then((res) => {return ('ok' + res.other);})\
+                              .catch((pex) => {return ('err' + pex);});\
+                              test_dynamic_import_mod2_prom;",
+                "test_dynamic_import.es",
+            );
+
+            match eval_res {
+                Ok(ok_esvf) => {
+                    assert!(ok_esvf.is_promise());
+                    ok_esvf
+                }
+                Err(err) => panic!("script failed 2: {}", err.err_msg()),
+            }
+        });
+
+        let prom_res = prom_esvf
+            .get_promise_result_blocking(Duration::from_secs(60))
+            .expect("promise timed out");
+        match prom_res {
+            Ok(s) => {
+                assert!(s.is_string());
+                assert!(s.get_string().starts_with("err"))
+            }
+            Err(err) => panic!("script failed 1: {}", err.get_string()),
+        }
+
+        log::debug!("test_dynamic_import2: import should be done now");
+        // 'foo_test_mod.mes'
+    }
+    #[test]
+    // see if compile fail works as expected
+    fn test_dynamic_import3() {
+        log::info!("test: test_dynamic_import2");
+        let prom_esvf = test_with_sm_rt(|sm_rt| {
+            let eval_res = sm_rt.eval(
+                "let test_dynamic_import_mod3_prom = import('buggy.mes').then((res) => {return ('ok' + res.other);})\
+                              .catch((pex) => {return ('err' + pex);});\
+                              test_dynamic_import_mod3_prom;",
+                "test_dynamic_import.es",
+            );
+
+            match eval_res {
+                Ok(ok_esvf) => {
+                    assert!(ok_esvf.is_promise());
+                    ok_esvf
+                }
+                Err(err) => panic!("script failed 2: {}", err.err_msg()),
+            }
+        });
+
+        let prom_res = prom_esvf
+            .get_promise_result_blocking(Duration::from_secs(60))
+            .expect("promise timed out");
+        match prom_res {
+            Ok(s) => {
+                assert!(s.is_string());
+                assert!(s.get_string().starts_with("err"))
+            }
+            Err(err) => panic!("script failed 1: {}", err.get_string()),
+        }
+
+        log::debug!("test_dynamic_import2: import should be done now");
+        // 'foo_test_mod.mes'
+    }
+    #[test]
+    // run again, see if cached works
+    fn test_dynamic_import4() {
+        log::info!("test: test_dynamic_import");
+        let prom_esvf = test_with_sm_rt(|sm_rt| {
+            let eval_res = sm_rt.eval(
+                "let test_dynamic_import_mod4_prom = import('foo_test_mod_dyn.mes').then((res) => {return ('ok' + res.other);})\
+                              .catch((pex) => {return ('err' + pex);});\
+                              test_dynamic_import_mod4_prom;",
+                "test_dynamic_import.es",
+            );
+
+            match eval_res {
+                Ok(ok_esvf) => {
+                    assert!(ok_esvf.is_promise());
+                    ok_esvf
+                }
+                Err(err) => panic!("script failed 2: {}", err.err_msg()),
+            }
+        });
+
+        let prom_res = prom_esvf
+            .get_promise_result_blocking(Duration::from_secs(60))
+            .expect("promise timed out");
+        match prom_res {
+            Ok(s) => {
+                assert!(s.is_string());
+                assert!(s.get_string().starts_with("ok"))
+            }
+            Err(err) => panic!("script failed 1: {}", err.get_string()),
+        }
+
         log::debug!("test_dynamic_import: import should be done now");
         // 'foo_test_mod.mes'
     }

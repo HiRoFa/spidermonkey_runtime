@@ -6,6 +6,7 @@ use crate::esruntimeinner::EsRuntimeInner;
 use crate::jsapi_utils::arrays::{get_array_element, get_array_length, new_array, object_is_array};
 use crate::jsapi_utils::rooting::EsPersistentRooted;
 use crate::jsapi_utils::{objects, EsErrorInfo};
+use crate::microtaskmanager::MicroTaskManager;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
 use crate::utils::AutoIdMap;
 use crate::{jsapi_utils, spidermonkeyruntimewrapper};
@@ -518,6 +519,11 @@ impl EsValueFacade {
             return Ok(Err(EsValueFacade::new_str(
                 "esvf was not a Promise".to_string(),
             )));
+        }
+
+        if MicroTaskManager::looks_like_worker_thread() {
+            log::error!("waiting for esvf prom from worker thread, bad dev bad!");
+            panic!("you really should not wait for promises in a RT's worker thread");
         }
 
         let rmev: &RustManagedEsVar = self.val_managed_var.as_ref().expect("not a managed var");

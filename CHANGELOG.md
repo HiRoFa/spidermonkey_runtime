@@ -1,4 +1,11 @@
-# 0.4.0 (work in progress)
+# 0.5.0 (work in progress)
+
+* Dynamic module imports
+```javascript
+    let {my, module_stuf} = await import('my_module.mes');
+```
+
+# 0.4.0
 
 * changed the way you add and invoke rust methods 
   * EsRuntime::add_global_(a)sync_function

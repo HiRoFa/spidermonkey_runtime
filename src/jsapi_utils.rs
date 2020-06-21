@@ -241,8 +241,7 @@ mod tests {
         F: FnOnce(&SmRuntime) -> R + Send + 'static,
     {
         let rt = crate::esruntime::tests::TEST_RT.clone();
-
-        rt.do_with_inner(|inner| inner.do_in_es_runtime_thread_sync(Box::new(test_fn)))
+        rt.do_in_es_runtime_thread_sync(test_fn)
     }
 
     #[test]
