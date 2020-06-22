@@ -45,10 +45,16 @@ impl<T> AutoIdMap<T> {
         self.map.insert(*id, elem);
     }
 
-    /// get an element base don it's id
+    /// get an element based on it's id
     #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn get(&self, id: &usize) -> Option<&T> {
         self.map.get(id)
+    }
+
+    /// get an element based on it's id
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub fn get_mut(&mut self, id: &usize) -> Option<&mut T> {
+        self.map.get_mut(id)
     }
 
     /// remove an element based on its id
