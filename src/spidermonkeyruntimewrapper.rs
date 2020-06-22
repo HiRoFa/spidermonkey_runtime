@@ -4,29 +4,20 @@ use crate::jsapi_utils;
 use crate::jsapi_utils::rooting::EsPersistentRooted;
 use crate::jsapi_utils::EsErrorInfo;
 use crate::utils::AutoIdMap;
-
 use log::{debug, trace};
-use lru::LruCache;
-
 use mozjs::glue::{CreateJobQueue, JobQueueTraps};
 use mozjs::jsapi::CallArgs;
-use mozjs::jsapi::FinishDynamicModuleImport;
-use mozjs::jsapi::Handle as RawHandle;
-use mozjs::jsapi::HandleValue as RawHandleValue;
 use mozjs::jsapi::JSAutoRealm;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
-use mozjs::jsapi::JSString;
 use mozjs::jsapi::JS_DefineFunction;
 use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_NewGlobalObject;
 use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::OnNewGlobalHookOption;
 use mozjs::jsapi::SetJobQueue;
-use mozjs::jsapi::SetModuleDynamicImportHook;
-use mozjs::jsapi::SetModuleResolveHook;
 use mozjs::jsapi::JS::HandleValueArray;
-use mozjs::jsval::{NullValue, ObjectValue, StringValue, UndefinedValue};
+use mozjs::jsval::{NullValue, ObjectValue, UndefinedValue};
 use mozjs::panic::wrap_panic;
 use mozjs::rust::wrappers::JS_CallFunctionValue;
 use mozjs::rust::HandleObject;
@@ -39,7 +30,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::os::raw::c_void;
 
-use crate::esruntime::EsRuntime;
 use std::ptr;
 use std::rc::Rc;
 use std::str;
@@ -197,12 +187,8 @@ impl SmRuntime {
 
     fn init_import_callbacks(&mut self) {
         // this tells the runtime how to resolve modules
-        let js_runtime = &mut self.runtime.rt();
-        self.do_with_jsapi(|_rt, _cx, _global| {
-            unsafe {
-                SetModuleResolveHook(*js_runtime, Some(import_module));
-                SetModuleDynamicImportHook(*js_runtime, Some(module_dynamic_import));
-            };
+        self.do_with_jsapi(|rt, _cx, _global| {
+            jsapi_utils::modules::init_runtime_for_modules(rt);
         });
     }
 
@@ -508,235 +494,6 @@ pub fn consume_cached_object(id: usize) -> EsPersistentRooted {
         let map = &mut *object_cache_rc.borrow_mut();
         map.remove(&id)
     })
-}
-
-thread_local! {
-// store epr in Box because https://doc.servo.org/mozjs_sys/jsgc/struct.Heap.html#method.boxed
-    static MODULE_CACHE: RefCell<LruCache<String, EsPersistentRooted>> = RefCell::new(init_cache());
-}
-
-fn init_cache() -> LruCache<String, EsPersistentRooted> {
-    let ct = SM_RT.with(|sm_rt_rc| {
-        let sm_rt = &*sm_rt_rc.borrow();
-        sm_rt.clone_esrt_inner().module_cache_size
-    });
-
-    LruCache::new(ct)
-}
-
-/// native function used for dynamic imports
-unsafe extern "C" fn module_dynamic_import(
-    cx: *mut JSContext,
-    reference_private: RawHandleValue,
-    specifier: RawHandle<*mut JSString>,
-    promise: RawHandle<*mut JSObject>,
-) -> bool {
-    // see sequence here in c
-    // https://github.com/marco-c/gecko-dev-comments-removed/blob/ab0d099cf83e6da81c541e69a4c171f7832c031d/js/src/shell/ModuleLoader.cpp#L101
-
-    trace!("module_dynamic_import called");
-
-    rooted!(in (cx) let mut closure_root = jsapi_utils::objects::new_object(cx));
-    rooted!(in (cx) let promise_val_root = ObjectValue(*promise));
-    rooted!(in (cx) let specifier_val_root = StringValue(&**specifier));
-    jsapi_utils::objects::set_es_obj_prop_val_raw(
-        cx,
-        closure_root.handle(),
-        "promise",
-        promise_val_root.handle(),
-    );
-    jsapi_utils::objects::set_es_obj_prop_val(
-        cx,
-        closure_root.handle().into(),
-        "reference_private",
-        reference_private,
-    );
-    jsapi_utils::objects::set_es_obj_prop_val_raw(
-        cx,
-        closure_root.handle(),
-        "specifier",
-        specifier_val_root.handle(),
-    );
-
-    let file_name = jsapi_utils::es_jsstring_to_string(cx, *specifier);
-
-    trace!("module_dynamic_import called: {}", file_name);
-
-    let closure_id = register_cached_object(cx, *closure_root);
-    let rt_arc = SmRuntime::clone_current_esrt_inner_arc();
-
-    // todo if the module is already cache we could just run an async job via
-    // rt_arc.do_in_es_runtime_thread
-    // instead of stepping into a different thread
-
-    let load_task = move || {
-        trace!(
-            "module_dynamic_import: {}, load_task running",
-            file_name.as_str()
-        );
-        // load mod code here (in helper thread)
-        let script: Option<String> = if let Some(loader) = &rt_arc.module_source_loader {
-            loader(file_name.as_str())
-        } else {
-            None
-        };
-
-        trace!(
-            "module_dynamic_import: {}, load_task: loaded",
-            file_name.as_str()
-        );
-
-        rt_arc.do_in_es_runtime_thread(move |sm_rt| {
-            // compile module / get from cache here
-            // resolve or reject promise here (in esrt_worker_thread)
-            trace!(
-                "module_dynamic_import: {}, load_task: back in do_in_es_runtime_thread",
-                file_name.as_str()
-            );
-            sm_rt.do_with_jsapi(|_rt, cx, _global| {
-                // check if was cached async
-                // todo replace with a bool
-
-                trace!(
-                    "module_dynamic_import: {}, load_task: back in do_in_es_runtime_thread, check cache",
-                    file_name.as_str()
-                );
-
-                let is_cached = MODULE_CACHE.with(|cache_rc| {
-                    let cache = &*cache_rc.borrow();
-                    cache.contains(&file_name)
-                });
-
-                let closure_epr = crate::spidermonkeyruntimewrapper::consume_cached_object(closure_id);
-                rooted!(in (cx) let closure_root = closure_epr.get());
-                rooted!(in (cx) let mut promise_val_root = NullValue());
-                rooted!(in (cx) let mut specifier_val_root = NullValue());
-                rooted!(in (cx) let mut reference_private_val_root = NullValue());
-                jsapi_utils::objects::get_es_obj_prop_val(cx, closure_root.handle(), "promise", promise_val_root.handle_mut()).ok().expect("could not get promise prop from closure");
-                jsapi_utils::objects::get_es_obj_prop_val(cx, closure_root.handle(), "specifier", specifier_val_root.handle_mut()).ok().expect("could not get specifier prop from closure");
-                jsapi_utils::objects::get_es_obj_prop_val(cx, closure_root.handle(), "reference_private", reference_private_val_root.handle_mut()).ok().expect("could not get reference_private prop from closure");
-                rooted!(in (cx) let mut promise_root = promise_val_root.to_object());
-                rooted!(in (cx) let mut specifier_root = specifier_val_root.to_string());
-
-
-                if is_cached {
-                    // resolve promise
-                    trace!("dyn module {} was cached, finish import", file_name.as_str());
-                    FinishDynamicModuleImport(cx, reference_private_val_root.handle().into(), specifier_root.handle().into(), promise_root.handle().into());
-
-                } else if let Some(script_str) = script {
-
-                    trace!("dyn module {} was loaded, compile", file_name.as_str());
-
-                    let compiled_mod_obj_res = jsapi_utils::modules::compile_module(
-                        cx,
-                        script_str.as_str(),
-                        file_name.as_str(),
-                    );
-
-                    if let Ok(compiled_mod_obj) = compiled_mod_obj_res {
-                        MODULE_CACHE.with(|cache_rc| {
-                            let cache = &mut *cache_rc.borrow_mut();
-                            let mod_epr = EsPersistentRooted::new_from_obj(cx, compiled_mod_obj);
-                            cache.put(file_name.clone(), mod_epr);
-                        });
-
-                        trace!("dyn module {} was loaded, compiled and cached, finish", file_name.as_str());
-
-                        FinishDynamicModuleImport(cx, reference_private_val_root.handle().into(), specifier_root.handle().into(), promise_root.handle().into());
-
-                    } else {
-                        // reject promise
-
-                        trace!("dyn module {} was not compiled ok, rejecting promise", file_name.as_str());
-
-                        let err_str= format!("module failed to compile: {}", compiled_mod_obj_res.err().unwrap().err_msg());
-                        rooted!(in (cx) let prom_reject_val = jsapi_utils::new_es_value_from_str(cx, err_str.as_str()));
-                        trace!("rejecting dynamic module promise: failed {}", err_str);
-                        jsapi_utils::promises::reject_promise(
-                            cx,
-                            promise_root.handle(),
-                            prom_reject_val.handle(),
-                        )
-                            .ok()
-                            .expect("promise rejection failed / 1");
-                    }
-                } else {
-                    // reject promise
-                    let err_str= format!("module not found: {}", file_name);
-                    trace!("rejecting dynamic module promise: failed {}", err_str);
-                    rooted!(in (cx) let prom_reject_val = jsapi_utils::new_es_value_from_str(cx, err_str.as_str()));
-                    jsapi_utils::promises::reject_promise(
-                        cx,
-                        promise_root.handle(),
-                        prom_reject_val.handle(),
-                    )
-                        .ok()
-                        .expect("promise rejection failed / 2");
-                }
-            });
-        });
-    };
-    EsRuntime::add_helper_task(load_task);
-
-    true
-}
-
-/// native function used a import function for module loading
-unsafe extern "C" fn import_module(
-    cx: *mut JSContext,
-    _reference_private: RawHandleValue,
-    specifier: RawHandle<*mut JSString>,
-) -> *mut JSObject {
-    let file_name = jsapi_utils::es_jsstring_to_string(cx, *specifier);
-
-    // see if we have that module
-    let cached: Option<*mut JSObject> = MODULE_CACHE.with(|cache_rc| {
-        let cache = &mut *cache_rc.borrow_mut();
-        if let Some(mpr) = cache.get(&file_name) {
-            trace!("found a cached module for {}", &file_name);
-            // set rval here
-            return Some(mpr.get());
-        }
-        None
-    });
-    if let Some(c) = cached {
-        return c;
-    };
-
-    // see if we got a module code loader
-    let module_src = SM_RT.with(|sm_rt_rc| {
-        let sm_rt = sm_rt_rc.borrow();
-        let es_rt_inner = sm_rt.clone_esrt_inner();
-        if let Some(module_source_loader) = &es_rt_inner.module_source_loader {
-            module_source_loader(file_name.as_str())
-        } else {
-            Some(format!(""))
-        }
-    });
-
-    let compiled_mod_obj_res =
-        jsapi_utils::modules::compile_module(cx, module_src.unwrap().as_str(), file_name.as_str());
-
-    if compiled_mod_obj_res.is_err() {
-        let err = compiled_mod_obj_res.err().unwrap();
-        let err_str = format!("error loading module: {}\0", err.err_msg());
-        JS_ReportErrorASCII(cx, err_str.as_ptr() as *const libc::c_char);
-        debug!("error loading module, returning null: {}", &err_str);
-        return *ptr::null_mut::<*mut JSObject>();
-    }
-
-    let compiled_module: *mut JSObject = compiled_mod_obj_res.ok().unwrap();
-
-    MODULE_CACHE.with(|cache_rc| {
-        trace!("caching module for {}", &file_name);
-        let cache = &mut *cache_rc.borrow_mut();
-        let mut mpr = EsPersistentRooted::default();
-        mpr.init(cx, compiled_module);
-        cache.put(file_name, mpr);
-    });
-
-    compiled_module
 }
 
 /// this function is called from script when the script invokes esses.invoke_rust_op

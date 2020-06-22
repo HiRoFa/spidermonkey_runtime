@@ -344,6 +344,17 @@ pub mod tests {
     }
 
     #[test]
+    fn test_wasm() {
+        let esrt: Arc<EsRuntime> = TEST_RT.clone();
+        let esvf = esrt
+            .eval_sync("typeof WebAssembly;", "test_wasm.es")
+            .ok()
+            .expect("script failed");
+        assert!(esvf.is_string());
+        assert_eq!(esvf.get_string().as_str(), "object");
+    }
+
+    #[test]
     fn test_module() {
         log::info!("test: test_module");
         let esrt: Arc<EsRuntime> = TEST_RT.clone();
