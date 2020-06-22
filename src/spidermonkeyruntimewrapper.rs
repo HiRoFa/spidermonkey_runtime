@@ -16,6 +16,7 @@ use mozjs::jsapi::JS_NewGlobalObject;
 use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::OnNewGlobalHookOption;
 use mozjs::jsapi::SetJobQueue;
+use mozjs::jsapi::SetPromiseRejectionTrackerCallback;
 use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsval::{NullValue, ObjectValue, UndefinedValue};
 use mozjs::panic::wrap_panic;
@@ -182,6 +183,11 @@ impl SmRuntime {
 
         self.do_with_jsapi(|_rt, cx, _global| unsafe {
             SetJobQueue(cx, job_queue);
+            SetPromiseRejectionTrackerCallback(
+                cx,
+                Some(promise_rejection_tracker),
+                ptr::null_mut(),
+            );
         });
     }
 
@@ -400,6 +406,16 @@ impl SmRuntime {
         }
         ret
     }
+}
+
+unsafe extern "C" fn promise_rejection_tracker(
+    cx: *mut JSContext,
+    _muted_errors: bool,
+    promise: mozjs::jsapi::HandleObject,
+    state: mozjs::jsapi::PromiseRejectionHandlingState,
+    _data: *mut c_void,
+) {
+    debug!("promise without rejection handler was rejected");
 }
 
 unsafe extern "C" fn global_op_native_method(

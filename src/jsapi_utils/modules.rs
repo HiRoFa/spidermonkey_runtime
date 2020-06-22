@@ -107,7 +107,7 @@ pub fn compile_module(
 
 thread_local! {
 // store epr in Box because https://doc.servo.org/mozjs_sys/jsgc/struct.Heap.html#method.boxed
-    static MODULE_CACHE: RefCell<LruCache<String, EsPersistentRooted>> = RefCell::new(init_cache());
+    static MODULE_CACHE: RefCell<LruCache<String, EsPersistentRooted>> = RefCell::new(init_module_cache());
 }
 
 /// this initializes the LryCache based on your settings
