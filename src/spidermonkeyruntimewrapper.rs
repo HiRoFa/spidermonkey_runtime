@@ -409,10 +409,10 @@ impl SmRuntime {
 }
 
 unsafe extern "C" fn promise_rejection_tracker(
-    cx: *mut JSContext,
+    _cx: *mut JSContext,
     _muted_errors: bool,
-    promise: mozjs::jsapi::HandleObject,
-    state: mozjs::jsapi::PromiseRejectionHandlingState,
+    _promise: mozjs::jsapi::HandleObject,
+    _state: mozjs::jsapi::PromiseRejectionHandlingState,
     _data: *mut c_void,
 ) {
     debug!("promise without rejection handler was rejected");
