@@ -1,4 +1,4 @@
-use crate::microtaskmanager::MicroTaskManager;
+use crate::eseventqueue::EsEventQueue;
 use mozjs::rust::{JSEngine, JSEngineHandle};
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -11,11 +11,11 @@ thread_local! {
 }
 
 lazy_static! {
-    static ref TASKMANAGER: Arc<MicroTaskManager> = MicroTaskManager::new();
+    static ref EVENTQUEUE: Arc<EsEventQueue> = EsEventQueue::new();
 }
 
 pub fn produce() -> JSEngineHandle {
-    TASKMANAGER.clone().exe_task(|| {
+    EVENTQUEUE.clone().exe_task(|| {
         ENGINE.with(|engine_rc| {
             let engine: &JSEngine = &*engine_rc.borrow();
             engine.handle()

@@ -81,7 +81,7 @@ mod tests {
         let rt = crate::esruntime::tests::TEST_RT.clone();
 
         let res = rt.do_with_inner(|inner| {
-            inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
+            inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
                 let mut vec = vec![];
                 sm_rt.do_with_jsapi(|_rt, cx, _global| {
                     //crate::jsapi_utils::set_gc_zeal_options(cx);
@@ -96,7 +96,7 @@ mod tests {
                 sm_rt.do_with_jsapi(|_rt, cx, _global| {
                     rooted!(in (cx) let my_obj_pval = Int32Value(123));
                     rooted!(in (cx) let my_obj_root = vec.get(0).unwrap().get());
-                    crate::jsapi_utils::objects::set_es_obj_prop_val_raw(
+                    crate::jsapi_utils::objects::set_es_obj_prop_value(
                         cx,
                         my_obj_root.handle(),
                         "p1",
@@ -119,7 +119,7 @@ mod tests {
                     });
                 }
                 true
-            }))
+            })
         });
 
         assert_eq!(true, res);

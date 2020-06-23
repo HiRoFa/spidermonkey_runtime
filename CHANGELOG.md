@@ -4,6 +4,8 @@
 ```javascript
     let {my, module_stuf} = await import('my_module.mes');
 ```
+* renamed MicroTaskManager to EsEventQueue
+* added utils for converting Handle to RawHandle an vice-versa
 
 # 0.4.0
 

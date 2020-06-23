@@ -48,7 +48,7 @@ pub fn get_or_define_namespace(
                 name
             );
             rooted!(in(context) let mut new_obj_val_root = ObjectValue(new_obj));
-            set_es_obj_prop_val_raw(context, cur_root.handle(), name, new_obj_val_root.handle());
+            set_es_obj_prop_value(context, cur_root.handle(), name, new_obj_val_root.handle());
             trace!(
                 "get_or_define_package, loop step: {} is null, prop_set",
                 name
@@ -237,7 +237,7 @@ pub fn get_js_obj_prop_names(context: *mut JSContext, obj: HandleObject) -> Vec<
 
 /// set a property of an object
 #[allow(dead_code)]
-pub fn set_es_obj_prop_val(
+pub fn set_es_obj_prop_value_raw(
     context: *mut JSContext,
     obj: mozjs::jsapi::HandleObject,
     prop_name: &str,
@@ -257,7 +257,7 @@ pub fn set_es_obj_prop_val(
 
 /// set a property of an object
 #[allow(dead_code)]
-pub fn set_es_obj_prop_val_raw(
+pub fn set_es_obj_prop_value(
     context: *mut JSContext,
     obj: HandleObject,
     prop_name: &str,
@@ -317,7 +317,7 @@ mod tests {
         let rt = crate::esruntime::tests::TEST_RT.clone();
 
         let test_vec = rt.do_with_inner(|inner| {
-            inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
+            inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
                 sm_rt.do_with_jsapi(|rt, cx, global| {
                     trace!("1");
 
@@ -369,7 +369,7 @@ mod tests {
 
                     test_vec
                 })
-            }))
+            })
         });
 
         assert_eq!(test_vec.len(), 3);
@@ -393,7 +393,7 @@ mod tests {
         let rt = crate::esruntime::tests::TEST_RT.clone();
 
         let test_vec = rt.do_with_inner(|inner| {
-            inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
+            inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
                 sm_rt.do_with_jsapi(|rt, cx, global| {
                     rooted!(in(cx) let mut rval = UndefinedValue());
                     let eval_res = jsapi_utils::eval(
@@ -415,7 +415,7 @@ mod tests {
 
                     get_js_obj_prop_names(cx, jso_root.handle())
                 })
-            }))
+            })
         });
 
         assert_eq!(test_vec.len(), 3);
@@ -429,7 +429,7 @@ mod tests {
         log::info!("test: test_get_or_define_package");
         let rt_arc: Arc<EsRuntime> = crate::esruntime::tests::TEST_RT.clone();
         let rt: &EsRuntime = rt_arc.borrow();
-        let res = rt.do_in_es_runtime_thread_sync(|sm_rt| {
+        let res = rt.do_in_es_event_queue_sync(|sm_rt| {
             sm_rt.do_with_jsapi(|_rt, cx, global| {
                 get_or_define_namespace(cx, global, vec!["test_get_or_define_package", "a", "b"]);
                 get_or_define_namespace(cx, global, vec!["test_get_or_define_package", "a", "c"]);
@@ -471,7 +471,7 @@ mod tests {
 
         let rt_arc: Arc<EsRuntime> = crate::esruntime::tests::TEST_RT.clone();
         let rt: &EsRuntime = rt_arc.borrow();
-        let ok = rt.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
+        let ok = rt.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
             sm_rt.do_with_jsapi(|rt, cx, global| {
                 rooted!(in (cx) let mut constructor_root = UndefinedValue());
                 let eval_res = jsapi_utils::eval(

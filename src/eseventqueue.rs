@@ -14,23 +14,23 @@ thread_local!(
     pub static LOCAL_JOBS: RefCell<Vec<Box<LocalJob>>> = RefCell::new(vec![]);
 );
 ///
-/// the MicroTaskManager is a single threaded thread pool which is used to act as the only thread
+/// the EsEventQueue is a single threaded thread pool which is used to act as the only thread
 /// using an instance of the spidermonkey runtime
 /// besides being able to add tasks from any thread by add_task
 /// a running task can add jobs to the current thread by calling add_task_from_worker
 /// those tasks need not impl the Send trait and there is no locking happening to add
 /// the task to the queue
-pub struct MicroTaskManager {
+pub struct EsEventQueue {
     jobs: DebugMutex<Vec<Box<dyn FnOnce() -> () + Send + 'static>>>,
     empty_cond: Condvar,
     worker_thread_name: String,
 }
 
-impl MicroTaskManager {
+impl EsEventQueue {
     pub fn new() -> Arc<Self> {
-        let uuid = format!("sttm_wt_{}", Uuid::new_v4());
-        let task_manager = MicroTaskManager {
-            jobs: DebugMutex::new(vec![], "MicroTaskManager::jobs"),
+        let uuid = format!("eseq_wt_{}", Uuid::new_v4());
+        let task_manager = EsEventQueue {
+            jobs: DebugMutex::new(vec![], "EsEventQueue::jobs"),
             empty_cond: Condvar::new(),
             worker_thread_name: uuid.clone(),
         };
@@ -45,7 +45,7 @@ impl MicroTaskManager {
                 if let Some(rc) = rcc {
                     rc.worker_loop();
                 } else {
-                    trace!("Arc to MicroTaskManager was dropped, stopping worker thread");
+                    trace!("Arc to EsEventQueue was dropped, stopping worker thread");
                     break;
                 }
             })
@@ -56,42 +56,42 @@ impl MicroTaskManager {
 
     /// add a task which will run asynchronously
     pub fn add_task<T: FnOnce() -> () + Send + 'static>(&self, task: T) {
-        trace!("MicroTaskManager::add_task");
+        trace!("EsEventQueue::add_task");
         {
             let mut lck = self.jobs.lock("add_task").unwrap();
             let jobs = &mut *lck;
             jobs.push(Box::new(task));
         }
-        trace!("MicroTaskManager::add_task / notify");
+        trace!("EsEventQueue::add_task / notify");
         self.empty_cond.notify_all();
     }
 
     /// execute a task synchronously in the worker thread
     pub fn exe_task<R: Send + 'static, T: FnOnce() -> R + Send + 'static>(&self, task: T) -> R {
-        trace!("MicroTaskManager::exe_task");
+        trace!("EsEventQueue::exe_task");
 
         if self.is_worker_thread() {
             // don;t block from worker threads
-            trace!("MicroTaskManager::exe_task, is worker, just run");
+            trace!("EsEventQueue::exe_task, is worker, just run");
             return task();
         }
 
         // create a channel, put sender in job, wait for receiver here
 
-        trace!("MicroTaskManager::exe_task / create channel");
+        trace!("EsEventQueue::exe_task / create channel");
 
         let (sender, receiver) = channel();
 
         let job = move || {
-            trace!("MicroTaskManager::exe_task / job");
+            trace!("EsEventQueue::exe_task / job");
             let res: R = task();
-            trace!("MicroTaskManager::exe_task / send");
+            trace!("EsEventQueue::exe_task / send");
             sender.send(res).unwrap();
         };
         self.add_task(job);
-        trace!("MicroTaskManager::exe_task / receive");
+        trace!("EsEventQueue::exe_task / receive");
         let res = receiver.recv();
-        trace!("MicroTaskManager::exe_task / received");
+        trace!("EsEventQueue::exe_task / received");
         match res {
             Ok(ret) => ret,
             Err(e) => {
@@ -132,10 +132,10 @@ impl MicroTaskManager {
         })
     }
 
-    pub fn looks_like_worker_thread() -> bool {
+    pub fn looks_like_eventqueue_thread() -> bool {
         let handle = thread::current();
         if let Some(handle_name) = handle.name() {
-            handle_name.starts_with("sttm_wt_")
+            handle_name.starts_with("eseq_wt_")
         } else {
             false
         }
@@ -188,15 +188,15 @@ impl MicroTaskManager {
     }
 }
 
-impl Drop for MicroTaskManager {
+impl Drop for EsEventQueue {
     fn drop(&mut self) {
-        trace!("drop MicroTaskManager");
+        trace!("drop EsEventQueue");
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::microtaskmanager::MicroTaskManager;
+    use crate::eseventqueue::EsEventQueue;
     use log::debug;
 
     use std::thread;
@@ -213,22 +213,22 @@ mod tests {
 
     fn t1() {
         {
-            let sttm = MicroTaskManager::new();
+            let sttm = EsEventQueue::new();
 
             let sttm2 = sttm.clone();
             let sttm3 = sttm.clone();
             let sttm4 = sttm.clone();
 
             let j = thread::spawn(move || {
-                debug!("add t1 to sttm3");
+                debug!("add t1 to EsEventQueue");
                 sttm3.add_task(|| {
                     debug!("t1");
                 });
-                debug!("add t2 to sttm4");
+                debug!("add t2 to EsEventQueue4");
                 sttm4.add_task(|| {
                     debug!("t2");
                 });
-                debug!("dropping sttm3 and 4");
+                debug!("dropping EsEventQueue3 and 4");
             });
 
             sttm.add_task(|| {
@@ -257,8 +257,8 @@ mod tests {
             j.join().ok().unwrap();
             debug!("done");
         }
-        debug!("sttm should drop now");
+        debug!("EsEventQueue should drop now");
         thread::sleep(Duration::from_secs(1));
-        debug!("sttm should be dropped now");
+        debug!("EsEventQueue should be dropped now");
     }
 }

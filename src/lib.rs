@@ -66,8 +66,8 @@
 //!
 //! fn use_jsapi() {
 //!     let rt = es_runtime::esruntime::EsRuntime::builder().build();
-//!     // first of all we need to run a closure in the worker thread for the engine
-//!     let res = rt.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
+//!     // first of all we need to run a closure in the event queue for the engine
+//!     let res = rt.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
 //!         // then we tell the SmRuntime we want to use the JSAPI
 //!         // do_with_jsapi does a couple of things
 //!         // 1.  root the global obj
@@ -109,6 +109,7 @@ mod es_sys_scripts;
 #[macro_use]
 
 pub mod utils;
+mod eseventqueue;
 pub mod esreflection;
 pub mod esruntime;
 pub mod esruntimebuilder;
@@ -116,6 +117,5 @@ pub mod esruntimeinner;
 pub mod esvaluefacade;
 mod features;
 pub mod jsapi_utils;
-mod microtaskmanager;
 pub mod spidermonkeyruntimewrapper;
 mod taskmanager;

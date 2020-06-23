@@ -20,7 +20,7 @@ lazy_static! {
     static ref HELPER_TASKS: Arc<TaskManager> = Arc::new(TaskManager::new(std::cmp::max(2, num_cpus::get())));
 }
 
-/// the EsRuntime is a facade that adds all script todo's to the SmRuntimeWrapper's MicroTaskManager so they are invoked in a single worker thread
+/// the EsRuntime is a facade that adds all script todo's to the EsRuntimes's event queue so they are invoked in a single worker thread
 /// you can wait for those tasks to complete by calling the _sync variants of the public methods here
 pub struct EsRuntime {
     inner: Arc<EsRuntimeInner>,
@@ -41,7 +41,7 @@ impl EsRuntime {
 
         // pass arc around inner to sm_rt thread
 
-        rt.inner.task_manager.exe_task(move || {
+        rt.inner.event_queue.exe_task(move || {
             // todo this should also be in init_info
 
             crate::spidermonkeyruntimewrapper::SM_RT.with(move |sm_rc: &RefCell<SmRuntime>| {
@@ -158,30 +158,30 @@ impl EsRuntime {
         f(&*inner)
     }
 
-    /// run a closure in the worker thread of this runtime, this is needed
+    /// run a closure in the worker thread of this runtime's event queue, this is needed
     /// if you want to use the inner SmRuntime on which u can use the jsapi_utils
-    pub fn do_in_es_runtime_thread<J>(&self, immutable_job: J)
+    pub fn do_in_es_event_queue<J>(&self, immutable_job: J)
     where
         J: FnOnce(&SmRuntime) -> () + Send + 'static,
     {
-        self.do_with_inner(|inner| inner.do_in_es_runtime_thread(immutable_job))
+        self.do_with_inner(|inner| inner.do_in_es_event_queue(immutable_job))
     }
 
-    /// run a closure in the worker thread of this runtime and wait for it to complete,
+    /// run a closure in the worker thread of this runtime's event queue and wait for it to complete,
     /// this is needed if you want to use the inner SmRuntime on which u can use the jsapi_utils
-    pub fn do_in_es_runtime_thread_sync<R: Send + 'static, J>(&self, immutable_job: J) -> R
+    pub fn do_in_es_event_queue_sync<R: Send + 'static, J>(&self, immutable_job: J) -> R
     where
         J: FnOnce(&SmRuntime) -> R + Send + 'static,
     {
-        self.do_with_inner(|inner| inner.do_in_es_runtime_thread_sync(immutable_job))
+        self.do_with_inner(|inner| inner.do_in_es_event_queue_sync(immutable_job))
     }
 
     /// legacy method which will be removed in #18
-    pub fn do_in_es_runtime_thread_mut_sync<R: Send + 'static, J>(&self, mutable_job: J) -> R
+    pub fn do_in_es_event_queue_mut_sync<R: Send + 'static, J>(&self, mutable_job: J) -> R
     where
         J: FnOnce(&mut SmRuntime) -> R + Send + 'static,
     {
-        self.do_with_inner(|inner| inner.do_in_es_runtime_thread_mut_sync(mutable_job))
+        self.do_with_inner(|inner| inner.do_in_es_event_queue_mut_sync(mutable_job))
     }
 
     /// add a task the the "helper" thread pool
@@ -284,7 +284,7 @@ pub mod tests {
             .module_code_loader(Box::new(module_code_loader))
             .build();
 
-        rt.do_in_es_runtime_thread_sync(|sm_rt| {
+        rt.do_in_es_event_queue_sync(|sm_rt| {
             sm_rt.do_with_jsapi(|_rt, _cx, _global| {
                 // uncomment this to test with gc in sadistic mode
                 // crate::jsapi_utils::set_gc_zeal_options(_cx);
@@ -305,7 +305,7 @@ pub mod tests {
             .gc_interval(Duration::from_secs(1))
             .build();
 
-        rt.do_in_es_runtime_thread_sync(|sm_rt| {
+        rt.do_in_es_event_queue_sync(|sm_rt| {
             sm_rt
                 .eval("this.f = () => {return 123;};", " test.es")
                 .ok()

@@ -1,12 +1,12 @@
 use log::trace;
 
 use crate::debugmutex::DebugMutex;
+use crate::eseventqueue::EsEventQueue;
 use crate::esruntime::EsRuntime;
 use crate::esruntimeinner::EsRuntimeInner;
 use crate::jsapi_utils::arrays::{get_array_element, get_array_length, new_array, object_is_array};
 use crate::jsapi_utils::rooting::EsPersistentRooted;
 use crate::jsapi_utils::{objects, EsErrorInfo};
-use crate::microtaskmanager::MicroTaskManager;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
 use crate::utils::AutoIdMap;
 use crate::{jsapi_utils, spidermonkeyruntimewrapper};
@@ -240,7 +240,7 @@ impl EsValueFacade {
 
                     let rt_opt = weak_rt_ref.upgrade();
                     if let Some(rti) = rt_opt {
-                        rti.do_in_es_runtime_thread_sync(Box::new(move |sm_rt: &SmRuntime| {
+                        rti.do_in_es_event_queue_sync(Box::new(move |sm_rt: &SmRuntime| {
                             // resolve or reject promise
                             sm_rt.do_with_jsapi(move|_rt, cx, _global| {
 
@@ -521,9 +521,9 @@ impl EsValueFacade {
             )));
         }
 
-        if MicroTaskManager::looks_like_worker_thread() {
-            log::error!("waiting for esvf prom from worker thread, bad dev bad!");
-            panic!("you really should not wait for promises in a RT's worker thread");
+        if EsEventQueue::looks_like_eventqueue_thread() {
+            log::error!("waiting for esvf prom from event queue thread, bad dev bad!");
+            panic!("you really should not wait for promises in a RT's event queue thread");
         }
 
         let rmev: &RustManagedEsVar = self.val_managed_var.as_ref().expect("not a managed var");
@@ -584,7 +584,7 @@ impl EsValueFacade {
 
         let job = move |sm_rt: &SmRuntime| Self::invoke_function2(cached_id, sm_rt, args);
 
-        rt_arc.do_in_es_runtime_thread_sync(job)
+        rt_arc.do_in_es_event_queue_sync(job)
     }
 
     pub(crate) fn invoke_function2(
@@ -749,7 +749,7 @@ impl EsValueFacade {
                 let prop_esvf = prop.1;
                 let prop_val: mozjs::jsapi::Value = prop_esvf.to_es_value(context);
                 rooted!(in(context) let mut val_root = prop_val);
-                jsapi_utils::objects::set_es_obj_prop_val_raw(
+                jsapi_utils::objects::set_es_obj_prop_value(
                     context,
                     obj_root.handle(),
                     prop_name,
@@ -862,7 +862,7 @@ impl Drop for EsValueFacade {
             let rt_arc = self.val_js_function.as_ref().unwrap().1.clone();
             let cached_obj_id = self.val_js_function.as_ref().unwrap().0;
 
-            rt_arc.do_in_es_runtime_thread(move |_sm_rt| {
+            rt_arc.do_in_es_event_queue(move |_sm_rt| {
                 spidermonkeyruntimewrapper::consume_cached_object(cached_obj_id);
             });
         }

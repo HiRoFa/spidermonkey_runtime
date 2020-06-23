@@ -1,7 +1,7 @@
+use crate::eseventqueue::EsEventQueue;
 use crate::esruntime::ModuleCodeLoader;
 use crate::esvaluefacade::EsValueFacade;
 use crate::jsapi_utils::EsErrorInfo;
-use crate::microtaskmanager::MicroTaskManager;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
 use log::{debug, trace};
 use mozjs::jsapi::CallArgs;
@@ -9,7 +9,7 @@ use mozjs::jsapi::JS_ReportErrorASCII;
 use std::sync::Arc;
 
 pub struct EsRuntimeInner {
-    pub(crate) task_manager: Arc<MicroTaskManager>,
+    pub(crate) event_queue: Arc<EsEventQueue>,
     pub(crate) _pre_cleanup_tasks: Vec<Box<dyn Fn(&EsRuntimeInner) -> () + Send + Sync>>,
     pub(crate) module_source_loader: Option<Box<dyn Fn(&str) -> Option<String> + Send + Sync>>,
     pub(crate) module_cache_size: usize,
@@ -21,7 +21,7 @@ impl EsRuntimeInner {
         module_cache_size: usize,
     ) -> Self {
         EsRuntimeInner {
-            task_manager: MicroTaskManager::new(),
+            event_queue: EsEventQueue::new(),
             _pre_cleanup_tasks: vec![],
             module_source_loader,
             module_cache_size,
@@ -37,7 +37,7 @@ impl EsRuntimeInner {
         debug!("call {} in thread {}", function_name, thread_id::get());
         let f_n = function_name.to_string();
 
-        self.do_in_es_runtime_thread(Box::new(move |sm_rt: &SmRuntime| {
+        self.do_in_es_event_queue(Box::new(move |sm_rt: &SmRuntime| {
             let res = sm_rt.call(obj_names, f_n.as_str(), args);
             if res.is_err() {
                 debug!("async call failed: {}", res.err().unwrap().message);
@@ -53,7 +53,7 @@ impl EsRuntimeInner {
     ) -> Result<EsValueFacade, EsErrorInfo> {
         trace!("call_sync {} in thread {}", function_name, thread_id::get());
         let f_n = function_name.to_string();
-        self.do_in_es_runtime_thread_sync(Box::new(move |sm_rt: &SmRuntime| {
+        self.do_in_es_event_queue_sync(Box::new(move |sm_rt: &SmRuntime| {
             sm_rt.call(obj_names, f_n.as_str(), args)
         }))
     }
@@ -64,7 +64,7 @@ impl EsRuntimeInner {
         let eval_code = eval_code.to_string();
         let file_name = file_name.to_string();
 
-        self.do_in_es_runtime_thread(Box::new(move |sm_rt: &SmRuntime| {
+        self.do_in_es_event_queue(Box::new(move |sm_rt: &SmRuntime| {
             let res = sm_rt.eval_void(eval_code.as_str(), file_name.as_str());
             if res.is_err() {
                 debug!("async code eval failed: {}", res.err().unwrap().message);
@@ -77,7 +77,7 @@ impl EsRuntimeInner {
         let eval_code = code.to_string();
         let file_name = file_name.to_string();
 
-        self.do_in_es_runtime_thread_sync(Box::new(move |sm_rt: &SmRuntime| {
+        self.do_in_es_event_queue_sync(Box::new(move |sm_rt: &SmRuntime| {
             sm_rt.eval(eval_code.as_str(), file_name.as_str())
         }))
     }
@@ -86,7 +86,7 @@ impl EsRuntimeInner {
         let eval_code = code.to_string();
         let file_name = file_name.to_string();
 
-        self.do_in_es_runtime_thread_sync(Box::new(move |sm_rt: &SmRuntime| {
+        self.do_in_es_event_queue_sync(Box::new(move |sm_rt: &SmRuntime| {
             sm_rt.eval_void(eval_code.as_str(), file_name.as_str())
         }))
     }
@@ -99,7 +99,7 @@ impl EsRuntimeInner {
         let module_src_str = module_src.to_string();
         let module_file_name_str = module_file_name.to_string();
 
-        self.do_in_es_runtime_thread_sync(Box::new(move |sm_rt: &SmRuntime| {
+        self.do_in_es_event_queue_sync(Box::new(move |sm_rt: &SmRuntime| {
             sm_rt.load_module(module_src_str.as_str(), module_file_name_str.as_str())
         }))
     }
@@ -108,13 +108,13 @@ impl EsRuntimeInner {
         trace!("cleaning up es_rt");
         // todo, set is_cleaning var on inner, here and now
         // that should hint the engine to not use this runtime
-        self.do_in_es_runtime_thread_sync(Box::new(move |sm_rt: &SmRuntime| {
+        self.do_in_es_event_queue_sync(Box::new(move |sm_rt: &SmRuntime| {
             sm_rt.cleanup();
         }));
         // reset cleaning var here
     }
 
-    pub fn do_in_es_runtime_thread<J>(&self, job: J)
+    pub fn do_in_es_event_queue<J>(&self, job: J)
     where
         J: FnOnce(&SmRuntime) -> () + Send + 'static,
     {
@@ -128,10 +128,10 @@ impl EsRuntimeInner {
             })
         };
 
-        self.task_manager.add_task(async_job);
+        self.event_queue.add_task(async_job);
     }
 
-    pub fn do_in_es_runtime_thread_sync<R: Send + 'static, J>(&self, job: J) -> R
+    pub fn do_in_es_event_queue_sync<R: Send + 'static, J>(&self, job: J) -> R
     where
         J: FnOnce(&SmRuntime) -> R + Send + 'static,
     {
@@ -145,10 +145,10 @@ impl EsRuntimeInner {
             })
         };
 
-        self.task_manager.exe_task(job)
+        self.event_queue.exe_task(job)
     }
 
-    pub fn do_in_es_runtime_thread_mut_sync<R: Send + 'static, J>(&self, mutable_job: J) -> R
+    pub fn do_in_es_event_queue_mut_sync<R: Send + 'static, J>(&self, mutable_job: J) -> R
     where
         J: FnOnce(&mut SmRuntime) -> R + Send + 'static,
     {
@@ -162,7 +162,7 @@ impl EsRuntimeInner {
             })
         };
 
-        self.task_manager.exe_task(job)
+        self.event_queue.exe_task(job)
     }
 
     pub(crate) fn register_op(
@@ -170,7 +170,7 @@ impl EsRuntimeInner {
         name: &'static str,
         op: crate::spidermonkeyruntimewrapper::OP,
     ) {
-        self.do_in_es_runtime_thread_mut_sync(Box::new(move |sm_rt: &mut SmRuntime| {
+        self.do_in_es_event_queue_mut_sync(Box::new(move |sm_rt: &mut SmRuntime| {
             sm_rt.register_op(name, op);
         }));
     }
@@ -180,7 +180,7 @@ impl EsRuntimeInner {
         F: Fn(Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send + Sync + 'static,
     {
         let func_rc = Arc::new(func);
-        self.do_in_es_runtime_thread_sync(move |sm_rt| {
+        self.do_in_es_event_queue_sync(move |sm_rt| {
             sm_rt.add_global_function(name, move |cx, args: CallArgs| {
                 let mut args_vec = vec![];
                 crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
@@ -208,7 +208,7 @@ impl EsRuntimeInner {
     where
         F: Fn(Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send + 'static,
     {
-        self.do_in_es_runtime_thread_sync(move |sm_rt| {
+        self.do_in_es_event_queue_sync(move |sm_rt| {
             sm_rt.add_global_function(name, move |cx, args: CallArgs| {
                 let mut args_vec = vec![];
                 crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
@@ -245,7 +245,7 @@ impl EsRuntimeInner {
 
 impl Drop for EsRuntimeInner {
     fn drop(&mut self) {
-        self.do_in_es_runtime_thread_sync(Box::new(|_sm_rt: &SmRuntime| {
+        self.do_in_es_event_queue_sync(Box::new(|_sm_rt: &SmRuntime| {
             debug!("dropping EsRuntimeWrapperInner");
         }));
     }

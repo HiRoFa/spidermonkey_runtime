@@ -11,7 +11,7 @@ use mozjs::rust::HandleValue;
 use std::str::FromStr;
 
 pub(crate) fn init(rt: &EsRuntime) {
-    rt.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
+    rt.do_in_es_event_queue_sync(Box::new(|sm_rt: &SmRuntime| {
         // todo move this to a new_object_in_global method in sm_rt
         // that should return a persistentrooted
         // then also create a add_property method
@@ -24,7 +24,7 @@ pub(crate) fn init(rt: &EsRuntime) {
             rooted!(in(context) let console_obj_val_root = console_obj_val);
             rooted!(in(context) let console_obj_root = console_obj);
 
-            crate::jsapi_utils::objects::set_es_obj_prop_val_raw(
+            crate::jsapi_utils::objects::set_es_obj_prop_value(
                 context,
                 global,
                 "console",

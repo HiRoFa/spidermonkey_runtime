@@ -136,19 +136,19 @@ unsafe extern "C" fn module_dynamic_import(
     rooted!(in (cx) let mut closure_root = jsapi_utils::objects::new_object(cx));
     rooted!(in (cx) let promise_val_root = ObjectValue(*promise));
     rooted!(in (cx) let specifier_val_root = StringValue(&**specifier));
-    jsapi_utils::objects::set_es_obj_prop_val_raw(
+    jsapi_utils::objects::set_es_obj_prop_value(
         cx,
         closure_root.handle(),
         "promise",
         promise_val_root.handle(),
     );
-    jsapi_utils::objects::set_es_obj_prop_val(
+    jsapi_utils::objects::set_es_obj_prop_value_raw(
         cx,
         closure_root.handle().into(),
         "reference_private",
         reference_private,
     );
-    jsapi_utils::objects::set_es_obj_prop_val_raw(
+    jsapi_utils::objects::set_es_obj_prop_value(
         cx,
         closure_root.handle(),
         "specifier",
@@ -183,9 +183,9 @@ unsafe extern "C" fn module_dynamic_import(
             file_name.as_str()
         );
 
-        rt_arc.do_in_es_runtime_thread(move |sm_rt| {
+        rt_arc.do_in_es_event_queue(move |sm_rt| {
             // compile module / get from cache here
-            // resolve or reject promise here (in esrt_worker_thread)
+            // resolve or reject promise here (in event queue)
             trace!(
                 "module_dynamic_import: {}, load_task: back in do_in_es_runtime_thread",
                 file_name.as_str()

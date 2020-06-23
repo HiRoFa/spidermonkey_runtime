@@ -129,7 +129,7 @@ impl EsProxy {
         event_obj: EsValueFacade,
     ) {
         let p_name = self.get_canonical_name();
-        rt.do_in_es_runtime_thread(move |sm_rt| {
+        rt.do_in_es_event_queue(move |sm_rt| {
             sm_rt.do_with_jsapi(move |_rt, cx, _global| {
                 let proxy = get_proxy(p_name.as_str()).unwrap();
                 let event_obj_value: JSVal = event_obj.to_es_value(cx);
@@ -169,7 +169,7 @@ impl EsProxy {
         event_obj: EsValueFacade,
     ) {
         let p_name = self.get_canonical_name();
-        rt.do_in_es_runtime_thread(move |sm_rt| {
+        rt.do_in_es_event_queue(move |sm_rt| {
             sm_rt.do_with_jsapi(move |_rt, cx, _global| {
                 let proxy = get_proxy(p_name.as_str()).unwrap();
                 let event_obj_value: JSVal = event_obj.to_es_value(cx);
@@ -528,7 +528,7 @@ impl EsProxyBuilder {
         let static_events = self.static_events.clone();
         // / static
 
-        rt.do_in_es_runtime_thread_sync(move |sm_rt| {
+        rt.do_in_es_event_queue_sync(move |sm_rt| {
             sm_rt.do_with_jsapi(move |_rt, cx, global| {
                 let mut builder = ProxyBuilder::new(ns, cn);
 

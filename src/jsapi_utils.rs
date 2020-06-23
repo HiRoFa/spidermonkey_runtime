@@ -2,7 +2,7 @@
 //!
 //! this mod contains utilities for working with JSAPI(SpiderMonkey)
 //! unless states otherwise you can asume that all methods in this mod and submods need to be called
-//! from the workerthread of the EsRuntime
+//! from the event queue of the EsRuntime
 //!
 //! # Example
 //!
@@ -11,7 +11,7 @@
 //!     use es_runtime::jsapi_utils;
 //!
 //! let rt = EsRuntimeBuilder::new().build();
-//! rt.do_in_es_runtime_thread_sync(|sm_rt| {
+//! rt.do_in_es_event_queue_sync(|sm_rt| {
 //!     // use jsapi_utils here
 //!     // if you need the Runtime, JSContext or Global object (which you almost allways will)
 //!     // you can use this method in the SmRuntime
@@ -43,6 +43,7 @@ use std::str;
 
 pub mod arrays;
 pub mod functions;
+pub mod handles;
 pub mod modules;
 pub mod objects;
 pub mod promises;
@@ -241,7 +242,7 @@ mod tests {
         F: FnOnce(&SmRuntime) -> R + Send + 'static,
     {
         let rt = crate::esruntime::tests::TEST_RT.clone();
-        rt.do_in_es_runtime_thread_sync(test_fn)
+        rt.do_in_es_event_queue_sync(test_fn)
     }
 
     #[test]
@@ -249,7 +250,7 @@ mod tests {
         let rt = crate::esruntime::tests::TEST_RT.clone();
 
         let test_string: String = rt.do_with_inner(|inner| {
-            inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
+            inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
                 sm_rt.do_with_jsapi(|rt, cx, global| {
                     rooted!(in(cx) let mut rval = UndefinedValue());
 
@@ -265,7 +266,7 @@ mod tests {
 
                     es_value_to_str(cx, *rval).ok().unwrap()
                 })
-            }))
+            })
         });
 
         assert_eq!(test_string, "this is a string".to_string());
@@ -282,11 +283,11 @@ mod tests {
     fn test_eval() {
         let rt = crate::esruntime::tests::TEST_RT.clone();
         let res: String = rt.do_with_inner(|inner| {
-            inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
+            inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
                 let res: Result<EsValueFacade, EsErrorInfo> =
                     sm_rt.eval("let a = 'i am eval'; a", "test_eval.es");
                 res.ok().unwrap().get_string().clone()
-            }))
+            })
         });
 
         assert_eq!(res.as_str(), "i am eval");
@@ -299,7 +300,7 @@ mod tests {
 
         let rt = crate::esruntime::tests::TEST_RT.clone();
         let res = rt.do_with_inner(|inner| {
-            inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
+            inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
                 sm_rt.do_with_jsapi(|rt, cx, global| {
                     trace!("test_report_exception 2");
 
@@ -325,7 +326,7 @@ mod tests {
 
                     "".to_string()
                 })
-            }))
+            })
         });
 
         assert_eq!(res, "quibus is not defined");

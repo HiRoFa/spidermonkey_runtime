@@ -4,7 +4,7 @@ use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsval::ObjectValue;
 
 pub(crate) fn init(rt: &EsRuntime) {
-    rt.do_in_es_runtime_thread_sync(|sm_rt| {
+    rt.do_in_es_event_queue_sync(|sm_rt| {
         sm_rt.add_global_function("setImmediate", |cx, args| {
             if args.argc_ == 0 {
                 unsafe {
@@ -50,7 +50,7 @@ pub(crate) fn init(rt: &EsRuntime) {
 
             // invoke later
             let rt = crate::spidermonkeyruntimewrapper::SmRuntime::clone_current_esrt_inner_arc();
-            rt.do_in_es_runtime_thread(move |sm_rt| {
+            rt.do_in_es_event_queue(move |sm_rt| {
                 sm_rt.do_with_jsapi(|_rt, cx, global| {
                     let func_epr =
                         crate::spidermonkeyruntimewrapper::consume_cached_object(cached_id);

@@ -86,7 +86,7 @@ impl SmRuntime {
     /// use mozjs::jsapi::CallArgs;
     ///
     /// let rt = EsRuntimeBuilder::new().build();
-    /// rt.do_in_es_runtime_thread_sync(|sm_rt| {
+    /// rt.do_in_es_event_queue_sync(|sm_rt| {
     ///     sm_rt.add_global_function("my_function", |_cx, args: CallArgs| {
     ///         // impl method here
     ///         args.rval().set(Int32Value(480));
@@ -116,7 +116,7 @@ impl SmRuntime {
         })
     }
 
-    /// construct a new SmRuntime, this should only be called from the workerthread of the MicroTaskManager
+    /// construct a new SmRuntime, this should only be called from the worker thread of the EsEventQueue
     /// here we actualy construct a new Runtime
     fn new() -> Self {
         debug!("init SmRuntime {}", thread_id::get());
@@ -676,8 +676,8 @@ unsafe extern "C" fn enqueue_promise_job(
             let sm_rt = &*sm_rt_rc.borrow();
             let esrt_inner_opt = sm_rt.opt_esrt_inner.as_ref().unwrap().upgrade();
             let esrt_inner: Arc<EsRuntimeInner> = esrt_inner_opt.unwrap();
-            let tm = esrt_inner.task_manager.clone();
-            tm.add_task_from_worker(task);
+            let event_queue = esrt_inner.event_queue.clone();
+            event_queue.add_task_from_worker(task);
         });
         result = true
     });
@@ -711,7 +711,7 @@ unsafe extern "C" fn empty(_extra: *const c_void) -> bool {
     wrap_panic(&mut || {
         result = SM_RT.with(|sm_rt_rc| {
             let sm_rt = &*sm_rt_rc.borrow();
-            sm_rt.clone_esrt_inner().task_manager.is_empty()
+            sm_rt.clone_esrt_inner().event_queue.is_empty()
         })
     });
     result
@@ -806,7 +806,7 @@ mod tests {
         log::info!("test: test_call_method_name");
         let rt = crate::esruntime::tests::TEST_RT.clone();
         let res = rt.do_with_inner(|inner| {
-            inner.do_in_es_runtime_thread_sync(
+            inner.do_in_es_event_queue_sync(
 
                 |sm_rt: &SmRuntime| {
                     sm_rt.do_with_jsapi(|rt, cx, global| {
@@ -884,7 +884,7 @@ mod tests {
         log::info!("test: test_call_method_obj_name");
         let rt = crate::esruntime::tests::TEST_RT.clone();
         let res = rt.do_with_inner(|inner| {
-            inner.do_in_es_runtime_thread_sync(
+            inner.do_in_es_event_queue_sync(
 
                 Box::new(|sm_rt: &SmRuntime| {
                     sm_rt.do_with_jsapi(|rt, cx, global| {
@@ -933,7 +933,7 @@ mod tests {
         let rt = crate::esruntime::tests::TEST_RT.clone();
         rt.do_with_inner(|inner| {
             for _x in 0..5000 {
-                inner.do_in_es_runtime_thread_sync(Box::new(|sm_rt: &SmRuntime| {
+                inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
                     sm_rt.do_with_jsapi(|rt, cx, global| {
                         rooted!(in (cx) let mut ret_val = UndefinedValue());
 
@@ -941,7 +941,7 @@ mod tests {
                             .ok()
                             .unwrap();
                     })
-                }));
+                });
                 std::thread::sleep(std::time::Duration::from_millis(10));
             }
         })
@@ -953,7 +953,7 @@ mod tests {
         use mozjs::jsapi::HandleValueArray;
 
         let rt = crate::esruntime::tests::TEST_RT.clone();
-        let ret = rt.do_in_es_runtime_thread_sync(|sm_rt: &SmRuntime| {
+        let ret = rt.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
             sm_rt.do_with_jsapi(|rt, cx, global| {
                 rooted!(in (cx) let mut func_root = UndefinedValue());
                 rt.evaluate_script(
