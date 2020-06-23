@@ -295,7 +295,7 @@ impl Proxy {
         &self,
         cx: *mut JSContext,
         obj_id: i32,
-        return_handle: mozjs::jsapi::MutableHandleValue,
+        mut return_handle: MutableHandleValue,
     ) -> Result<(), EsErrorInfo> {
         let obj_instance: *mut JSObject =
             unsafe { mozjs::jsapi::JS_NewObject(cx, &ES_PROXY_CLASS) };
@@ -1595,29 +1595,26 @@ unsafe extern "C" fn proxy_instance_finalize(_fop: *mut JSFreeOp, object: *mut J
     trace!("reflection::finalize");
 
     let ptr_usize = object as usize;
-    let id_opt = PROXY_INSTANCE_IDS.with(|piid_rc| {
+    let proxy_instance_id = PROXY_INSTANCE_IDS.with(|piid_rc| {
         let piid = &mut *piid_rc.borrow_mut();
-        piid.remove(&ptr_usize)
+        piid.remove(&ptr_usize).expect("no such instance in ids")
     });
 
-    if let Some(id) = id_opt {
-        let cn = PROXY_INSTANCE_CLASSNAMES
-            .with(|piid_rc| {
-                let piid = &mut *piid_rc.borrow_mut();
-                piid.remove(&id)
-            })
-            .unwrap();
+    let cn = PROXY_INSTANCE_CLASSNAMES.with(|piid_rc| {
+        let piid = &mut *piid_rc.borrow_mut();
+        piid.remove(&proxy_instance_id)
+            .expect("no such instance in classnames")
+    });
 
-        trace!("finalize id {} of type {}", id, cn);
-        if let Some(proxy) = get_proxy(cn.as_str()) {
-            if let Some(finalizer) = &proxy.finalizer {
-                finalizer(id);
-            }
-
-            // clear event listeners
-            let pel = &mut *proxy.event_listeners.borrow_mut();
-            pel.remove(&id);
+    trace!("finalize id {} of type {}", proxy_instance_id, cn);
+    if let Some(proxy) = get_proxy(cn.as_str()) {
+        if let Some(finalizer) = &proxy.finalizer {
+            finalizer(proxy_instance_id);
         }
+
+        // clear event listeners
+        let pel = &mut *proxy.event_listeners.borrow_mut();
+        pel.remove(&proxy_instance_id);
     }
 }
 
@@ -1658,7 +1655,8 @@ unsafe extern "C" fn proxy_construct(
 
             if obj_id_res.is_ok() {
                 let obj_id = obj_id_res.ok().unwrap();
-                let res = proxy.new_instance(cx, obj_id, args.rval());
+                let rval = jsapi_utils::handles::from_raw_handle_mut(args.rval());
+                let res = proxy.new_instance(cx, obj_id, rval);
                 match res {
                     Ok(_) => return true,
                     Err(js_err) => {
