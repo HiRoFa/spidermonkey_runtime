@@ -287,7 +287,11 @@ impl Proxy {
     /// get the canonical name of the proxy class, this includes the namespace
     /// e.g. "my.biz.MyApp"
     pub fn get_canonical_name(&self) -> String {
-        format!("{}.{}", self.namespace.join("."), self.class_name)
+        if self.namespace.is_empty() {
+            format!("{}", self.class_name)
+        } else {
+            format!("{}.{}", self.namespace.join("."), self.class_name)
+        }
     }
 
     /// instantiate a new instance of the proxy class
@@ -734,6 +738,32 @@ mod tests {
                         .ok()
                         .unwrap();
                     assert_eq!(&123, esvf.get_i32());
+                });
+            });
+            inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
+                sm_rt.cleanup();
+            });
+        });
+    }
+
+    #[test]
+    fn test_proxy_nonconstructable() {
+        log::info!("test_proxy_nonconstructable");
+        let rt = crate::esruntime::tests::TEST_RT.clone();
+
+        rt.do_with_inner(|inner| {
+            inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
+                sm_rt.do_with_jsapi(|_rt, cx, global| {
+                    let _proxy_arc = ProxyBuilder::new(vec![], "TestClass3")
+                        .method("test", |_cx, _obj_id, _args, _rval| Ok(()))
+                        .build(cx, global);
+                    let _err = sm_rt
+                        .eval(
+                            "let t = new TestClass3();",
+                            "test_proxy_nonconstructable.es",
+                        )
+                        .err()
+                        .expect("well that should have failed");
                 });
             });
             inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
@@ -1670,6 +1700,13 @@ unsafe extern "C" fn proxy_construct(
 
                 return false;
             }
+        } else {
+            JS_ReportErrorASCII(
+                cx,
+                b"class is not constructable\0".as_ptr() as *const libc::c_char,
+            );
+
+            return false;
         }
     }
 

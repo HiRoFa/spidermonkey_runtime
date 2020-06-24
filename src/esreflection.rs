@@ -193,7 +193,11 @@ impl EsProxy {
     ///assert_eq!(es_proxy.get_canonical_name().as_str(), "my.biz.MyClass");
     /// ```
     pub fn get_canonical_name(&self) -> String {
-        format!("{}.{}", self.namespace.join("."), self.class_name)
+        if self.namespace.is_empty() {
+            format!("{}", self.class_name)
+        } else {
+            format!("{}.{}", self.namespace.join("."), self.class_name)
+        }
     }
 }
 
@@ -695,6 +699,10 @@ impl EsProxyBuilder {
     /// get the canonical name of the proxy class, this includes the namespace
     /// e.g. "my.biz.MyApp"
     pub fn get_canonical_name(&self) -> String {
-        format!("{}.{}", self.namespace.join("."), self.class_name)
+        if self.namespace.is_empty() {
+            format!("{}", self.class_name)
+        } else {
+            format!("{}.{}", self.namespace.join("."), self.class_name)
+        }
     }
 }
