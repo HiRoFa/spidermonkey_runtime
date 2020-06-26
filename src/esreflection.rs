@@ -194,7 +194,7 @@ impl EsProxy {
     /// ```
     pub fn get_canonical_name(&self) -> String {
         if self.namespace.is_empty() {
-            format!(self.class_name.to_string())
+            self.class_name.to_string()
         } else {
             format!("{}.{}", self.namespace.join("."), self.class_name)
         }
@@ -700,7 +700,7 @@ impl EsProxyBuilder {
     /// e.g. "my.biz.MyApp"
     pub fn get_canonical_name(&self) -> String {
         if self.namespace.is_empty() {
-            format!(self.class_name.to_string())
+            self.class_name.to_string()
         } else {
             format!("{}.{}", self.namespace.join("."), self.class_name)
         }

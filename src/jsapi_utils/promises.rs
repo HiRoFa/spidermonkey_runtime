@@ -2,11 +2,15 @@ use crate::jsapi_utils::objects::{get_constructor, get_es_obj_prop_val_as_string
 use crate::jsapi_utils::{report_es_ex, EsErrorInfo};
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
+use mozjs::jsapi::SetPromiseRejectionTrackerCallback;
+use mozjs::jsapi::StackFormat;
 use mozjs::jsval::NullValue;
 use mozjs::rust::jsapi_wrapped::NewPromiseObject;
 use mozjs::rust::jsapi_wrapped::RejectPromise;
 use mozjs::rust::jsapi_wrapped::ResolvePromise;
 use mozjs::rust::{HandleObject, HandleValue};
+use std::os::raw::c_void;
+use std::ptr;
 
 /// see if a JSObject is an instance of Promise
 pub fn object_is_promise(context: *mut JSContext, obj: HandleObject) -> bool {
@@ -167,4 +171,40 @@ mod tests {
         });
         assert_eq!(res, false);
     }
+
+    #[test]
+    fn test_promise_rejection_log() {
+        let rt = crate::esruntime::tests::TEST_RT.clone();
+        rt.eval_sync(
+            "let p = new Promise((res, rej) => {rej('poof');}); p.then((res) => {});",
+            "test_promise_rejection_log.es",
+        )
+        .ok()
+        .expect("script test_promise_rejection_log.es failed");
+    }
+}
+
+pub fn init_rejection_tracker(cx: *mut JSContext) {
+    unsafe {
+        SetPromiseRejectionTrackerCallback(cx, Some(promise_rejection_tracker), ptr::null_mut())
+    };
+}
+
+unsafe extern "C" fn promise_rejection_tracker(
+    cx: *mut JSContext,
+    _muted_errors: bool,
+    _promise: mozjs::jsapi::HandleObject,
+    _state: mozjs::jsapi::PromiseRejectionHandlingState,
+    _data: *mut c_void,
+) {
+    capture_stack!(in (cx) let stack);
+    let str_stack = stack
+        .unwrap()
+        .as_string(None, StackFormat::SpiderMonkey)
+        .unwrap();
+
+    log::error!(
+        "promise without rejection handler was rejected from:\n{}",
+        str_stack
+    );
 }
