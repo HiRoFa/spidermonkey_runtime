@@ -176,7 +176,7 @@ mod tests {
     fn test_promise_rejection_log() {
         let rt = crate::esruntime::tests::TEST_RT.clone();
         rt.eval_sync(
-            "let p = new Promise((res, rej) => {rej('poof');}); p.then((res) => {});",
+            "{let p = new Promise((res, rej) => {rej('poof');}); p.then((res) => {});}",
             "test_promise_rejection_log.es",
         )
         .ok()
@@ -184,6 +184,7 @@ mod tests {
     }
 }
 
+/// this initializes a default rejectiontracker which logs when a promise was rejected which did not have a rejection handler
 pub fn init_rejection_tracker(cx: *mut JSContext) {
     unsafe {
         SetPromiseRejectionTrackerCallback(cx, Some(promise_rejection_tracker), ptr::null_mut())
