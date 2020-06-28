@@ -2,6 +2,8 @@ use crate::jsapi_utils::{es_jsstring_to_string, es_value_to_str, report_es_ex, E
 use log::trace;
 use mozjs::glue::RUST_JSID_IS_STRING;
 use mozjs::glue::RUST_JSID_TO_STRING;
+use mozjs::jsapi::HandleObject as RawHandleObject;
+use mozjs::jsapi::HandleValue as RawHandleValue;
 use mozjs::jsapi::HandleValueArray;
 use mozjs::jsapi::JSClass;
 use mozjs::jsapi::JSContext;
@@ -71,11 +73,22 @@ pub fn get_es_obj_prop_val(
     prop_name: &str,
     ret_val: MutableHandleValue,
 ) -> Result<(), EsErrorInfo> {
+    get_es_obj_prop_val_raw(context, obj.into(), prop_name, ret_val)
+}
+
+/// get a single member of a JSObject
+#[allow(dead_code)]
+pub fn get_es_obj_prop_val_raw(
+    context: *mut JSContext,
+    obj: RawHandleObject,
+    prop_name: &str,
+    ret_val: MutableHandleValue,
+) -> Result<(), EsErrorInfo> {
     let n = format!("{}\0", prop_name);
     let ok = unsafe {
         JS_GetProperty(
             context,
-            obj.into(),
+            obj,
             n.as_ptr() as *const libc::c_char,
             ret_val.into(),
         )
@@ -98,6 +111,21 @@ pub fn get_es_obj_prop_val_as_string(
 ) -> Result<String, &'static str> {
     rooted!(in (context) let mut rval = UndefinedValue());
     let res = get_es_obj_prop_val(context, obj, prop_name, rval.handle_mut());
+    if res.is_err() {
+        panic!(res.err().unwrap().message);
+    }
+
+    es_value_to_str(context, *rval)
+}
+
+/// util method to quickly get a property of a JSObject as String
+pub fn get_es_obj_prop_val_as_string_raw(
+    context: *mut JSContext,
+    obj: RawHandleObject,
+    prop_name: &str,
+) -> Result<String, &'static str> {
+    rooted!(in (context) let mut rval = UndefinedValue());
+    let res = get_es_obj_prop_val_raw(context, obj, prop_name, rval.handle_mut());
     if res.is_err() {
         panic!(res.err().unwrap().message);
     }
@@ -239,9 +267,9 @@ pub fn get_js_obj_prop_names(context: *mut JSContext, obj: HandleObject) -> Vec<
 #[allow(dead_code)]
 pub fn set_es_obj_prop_value_raw(
     context: *mut JSContext,
-    obj: mozjs::jsapi::HandleObject,
+    obj: RawHandleObject,
     prop_name: &str,
-    prop_val: mozjs::jsapi::HandleValue,
+    prop_val: RawHandleValue,
 ) {
     let prop_name_str = format!("{}\0", prop_name);
     unsafe {

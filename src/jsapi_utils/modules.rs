@@ -7,12 +7,15 @@ use log::trace;
 use lru::LruCache;
 use mozjs::jsapi::FinishDynamicModuleImport;
 use mozjs::jsapi::Handle as RawHandle;
+use mozjs::jsapi::HandleObject as RawHandleObject;
 use mozjs::jsapi::HandleValue as RawHandleValue;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JSString;
 use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::SetModuleDynamicImportHook;
+use mozjs::jsapi::SetModuleMetadataHook;
+use mozjs::jsapi::SetModulePrivate;
 use mozjs::jsapi::SetModuleResolveHook;
 use mozjs::jsval::{NullValue, ObjectValue, StringValue};
 use mozjs::rust::{transform_u16_to_source_text, Runtime};
@@ -29,6 +32,7 @@ pub(crate) fn init_runtime_for_modules(rt: &Runtime) {
     unsafe {
         SetModuleResolveHook(rt.rt(), Some(import_module));
         SetModuleDynamicImportHook(rt.rt(), Some(module_dynamic_import));
+        SetModuleMetadataHook(rt.rt(), Some(set_module_metadata));
     };
 }
 
@@ -69,6 +73,19 @@ pub fn compile_module(
             column: 0,
         });
     }
+
+    trace!("SetModulePrivate: {}", file_name);
+
+    let private_obj = jsapi_utils::objects::new_object(context);
+    rooted!(in (context) let private_obj_root = private_obj);
+    rooted!(in (context) let path_root = jsapi_utils::new_es_value_from_str(context, file_name));
+    jsapi_utils::objects::set_es_obj_prop_value(
+        context,
+        private_obj_root.handle(),
+        "path",
+        path_root.handle(),
+    );
+    unsafe { SetModulePrivate(compiled_module, &ObjectValue(private_obj)) };
 
     trace!("ModuleInstantiate: {}", file_name);
 
@@ -156,8 +173,26 @@ unsafe extern "C" fn module_dynamic_import(
     );
 
     let file_name = jsapi_utils::es_jsstring_to_string(cx, *specifier);
+    let ref_path = if reference_private.is_undefined() {
+        "(unknown)".to_string()
+    } else {
+        rooted!(in (cx) let private_obj_root = reference_private.to_object_or_null());
+        let path_res = jsapi_utils::objects::get_es_obj_prop_val_as_string(
+            cx,
+            private_obj_root.handle(),
+            "path",
+        );
+        match path_res {
+            Ok(p) => p,
+            Err(_) => "(unknown)".to_string(),
+        }
+    };
 
-    trace!("module_dynamic_import called: {}", file_name);
+    trace!(
+        "module_dynamic_import called: {} from ref: {}",
+        file_name,
+        ref_path
+    );
 
     let closure_id = register_cached_object(cx, *closure_root);
     let rt_arc = SmRuntime::clone_current_esrt_inner_arc();
@@ -275,6 +310,41 @@ unsafe extern "C" fn module_dynamic_import(
         });
     };
     EsRuntime::add_helper_task(load_task);
+
+    true
+}
+
+unsafe extern "C" fn set_module_metadata(
+    cx: *mut JSContext,
+    private_value: RawHandleValue,
+    meta_object: RawHandleObject,
+) -> bool {
+    // the goal here is to set the "url" prop on meta_object which is the full_path prop of private_value
+    // i think :)
+
+    // lets just see what we get here first
+    let path = if !private_value.is_undefined() {
+        rooted!(in (cx) let private_obj_root = private_value.to_object_or_null());
+        let get_res = jsapi_utils::objects::get_es_obj_prop_val_as_string(
+            cx,
+            private_obj_root.handle(),
+            "path",
+        );
+        match get_res {
+            Ok(p) => p,
+            Err(_) => "(unknown)".to_string(),
+        }
+    } else {
+        "(unknown)".to_string()
+    };
+
+    rooted!(in (cx) let path_root = jsapi_utils::new_es_value_from_str(cx, path.as_str()));
+    jsapi_utils::objects::set_es_obj_prop_value_raw(
+        cx,
+        meta_object,
+        "url",
+        path_root.handle().into(),
+    );
 
     true
 }
@@ -559,6 +629,28 @@ mod tests {
         }
 
         log::debug!("test_dynamic_import: import should be done now");
+        // 'foo_test_mod.mes'
+    }
+
+    #[test]
+    // run again, see if cached works
+    fn test_dynamic_import5() {
+        log::info!("test: test_dynamic_import5");
+        let _ = test_with_sm_rt(|sm_rt| {
+            let eval_res = sm_rt.load_module(
+                "let test_dynamic_import_mod4_prom = import('foo_test_mod_dyn.mes').then((res) => {return ('ok' + res.other);})\
+                              .catch((pex) => {return ('err' + pex);});\
+                              test_dynamic_import_mod4_prom;",
+                "test_dynamic_import5.mes",
+            );
+
+            match eval_res {
+                Ok(ok_esvf) => ok_esvf,
+                Err(err) => panic!("script failed 2: {}", err.err_msg()),
+            }
+        });
+        std::thread::sleep(Duration::from_secs(5));
+        log::debug!("test_dynamic_import5: import should be done now");
         // 'foo_test_mod.mes'
     }
 }
