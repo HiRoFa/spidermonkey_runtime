@@ -26,6 +26,10 @@ pub struct EsRuntime {
     inner: Arc<EsRuntimeInner>,
 }
 
+// todo should be a trait or struct? with a
+// - has(ref_path, path)
+// - load(ref_path, path) -> (file_name: String, code: String)
+// loader should resolve real path
 pub type ModuleCodeLoader = dyn Fn(&str) -> Option<String> + Send + Sync + 'static;
 
 impl EsRuntime {

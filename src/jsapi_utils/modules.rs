@@ -138,6 +138,22 @@ fn init_module_cache() -> LruCache<String, EsPersistentRooted> {
     LruCache::new(ct)
 }
 
+fn get_path_from_module_private(cx: *mut JSContext, reference_private: RawHandleValue) -> String {
+    if !reference_private.is_undefined() {
+        rooted!(in (cx) let private_obj_root = reference_private.to_object_or_null());
+        let path_res = jsapi_utils::objects::get_es_obj_prop_val_as_string(
+            cx,
+            private_obj_root.handle(),
+            "path",
+        );
+        if path_res.is_ok() {
+            return path_res.ok().unwrap();
+        }
+    }
+
+    "(unknown)".to_string()
+}
+
 /// native function used for dynamic imports
 unsafe extern "C" fn module_dynamic_import(
     cx: *mut JSContext,
@@ -146,7 +162,7 @@ unsafe extern "C" fn module_dynamic_import(
     promise: RawHandle<*mut JSObject>,
 ) -> bool {
     // see sequence here in c
-    // https://github.com/marco-c/gecko-dev-comments-removed/blob/ab0d099cf83e6da81c541e69a4c171f7832c031d/js/src/shell/ModuleLoader.cpp#L101
+    // https://github.com/mozilla/gecko-dev/blob/master/js/src/shell/ModuleLoader.cpp
 
     trace!("module_dynamic_import called");
 
@@ -173,20 +189,7 @@ unsafe extern "C" fn module_dynamic_import(
     );
 
     let file_name = jsapi_utils::es_jsstring_to_string(cx, *specifier);
-    let ref_path = if reference_private.is_undefined() {
-        "(unknown)".to_string()
-    } else {
-        rooted!(in (cx) let private_obj_root = reference_private.to_object_or_null());
-        let path_res = jsapi_utils::objects::get_es_obj_prop_val_as_string(
-            cx,
-            private_obj_root.handle(),
-            "path",
-        );
-        match path_res {
-            Ok(p) => p,
-            Err(_) => "(unknown)".to_string(),
-        }
-    };
+    let ref_path = get_path_from_module_private(cx, reference_private);
 
     trace!(
         "module_dynamic_import called: {} from ref: {}",
@@ -323,20 +326,7 @@ unsafe extern "C" fn set_module_metadata(
     // i think :)
 
     // lets just see what we get here first
-    let path = if !private_value.is_undefined() {
-        rooted!(in (cx) let private_obj_root = private_value.to_object_or_null());
-        let get_res = jsapi_utils::objects::get_es_obj_prop_val_as_string(
-            cx,
-            private_obj_root.handle(),
-            "path",
-        );
-        match get_res {
-            Ok(p) => p,
-            Err(_) => "(unknown)".to_string(),
-        }
-    } else {
-        "(unknown)".to_string()
-    };
+    let path = get_path_from_module_private(cx, private_value);
 
     rooted!(in (cx) let path_root = jsapi_utils::new_es_value_from_str(cx, path.as_str()));
     jsapi_utils::objects::set_es_obj_prop_value_raw(
@@ -352,10 +342,13 @@ unsafe extern "C" fn set_module_metadata(
 /// native function used a import function for module loading
 unsafe extern "C" fn import_module(
     cx: *mut JSContext,
-    _reference_private: RawHandleValue,
+    reference_private: RawHandleValue,
     specifier: RawHandle<*mut JSString>,
 ) -> *mut JSObject {
     let file_name = jsapi_utils::es_jsstring_to_string(cx, *specifier);
+    let ref_path = get_path_from_module_private(cx, reference_private);
+
+    trace!("import_module {} from ref {}", file_name, ref_path);
 
     // see if we have that module
     let cached: Option<*mut JSObject> = MODULE_CACHE.with(|cache_rc| {
