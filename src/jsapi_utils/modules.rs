@@ -638,9 +638,9 @@ mod tests {
         log::info!("test: test_dynamic_import5");
         let _ = test_with_sm_rt(|sm_rt| {
             let eval_res = sm_rt.load_module(
-                "let test_dynamic_import_mod4_prom = import('foo_test_mod_dyn.mes').then((res) => {return ('ok' + res.other);})\
+                "let test_dynamic_import_mod5_prom = import('foo_test_mod_dyn.mes').then((res) => {return ('ok' + res.other);})\
                               .catch((pex) => {return ('err' + pex);});\
-                              test_dynamic_import_mod4_prom;",
+                              test_dynamic_import_mod5_prom;",
                 "test_dynamic_import5.mes",
             );
 
