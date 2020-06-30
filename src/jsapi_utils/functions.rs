@@ -16,7 +16,7 @@ use mozjs::jsapi::JS_ObjectIsFunction;
 use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsval::JSVal;
 use mozjs::jsval::UndefinedValue;
-use mozjs::rust::{HandleObject, HandleValue, MutableHandleValue};
+use mozjs::rust::{HandleObject, HandleValue, MutableHandleObject, MutableHandleValue};
 
 /// call a method by namespace and name
 pub fn call_method_name(
@@ -313,6 +313,15 @@ pub fn new_native_constructor(
     ret
 
     //https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/JSAPI_reference/JS_DefineFunction
+}
+
+pub fn new_callback<C>(_cx: *mut JSContext, _rval: MutableHandleObject, _callback: C) -> bool
+where
+    C: Fn(Vec<HandleValue>, MutableHandleValue) -> bool,
+{
+    // todo create a JSClassOps thingy with a finalizer which is used to remove the closure from our own AutoIdMap
+    // id should be added to instance of JSFunction with a permanent prop (todo, figure out symbols)
+    true
 }
 
 #[cfg(test)]

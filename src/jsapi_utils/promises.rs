@@ -1,10 +1,15 @@
 use crate::jsapi_utils::{report_es_ex, EsErrorInfo};
+use mozjs::jsapi::AddPromiseReactions;
+use mozjs::jsapi::GetPromiseResult;
+use mozjs::jsapi::GetPromiseState;
+use mozjs::jsapi::HandleObject as RawHandleObject;
 use mozjs::jsapi::IsPromiseObject;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
+use mozjs::jsapi::PromiseState;
 use mozjs::jsapi::SetPromiseRejectionTrackerCallback;
 use mozjs::jsapi::StackFormat;
-use mozjs::jsval::NullValue;
+use mozjs::jsval::{JSVal, NullValue};
 use mozjs::rust::jsapi_wrapped::NewPromiseObject;
 use mozjs::rust::jsapi_wrapped::RejectPromise;
 use mozjs::rust::jsapi_wrapped::ResolvePromise;
@@ -12,9 +17,62 @@ use mozjs::rust::{HandleObject, HandleValue};
 use std::os::raw::c_void;
 use std::ptr;
 
-/// see if a JSObject is an instance of Promise
+/// Returns true if the given object is an unwrapped PromiseObject, false otherwise.
 pub fn object_is_promise(obj: HandleObject) -> bool {
-    unsafe { IsPromiseObject(obj.into()) }
+    object_is_promise_raw(obj.into())
+}
+
+/// Returns true if the given object is an unwrapped PromiseObject, false otherwise.
+pub fn object_is_promise_raw(obj: RawHandleObject) -> bool {
+    unsafe { IsPromiseObject(obj) }
+}
+
+/// Returns the given Promise's result: either the resolution value for fulfilled promises, or the rejection reason for rejected ones.
+pub fn get_promise_result(promise: HandleObject) -> JSVal {
+    get_promise_result_raw(promise.into())
+}
+
+/// Returns the given Promise's result: either the resolution value for fulfilled promises, or the rejection reason for rejected ones.
+pub fn get_promise_result_raw(promise: RawHandleObject) -> JSVal {
+    unsafe { GetPromiseResult(promise) }
+}
+
+/// Unforgeable, optimized version of the JS builtin Promise.prototype.then.
+/// Takes a Promise instance and onResolve, onReject callables to enqueue as reactions for that promise. In difference to Promise.prototype.then, this doesn't create and return a new Promise instance.
+/// Throws a TypeError if promise isn't a Promise (or possibly a different error if it's a security wrapper or dead object proxy).
+/// Asserts that onFulfilled and onRejected are each either callable or null.
+pub fn add_promise_reactions(
+    cx: *mut JSContext,
+    promise: HandleObject,
+    then: HandleObject,
+    catch: HandleObject,
+) -> bool {
+    add_promise_reactions(cx, promise.into(), then.into(), catch.into())
+}
+
+/// Unforgeable, optimized version of the JS builtin Promise.prototype.then.
+/// Takes a Promise instance and onResolve, onReject callables to enqueue as reactions for that promise. In difference to Promise.prototype.then, this doesn't create and return a new Promise instance.
+/// Throws a TypeError if promise isn't a Promise (or possibly a different error if it's a security wrapper or dead object proxy).
+/// Asserts that onFulfilled and onRejected are each either callable or null.
+pub fn add_promise_reactions_raw(
+    cx: *mut JSContext,
+    promise: RawHandleObject,
+    then: RawHandleObject,
+    catch: RawHandleObject,
+) -> bool {
+    unsafe { AddPromiseReactions(cx, promise, then, catch) }
+}
+
+/// Returns the given Promise's state as a JS::PromiseState enum value.
+/// Returns JS::PromiseState::Pending if the given object is a wrapper that can't safely be unwrapped.
+pub fn get_promise_state(promise: HandleObject) -> PromiseState {
+    unsafe { GetPromiseState(promise.into()) }
+}
+
+/// Returns the given Promise's state as a JS::PromiseState enum value.
+/// Returns JS::PromiseState::Pending if the given object is a wrapper that can't safely be unwrapped.
+pub fn get_promise_state_raw(promise: RawHandleObject) -> PromiseState {
+    unsafe { GetPromiseState(promise) }
 }
 
 /// create a new Promise, this can be resolved later from rust
