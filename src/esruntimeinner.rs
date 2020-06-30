@@ -1,5 +1,5 @@
 use crate::eseventqueue::EsEventQueue;
-use crate::esruntime::{EsScriptCode, ModuleCodeLoader};
+use crate::esruntime::ModuleCodeLoader;
 use crate::esvaluefacade::EsValueFacade;
 use crate::jsapi_utils::EsErrorInfo;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
@@ -11,8 +11,7 @@ use std::sync::Arc;
 pub struct EsRuntimeInner {
     pub(crate) event_queue: Arc<EsEventQueue>,
     pub(crate) _pre_cleanup_tasks: Vec<Box<dyn Fn(&EsRuntimeInner) -> () + Send + Sync>>,
-    pub(crate) module_source_loader:
-        Option<Box<dyn Fn(&str, &str) -> Option<EsScriptCode> + Send + Sync>>,
+    pub(crate) module_source_loader: Option<Box<ModuleCodeLoader>>,
     pub(crate) module_cache_size: usize,
 }
 
