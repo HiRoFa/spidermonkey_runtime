@@ -39,7 +39,7 @@ this.esses = new (class Esses {
     */
     invoke_rust_op(name, ...args) {
 
-        console.log("invoke_rust_op_sync %s ", name);
+        console.log("invoke_rust_op %s ", name);
         try {
             let rust_result = __invoke_rust_op(name, ...args);
             return rust_result;

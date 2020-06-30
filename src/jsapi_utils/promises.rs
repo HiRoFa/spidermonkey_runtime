@@ -1,5 +1,5 @@
-use crate::jsapi_utils::objects::{get_constructor, get_es_obj_prop_val_as_string};
 use crate::jsapi_utils::{report_es_ex, EsErrorInfo};
+use mozjs::jsapi::IsPromiseObject;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::SetPromiseRejectionTrackerCallback;
@@ -13,21 +13,8 @@ use std::os::raw::c_void;
 use std::ptr;
 
 /// see if a JSObject is an instance of Promise
-pub fn object_is_promise(context: *mut JSContext, obj: HandleObject) -> bool {
-    // todo this is not the best way of doing this, we need to get the promise object of the global scope and see if that is the same as the objects constructor
-
-    let constr_res = get_constructor(context, obj);
-    if constr_res.is_ok() {
-        let constr: *mut JSObject = constr_res.ok().unwrap();
-        rooted!(in (context) let constr_root = constr);
-        if !constr.is_null() {
-            let name_prop = get_es_obj_prop_val_as_string(context, constr_root.handle(), "name");
-            if let Ok(name) = name_prop {
-                return name.as_str().eq("Promise");
-            }
-        }
-    }
-    false
+pub fn object_is_promise(obj: HandleObject) -> bool {
+    unsafe { IsPromiseObject(obj.into()) }
 }
 
 /// create a new Promise, this can be resolved later from rust
@@ -132,7 +119,7 @@ mod tests {
 
                     rooted!(in(cx) let prom_obj_root = p_value.to_object());
                     trace!("is_prom");
-                    return object_is_promise(cx, prom_obj_root.handle());
+                    return object_is_promise(prom_obj_root.handle());
                 }
                 false
             })
@@ -164,7 +151,7 @@ mod tests {
                     trace!("getting obj {}", p_value.is_object());
                     rooted!(in(cx) let prom_obj_root = p_value.to_object());
                     trace!("is_prom");
-                    return object_is_promise(cx, prom_obj_root.handle());
+                    return object_is_promise(prom_obj_root.handle());
                 }
                 false
             })

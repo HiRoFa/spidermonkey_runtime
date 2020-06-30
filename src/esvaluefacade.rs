@@ -44,10 +44,10 @@ pub struct EsValueFacade {
     val_i32: Option<i32>,
     val_f64: Option<f64>,
     val_boolean: Option<bool>,
-    val_managed_var: Option<RustManagedEsVar>,
+    val_managed_promise: Option<RustManagedEsVar>,
     val_object: Option<HashMap<String, EsValueFacade>>,
     val_array: Option<Vec<EsValueFacade>>,
-    val_promise: Option<usize>,
+    val_prepped_promise: Option<usize>,
     val_js_function: Option<(usize, Arc<EsRuntimeInner>)>,
 }
 
@@ -88,10 +88,10 @@ impl EsValueFacade {
             val_f64: None,
             val_i32: None,
             val_boolean: None,
-            val_managed_var: None,
+            val_managed_promise: None,
             val_object: None,
             val_array: None,
-            val_promise: None,
+            val_prepped_promise: None,
             val_js_function: None,
         }
     }
@@ -299,7 +299,7 @@ impl EsValueFacade {
 
         let mut ret = Self::undefined();
 
-        ret.val_promise = Some(id);
+        ret.val_prepped_promise = Some(id);
 
         ret
     }
@@ -366,7 +366,7 @@ impl EsValueFacade {
                 }
 
                 val_array = Some(vals);
-            } else if jsapi_utils::promises::object_is_promise(context, obj_root.handle()) {
+            } else if jsapi_utils::promises::object_is_promise(obj_root.handle()) {
                 // call esses.registerPromiseForResolutionInRust(prom);
 
                 rooted!(in (context) let mut id_val = UndefinedValue());
@@ -449,10 +449,10 @@ impl EsValueFacade {
             val_i32,
             val_f64,
             val_boolean,
-            val_managed_var,
+            val_managed_promise: val_managed_var,
             val_object,
             val_array,
-            val_promise: None,
+            val_prepped_promise: None,
             val_js_function,
         }
     }
@@ -478,7 +478,10 @@ impl EsValueFacade {
     }
 
     pub fn get_managed_object_id(&self) -> i32 {
-        let rmev: &RustManagedEsVar = self.val_managed_var.as_ref().expect("not a managed var");
+        let rmev: &RustManagedEsVar = self
+            .val_managed_promise
+            .as_ref()
+            .expect("not a managed var");
         rmev.obj_id
     }
 
@@ -489,7 +492,7 @@ impl EsValueFacade {
 
     /// check if this esvf was a promise which was initialized from rust by calling EsValueFacade::new_promise()
     pub fn is_prepped_promise(&self) -> bool {
-        self.val_promise.is_some()
+        self.val_prepped_promise.is_some()
     }
 
     /// wait for a promise to resolve in rust
@@ -526,7 +529,10 @@ impl EsValueFacade {
             panic!("you really should not wait for promises in a RT's event queue thread");
         }
 
-        let rmev: &RustManagedEsVar = self.val_managed_var.as_ref().expect("not a managed var");
+        let rmev: &RustManagedEsVar = self
+            .val_managed_promise
+            .as_ref()
+            .expect("not a managed var");
         let rx = rmev.opt_receiver.as_ref().expect("not a waiting promise");
         rx.recv_timeout(timeout)
     }
@@ -654,7 +660,7 @@ impl EsValueFacade {
 
     /// check if the value is a promise
     pub fn is_managed_object(&self) -> bool {
-        self.val_managed_var.is_some()
+        self.val_managed_promise.is_some()
     }
 
     /// check if the value is an object
@@ -772,7 +778,7 @@ impl EsValueFacade {
     fn to_es_promise_value(&self, context: *mut JSContext) -> JSVal {
         trace!("to_es_value.7 prepped_promise");
         let map: &mut PromiseAnswersMap = &mut PROMISE_ANSWERS.lock("to_es_value.7").unwrap();
-        let id = self.val_promise.as_ref().unwrap();
+        let id = self.val_prepped_promise.as_ref().unwrap();
         if let Some(opt) = map.get(id) {
             trace!("create promise");
             // create promise
@@ -852,7 +858,7 @@ impl Drop for EsValueFacade {
             // drop from map if val is None, task has not run yet and to_es_val was not called
             let map: &mut PromiseAnswersMap =
                 &mut PROMISE_ANSWERS.lock("EsValueFacade::drop").unwrap();
-            let id = self.val_promise.as_ref().unwrap();
+            let id = self.val_prepped_promise.as_ref().unwrap();
             if let Some(opt) = map.get(id) {
                 if opt.is_none() {
                     map.remove(id);
