@@ -402,7 +402,7 @@ unsafe extern "C" fn import_module(
 
         compiled_module
     } else {
-        return NullValue().to_object();
+        NullValue().to_object()
     }
 }
 

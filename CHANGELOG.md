@@ -6,6 +6,7 @@
 ```
 * renamed MicroTaskManager to EsEventQueue
 * added utils for converting Handle to RawHandle an vice-versa
+* relative path support for module loading (#32)
 
 # 0.4.0
 
