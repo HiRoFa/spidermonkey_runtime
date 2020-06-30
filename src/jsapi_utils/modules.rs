@@ -1,4 +1,4 @@
-use crate::esruntime::EsRuntime;
+use crate::esruntime::{EsRuntime, EsScriptCode};
 use crate::jsapi_utils;
 use crate::jsapi_utils::rooting::EsPersistentRooted;
 use crate::jsapi_utils::{report_es_ex, EsErrorInfo};
@@ -210,8 +210,8 @@ unsafe extern "C" fn module_dynamic_import(
             file_name.as_str()
         );
         // load mod code here (in helper thread)
-        let script: Option<String> = if let Some(loader) = &rt_arc.module_source_loader {
-            loader(file_name.as_str())
+        let script: Option<EsScriptCode> = if let Some(loader) = &rt_arc.module_source_loader {
+            loader(file_name.as_str(), ref_path.as_str())
         } else {
             None
         };
@@ -259,14 +259,14 @@ unsafe extern "C" fn module_dynamic_import(
                     trace!("dyn module {} was cached, finish import", file_name.as_str());
                     FinishDynamicModuleImport(cx, reference_private_val_root.handle().into(), specifier_root.handle().into(), promise_root.handle().into());
 
-                } else if let Some(script_str) = script {
+                } else if let Some(script_code) = script {
 
                     trace!("dyn module {} was loaded, compile", file_name.as_str());
 
                     let compiled_mod_obj_res = compile_module(
                         cx,
-                        script_str.as_str(),
-                        file_name.as_str(),
+                        script_code.get_code(),
+                        script_code.get_path(),
                     );
 
                     if let Ok(compiled_mod_obj) = compiled_mod_obj_res {
@@ -365,38 +365,45 @@ unsafe extern "C" fn import_module(
     };
 
     // see if we got a module code loader
-    let module_src = SM_RT.with(|sm_rt_rc| {
+    let module_code_opt: Option<EsScriptCode> = SM_RT.with(|sm_rt_rc| {
         let sm_rt = sm_rt_rc.borrow();
         let es_rt_inner = sm_rt.clone_esrt_inner();
         if let Some(module_source_loader) = &es_rt_inner.module_source_loader {
-            module_source_loader(file_name.as_str())
+            module_source_loader(file_name.as_str(), ref_path.as_str())
         } else {
-            Some(format!(""))
+            None
         }
     });
 
-    let compiled_mod_obj_res =
-        jsapi_utils::modules::compile_module(cx, module_src.unwrap().as_str(), file_name.as_str());
+    if let Some(module_code) = module_code_opt {
+        let compiled_mod_obj_res = jsapi_utils::modules::compile_module(
+            cx,
+            module_code.get_code(),
+            module_code.get_path(),
+        );
 
-    if compiled_mod_obj_res.is_err() {
-        let err = compiled_mod_obj_res.err().unwrap();
-        let err_str = format!("error loading module: {}\0", err.err_msg());
-        JS_ReportErrorASCII(cx, err_str.as_ptr() as *const libc::c_char);
-        log::debug!("error loading module, returning null: {}", &err_str);
-        return *ptr::null_mut::<*mut JSObject>();
+        if compiled_mod_obj_res.is_err() {
+            let err = compiled_mod_obj_res.err().unwrap();
+            let err_str = format!("error loading module: {}\0", err.err_msg());
+            JS_ReportErrorASCII(cx, err_str.as_ptr() as *const libc::c_char);
+            log::debug!("error loading module, returning null: {}", &err_str);
+            return *ptr::null_mut::<*mut JSObject>();
+        }
+
+        let compiled_module: *mut JSObject = compiled_mod_obj_res.ok().unwrap();
+
+        MODULE_CACHE.with(|cache_rc| {
+            trace!("caching module for {}", &file_name);
+            let cache = &mut *cache_rc.borrow_mut();
+            let mut mpr = EsPersistentRooted::default();
+            mpr.init(cx, compiled_module);
+            cache.put(file_name, mpr);
+        });
+
+        compiled_module
+    } else {
+        return NullValue().to_object();
     }
-
-    let compiled_module: *mut JSObject = compiled_mod_obj_res.ok().unwrap();
-
-    MODULE_CACHE.with(|cache_rc| {
-        trace!("caching module for {}", &file_name);
-        let cache = &mut *cache_rc.borrow_mut();
-        let mut mpr = EsPersistentRooted::default();
-        mpr.init(cx, compiled_module);
-        cache.put(file_name, mpr);
-    });
-
-    compiled_module
 }
 
 #[cfg(test)]

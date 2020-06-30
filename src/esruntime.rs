@@ -26,11 +26,25 @@ pub struct EsRuntime {
     inner: Arc<EsRuntimeInner>,
 }
 
-// todo should be a trait or struct? with a
-// - has(ref_path, path)
-// - load(ref_path, path) -> (file_name: String, code: String)
-// loader should resolve real path
-pub type ModuleCodeLoader = dyn Fn(&str) -> Option<String> + Send + Sync + 'static;
+pub struct EsScriptCode {
+    absolute_path: String,
+    script_code: String,
+}
+
+impl EsScriptCode {
+    pub fn get_path(&self) -> &str {
+        self.absolute_path.as_str()
+    }
+    pub fn get_code(&self) -> &str {
+        self.script_code.as_str()
+    }
+}
+
+/// A ModuleCodeLoader function is used to load code into the runtime
+/// The first argument is the (relative) path of the module to import
+/// The second argument is the absolute path to the module which is importing the new module (reference_path)
+/// the EsScriptCode struct which is returned should allways contain an absolute path even if the module is loaded with a relative path
+pub type ModuleCodeLoader = dyn Fn(&str, &str) -> Option<EsScriptCode> + Send + Sync + 'static;
 
 impl EsRuntime {
     /// create a builder to instantiate an EsRuntime
@@ -253,7 +267,7 @@ impl EsRuntime {
 #[cfg(test)]
 pub mod tests {
 
-    use crate::esruntime::EsRuntime;
+    use crate::esruntime::{EsRuntime, EsScriptCode};
     use crate::esvaluefacade::EsValueFacade;
     use crate::jsapi_utils::EsErrorInfo;
     use log::LevelFilter;
@@ -271,16 +285,24 @@ pub mod tests {
             .ok()
             .unwrap();
 
-        let module_code_loader = |file_name: &str| {
-            if file_name.eq("dontfind.mes") {
+        let module_code_loader = |path: &str, _ref_path: &str| {
+            if path.eq("dontfind.mes") {
                 None
-            } else if file_name.eq("buggy.mes") {
-                Some(format!(
+            } else if path.eq("buggy.mes") {
+                let code = format!(
                     "i'm a little teapot short and stout, Tip me over and pour me out!, {}",
-                    file_name
-                ))
+                    path
+                );
+                Some(EsScriptCode {
+                    absolute_path: path.to_string(),
+                    script_code: code,
+                })
             } else {
-                Some(format!("export default () => 123; export const other = Math.sqrt(8); console.log('running imported test module'); \n\nconsole.log('parsing a module from code loader for filename: {}');", file_name))
+                let code = format!("export default () => 123; export const other = Math.sqrt(8); console.log('running imported test module'); \n\nconsole.log('parsing a module from code loader for filename: {}');", path);
+                Some(EsScriptCode {
+                    absolute_path: path.to_string(),
+                    script_code: code,
+                })
             }
         };
         let rt = EsRuntime::builder()
