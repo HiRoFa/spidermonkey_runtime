@@ -47,7 +47,7 @@ pub fn add_promise_reactions(
     then: HandleObject,
     catch: HandleObject,
 ) -> bool {
-    add_promise_reactions(cx, promise.into(), then.into(), catch.into())
+    add_promise_reactions_raw(cx, promise.into(), then.into(), catch.into())
 }
 
 /// Unforgeable, optimized version of the JS builtin Promise.prototype.then.
