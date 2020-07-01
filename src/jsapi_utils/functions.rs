@@ -1,22 +1,31 @@
 use crate::jsapi_utils::objects::get_es_obj_prop_val;
 use crate::jsapi_utils::{get_type_of, report_es_ex, EsErrorInfo};
+use log::trace;
+use mozjs::jsapi::CallArgs;
+use mozjs::jsapi::JSClass;
+use mozjs::jsapi::JSClassOps;
 use mozjs::jsapi::JSContext;
+use mozjs::jsapi::JSFreeOp;
 use mozjs::jsapi::JSFunction;
 use mozjs::jsapi::JSNative;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JSType;
 use mozjs::jsapi::JS_CallFunctionName;
 use mozjs::jsapi::JS_CallFunctionValue;
-
-use log::trace;
 use mozjs::jsapi::JS_DefineFunction;
 use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_NewFunction;
+use mozjs::jsapi::JS_NewObject;
 use mozjs::jsapi::JS_ObjectIsFunction;
+use mozjs::jsapi::JS_ReportErrorASCII;
+use mozjs::jsapi::MutableHandleObject as RawMutableHandleObject;
 use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsval::JSVal;
 use mozjs::jsval::UndefinedValue;
 use mozjs::rust::{HandleObject, HandleValue, MutableHandleObject, MutableHandleValue};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::ptr;
 
 /// call a method by namespace and name
 pub fn call_method_name(
@@ -315,12 +324,106 @@ pub fn new_native_constructor(
     //https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/JSAPI_reference/JS_DefineFunction
 }
 
-pub fn new_callback<C>(_cx: *mut JSContext, _rval: MutableHandleObject, _callback: C) -> bool
+static CALLBACK_CLASS_OPS: JSClassOps = JSClassOps {
+    addProperty: None,
+    delProperty: None,
+    enumerate: None,
+    newEnumerate: None,
+    resolve: None,
+    mayResolve: None,
+    finalize: Some(finalize_callback),
+    call: Some(call_callback),
+    hasInstance: None,
+    construct: None,
+    trace: None,
+};
+
+unsafe extern "C" fn call_callback(cx: *mut JSContext, argc: u32, vp: *mut JSVal) -> bool {
+    let args = CallArgs::from_vp(vp, argc);
+    let callback_obj: *mut JSObject = args.callee();
+    let callback_id = callback_obj as usize;
+    trace!("call callback id: {}", callback_id);
+
+    CALLBACKS.with(|callbacks_rc| {
+        let callbacks = &mut *callbacks_rc.borrow_mut();
+        if callbacks.contains_key(&callback_id) {
+            trace!("found callback");
+            let callback = callbacks.get(&callback_id).unwrap();
+            let mut args_vec = vec![];
+            for x in 0..args.argc_ {
+                args_vec.push(HandleValue::from_marked_location(&*args.get(x)));
+            }
+
+            let res = callback(
+                cx,
+                args_vec,
+                crate::jsapi_utils::handles::from_raw_handle_mut(args.rval()),
+            );
+            match res {
+                Ok(_) => true,
+                Err(e) => {
+                    let s = format!("error while invoking callback: {}", e);
+                    JS_ReportErrorASCII(cx, s.as_ptr() as *const libc::c_char);
+                    false
+                }
+            }
+        } else {
+            trace!("callback not found for id {}", callback_id);
+            let s = format!("callback not found for id {}", callback_id);
+            JS_ReportErrorASCII(cx, s.as_ptr() as *const libc::c_char);
+            false
+        }
+    })
+}
+unsafe extern "C" fn finalize_callback(_op: *mut JSFreeOp, callback_obj: *mut JSObject) {
+    let callback_id = callback_obj as usize;
+    trace!("finalize callback id: {}", callback_id);
+    CALLBACKS.with(|callbacks_rc| {
+        let callbacks = &mut *callbacks_rc.borrow_mut();
+        trace!("callback exists = {}", callbacks.contains_key(&callback_id));
+        callbacks.remove(&callback_id);
+    });
+}
+
+static CALLBACK_CLASS: JSClass = JSClass {
+    name: b"RustCallback\0" as *const u8 as *const libc::c_char,
+    flags: mozjs::jsapi::JSCLASS_FOREGROUND_FINALIZE,
+    cOps: &CALLBACK_CLASS_OPS as *const JSClassOps,
+    spec: ptr::null(),
+    ext: ptr::null(),
+    oOps: ptr::null(),
+};
+
+pub type Callback =
+    dyn Fn(*mut JSContext, Vec<HandleValue>, MutableHandleValue) -> Result<(), String> + 'static;
+
+thread_local! {
+    static CALLBACKS: RefCell<HashMap<usize, Box<Callback>>> = RefCell::new(HashMap::new());
+}
+
+pub fn new_callback<C>(cx: *mut JSContext, rval: MutableHandleObject, callback: C) -> bool
 where
-    C: Fn(Vec<HandleValue>, MutableHandleValue) -> bool,
+    C: Fn(*mut JSContext, Vec<HandleValue>, MutableHandleValue) -> Result<(), String> + 'static,
 {
-    // todo create a JSClassOps thingy with a finalizer which is used to remove the closure from our own AutoIdMap
-    // id should be added to instance of JSFunction with a permanent prop (todo, figure out symbols)
+    new_callback_raw(cx, rval.into(), callback)
+}
+
+pub fn new_callback_raw<C>(cx: *mut JSContext, rval: RawMutableHandleObject, callback: C) -> bool
+where
+    C: Fn(*mut JSContext, Vec<HandleValue>, MutableHandleValue) -> Result<(), String> + 'static,
+{
+    // create callback obj
+
+    let callback_obj: *mut JSObject = unsafe { JS_NewObject(cx, &CALLBACK_CLASS) };
+    rval.set(callback_obj);
+    let callback_id = callback_obj as usize;
+
+    CALLBACKS.with(move |callbacks_rc| {
+        let callbacks = &mut *callbacks_rc.borrow_mut();
+        trace!("inserting callback with id {}", callback_id);
+        callbacks.insert(callback_id, Box::new(callback));
+    });
+
     true
 }
 
@@ -328,11 +431,13 @@ where
 mod tests {
     use crate::jsapi_utils;
     use crate::jsapi_utils::functions::{
-        call_method_name, call_obj_method_name, value_is_function,
+        call_method_name, call_obj_method_name, new_callback, value_is_function,
     };
     use crate::jsapi_utils::report_es_ex;
     use crate::jsapi_utils::tests::test_with_sm_rt;
-    use mozjs::jsval::{Int32Value, JSVal, UndefinedValue};
+    use log::trace;
+    use mozjs::jsval::{Int32Value, JSVal, ObjectValue, UndefinedValue};
+    use std::time::Duration;
 
     #[test]
     fn test_instance_of_function() {
@@ -449,5 +554,42 @@ mod tests {
         });
 
         assert_eq!(ret, 35);
+    }
+
+    #[test]
+    fn test_callback() {
+        let rt = crate::esruntime::tests::TEST_RT.clone();
+        rt.eval_sync(
+            "this.test_callback_func = function(cb){cb();};",
+            "test_callback.es",
+        )
+        .ok()
+        .expect("eval failed");
+
+        rt.do_in_es_event_queue_sync(|sm_rt| {
+            sm_rt.do_with_jsapi(|_rt, cx, global| {
+                rooted!(in (cx) let mut cb_root = mozjs::jsval::NullValue().to_object_or_null());
+                new_callback(cx, cb_root.handle_mut(), |_cx, _args, _rval| {
+                    trace!("callback closure was called");
+                    Ok(())
+                });
+                rooted!(in (cx) let func_val = ObjectValue(*cb_root));
+                rooted!(in (cx) let mut frval = UndefinedValue());
+                call_method_name(
+                    cx,
+                    global,
+                    "test_callback_func",
+                    vec![*func_val],
+                    frval.handle_mut(),
+                )
+                .ok()
+                .expect("call method failed");
+            });
+        });
+
+        rt.cleanup_sync();
+
+        std::thread::sleep(Duration::from_secs(5));
+        trace!("end of test_callback");
     }
 }
