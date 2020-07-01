@@ -415,6 +415,7 @@ where
     // create callback obj
 
     let callback_obj: *mut JSObject = unsafe { JS_NewObject(cx, &CALLBACK_CLASS) };
+
     rval.set(callback_obj);
     let callback_id = callback_obj as usize;
 

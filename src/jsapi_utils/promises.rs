@@ -13,7 +13,7 @@ use mozjs::jsval::{JSVal, NullValue};
 use mozjs::rust::jsapi_wrapped::NewPromiseObject;
 use mozjs::rust::jsapi_wrapped::RejectPromise;
 use mozjs::rust::jsapi_wrapped::ResolvePromise;
-use mozjs::rust::{HandleObject, HandleValue};
+use mozjs::rust::{HandleObject, HandleValue, MutableHandleValue};
 use std::os::raw::c_void;
 use std::ptr;
 
@@ -61,6 +61,38 @@ pub fn add_promise_reactions_raw(
     catch: RawHandleObject,
 ) -> bool {
     unsafe { AddPromiseReactions(cx, promise, then, catch) }
+}
+
+/// convert two closures to JSObjects and add them to the promise as reactions
+pub fn add_promise_reactions_callbacks<T, C>(
+    cx: *mut JSContext,
+    promise: HandleObject,
+    then_opt: Option<T>,
+    catch_opt: Option<C>,
+) -> bool
+where
+    T: Fn(*mut JSContext, Vec<HandleValue>, MutableHandleValue) -> Result<(), String> + 'static,
+    C: Fn(*mut JSContext, Vec<HandleValue>, MutableHandleValue) -> Result<(), String> + 'static,
+{
+    rooted!(in (cx) let mut then_rval = NullValue().to_object_or_null());
+    rooted!(in (cx) let mut catch_rval = NullValue().to_object_or_null());
+
+    if let Some(then) = then_opt {
+        assert!(crate::jsapi_utils::functions::new_callback(
+            cx,
+            then_rval.handle_mut(),
+            then
+        ));
+    }
+    if let Some(catch) = catch_opt {
+        assert!(crate::jsapi_utils::functions::new_callback(
+            cx,
+            catch_rval.handle_mut(),
+            catch
+        ));
+    }
+
+    add_promise_reactions(cx, promise, then_rval.handle(), catch_rval.handle())
 }
 
 /// Returns the given Promise's state as a JS::PromiseState enum value.
