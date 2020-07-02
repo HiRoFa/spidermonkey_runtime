@@ -205,7 +205,7 @@ impl SmRuntime {
         self.do_with_jsapi(|rt, _cx, global| {
             trace!("smrt.call {} in thread {}", func_name, thread_id::get());
 
-            self.call_obj_method_name(rt, global, global, obj_names, func_name, arguments)
+            self.call_obj_method_name(rt, global, obj_names, func_name, arguments)
         })
     }
 
@@ -239,7 +239,7 @@ impl SmRuntime {
                 jsapi_utils::eval(rt, global, eval_code, file_name, rval.handle_mut());
 
             if eval_res.is_ok() {
-                Ok(EsValueFacade::new_v(rt, cx, global, rval.handle()))
+                Ok(EsValueFacade::new_v(cx, rval.handle()))
             } else {
                 Err(eval_res.err().unwrap())
             }
@@ -321,7 +321,6 @@ impl SmRuntime {
     fn call_obj_method_name(
         &self,
         rt: &Runtime,
-        global: HandleObject,
         scope: HandleObject,
         obj_names: Vec<&str>,
         function_name: &str,
@@ -343,7 +342,7 @@ impl SmRuntime {
             );
 
             if res2.is_ok() {
-                Ok(EsValueFacade::new_v(rt, context, global, rval.handle()))
+                Ok(EsValueFacade::new_v(context, rval.handle()))
             } else {
                 Err(res2.err().unwrap())
             }
@@ -354,9 +353,7 @@ impl SmRuntime {
     #[allow(dead_code)]
     fn call_method_name(
         &self,
-        rt: &Runtime,
         context: *mut JSContext,
-        global: HandleObject,
         scope: HandleObject,
         function_name: &str,
         args: Vec<EsValueFacade>,
@@ -373,7 +370,7 @@ impl SmRuntime {
             );
 
             if res2.is_ok() {
-                Ok(EsValueFacade::new_v(rt, context, global, rval.handle()))
+                Ok(EsValueFacade::new_v(context, rval.handle()))
             } else {
                 Err(res2.err().unwrap())
             }
@@ -575,18 +572,12 @@ fn invoke_rust_op_esvf(
         trace!("about to borrow sm_rt");
         let sm_rt = &*sm_rt_rc.borrow();
 
-        let rt = &sm_rt.runtime;
         rooted!(in (context) let global_root = sm_rt.global_obj);
 
         for x in 1..args.argc_ {
             let var_arg: mozjs::rust::HandleValue =
                 unsafe { mozjs::rust::Handle::from_raw(args.get(x)) };
-            args_vec.push(EsValueFacade::new_v(
-                rt,
-                context,
-                global_root.handle(),
-                var_arg,
-            ));
+            args_vec.push(EsValueFacade::new_v(context, var_arg));
         }
 
         if as_promise {
@@ -792,43 +783,37 @@ mod tests {
         log::info!("test: test_call_method_name");
         let rt = crate::esruntime::tests::TEST_RT.clone();
         let res = rt.do_with_inner(|inner| {
-            inner.do_in_es_event_queue_sync(
+            inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
+                sm_rt.do_with_jsapi(|rt, cx, global| {
+                    rooted!(in(cx) let mut rval = UndefinedValue());
+                    let _eval_res = jsapi_utils::eval(
+                        rt,
+                        global,
+                        "this.test_func_1 = function test_func_1(a, b, c){return (a + '_' + b + '_' + c);};",
+                        "test_call_method_name.es",
+                        rval.handle_mut(),
+                    );
 
-                |sm_rt: &SmRuntime| {
-                    sm_rt.do_with_jsapi(|rt, cx, global| {
-                        rooted!(in(cx) let mut rval = UndefinedValue());
-                        let _eval_res = jsapi_utils::eval(
-                            rt,
-                            global,
-                            "this.test_func_1 = function test_func_1(a, b, c){return (a + '_' + b + '_' + c);};",
-                            "test_call_method_name.es",
-                            rval.handle_mut(),
-                        );
+                    let res = sm_rt.call_method_name(
+                        cx,
+                        global,
+                        "test_func_1",
+                        vec![
+                            EsValueFacade::new_str("abc".to_string()),
+                            EsValueFacade::new_bool(true),
+                            EsValueFacade::new_i32(123)
+                        ],
+                    );
 
-                        let res = sm_rt.call_method_name(
-                            rt,
-                            cx,
-                            global,
-                            global,
-                            "test_func_1",
-                            vec![
-                                EsValueFacade::new_str("abc".to_string()),
-                                EsValueFacade::new_bool(true),
-                                EsValueFacade::new_i32(123)
-                            ],
-                        );
-
-                        if res.is_ok() {
-                            let esvf = res.ok().unwrap();
-                            esvf.get_string().to_string()
-                        } else {
-                            let err = res.err().unwrap();
-                            panic!("err {}", err.message);
-                        }
-                    })
-                }
-
-                )
+                    if res.is_ok() {
+                        let esvf = res.ok().unwrap();
+                        esvf.get_string().to_string()
+                    } else {
+                        let err = res.err().unwrap();
+                        panic!("err {}", err.message);
+                    }
+                })
+            })
         });
 
         assert_eq!(res, "abc_true_123".to_string());
@@ -887,7 +872,6 @@ mod tests {
 
                         let res = sm_rt.call_obj_method_name(
                             rt,
-                            global,
                             global,
                             vec!["myobj", "sub"],
                             "test_func_1",

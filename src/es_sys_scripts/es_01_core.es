@@ -11,25 +11,6 @@ this.esses = new (class Esses {
 
     }
 
-    /**
-    * generate a new id and resolve values with that id later
-    */
-    registerPromiseForResolutionInRust(prom) {
-        if (typeof prom === 'object' && prom instanceof Promise) {
-            let id = this.next_id();
-            // then and catch are registered async to prevent direct resolution without id being registered in rust
-            // we also store the promise in a Map so it is not garbage collected
-            this._registered_promises.set(id, prom);
-
-            setImmediate(function() {
-                esses.register_waitfor_promise(prom, id);
-            });
-            return id;
-        } else {
-            throw Error("value pass to registerPromiseForResolutionInRust was not a Promise [" + typeof prom + "]");
-        }
-    }
-
     next_id() {
         return this._next_id++;
     }
@@ -75,34 +56,6 @@ this.esses = new (class Esses {
             throw ex;
         }
 
-    }
-
-    register_waitfor_promise(val, man_obj_id) {
-
-        console.log("register_waitfor_promise: val = %s" + typeof val);
-
-        if (val instanceof Promise) {
-            val.then((result) => {
-                console.trace('resolving esvf from es to {}', result);
-                esses.invoke_rust_op_sync('resolve_waiting_esvf_future', man_obj_id, result);
-            });
-            val.catch((ex) => {
-                console.trace('rejecting esvf from es to {}', ex);
-                esses.invoke_rust_op_sync('reject_waiting_esvf_future', man_obj_id, ex);
-            });
-            val.finally(() => {
-                console.trace('finalize promise (remove from map) id: %s', man_obj_id);
-                esses._registered_promises.remove(man_obj_id);
-            });
-        } else {
-            let t = "" + val;
-            if (val && val.constructor) {
-                t = val.constructor.name;
-            } else if (val){
-                t = JSON.stringify(val);
-            }
-            throw Error("_register_waitfor_promise_ managed obj was not a promise: " + t);
-        }
     }
 
     /**

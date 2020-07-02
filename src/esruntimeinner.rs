@@ -183,18 +183,13 @@ impl EsRuntimeInner {
         self.do_in_es_event_queue_sync(move |sm_rt| {
             sm_rt.add_global_function(name, move |cx, args: CallArgs| {
                 let mut args_vec = vec![];
-                crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
-                    let sm_rt = &*sm_rt_rc.borrow();
-                    // todo,  it sucks that i need to do this to get rt and global..
-                    sm_rt.do_with_jsapi(|rt, cx, global| {
-                        for x in 0..args.argc_ {
-                            let arg = args.get(x); // jsapi handle
-                            let var_arg: mozjs::rust::HandleValue =
-                                unsafe { mozjs::rust::Handle::from_raw(arg) };
-                            args_vec.push(EsValueFacade::new_v(rt, cx, global, var_arg));
-                        }
-                    })
-                });
+
+                for x in 0..args.argc_ {
+                    let arg = args.get(x); // jsapi handle
+                    let var_arg: mozjs::rust::HandleValue =
+                        unsafe { mozjs::rust::Handle::from_raw(arg) };
+                    args_vec.push(EsValueFacade::new_v(cx, var_arg));
+                }
 
                 let func_rc_clone = func_rc.clone();
                 let prom_res_esvf = EsValueFacade::new_promise(move || func_rc_clone(args_vec));
@@ -211,18 +206,13 @@ impl EsRuntimeInner {
         self.do_in_es_event_queue_sync(move |sm_rt| {
             sm_rt.add_global_function(name, move |cx, args: CallArgs| {
                 let mut args_vec = vec![];
-                crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
-                    let sm_rt = &*sm_rt_rc.borrow();
-                    // todo,  it sucks that i need to do this to get rt and global..
-                    sm_rt.do_with_jsapi(|rt, cx, global| {
-                        for x in 0..args.argc_ {
-                            let arg = args.get(x); // jsapi handle
-                            let var_arg: mozjs::rust::HandleValue =
-                                unsafe { mozjs::rust::Handle::from_raw(arg) };
-                            args_vec.push(EsValueFacade::new_v(rt, cx, global, var_arg));
-                        }
-                    })
-                });
+
+                for x in 0..args.argc_ {
+                    let arg = args.get(x); // jsapi handle
+                    let var_arg: mozjs::rust::HandleValue =
+                        unsafe { mozjs::rust::Handle::from_raw(arg) };
+                    args_vec.push(EsValueFacade::new_v(cx, var_arg));
+                }
 
                 let func_res = func(args_vec);
                 match func_res {

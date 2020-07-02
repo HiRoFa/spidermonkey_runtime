@@ -14,15 +14,14 @@ use either::Either;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsval::{BooleanValue, DoubleValue, Int32Value, JSVal, ObjectValue, UndefinedValue};
-use mozjs::rust::{HandleObject, HandleValue, Runtime};
-use std::cell::RefCell;
+use mozjs::rust::{HandleValue, MutableHandleValue};
 use std::collections::HashMap;
-use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
+use std::sync::mpsc::{channel, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 struct RustManagedEsVar {
-    obj_id: i32,
+    obj_id: usize,
     opt_receiver: Option<Receiver<Result<EsValueFacade, EsValueFacade>>>,
 }
 
@@ -51,10 +50,6 @@ pub struct EsValueFacade {
     val_js_function: Option<(usize, Arc<EsRuntimeInner>)>,
 }
 
-thread_local! {
-    static PROMISE_RESOLUTION_TRANSMITTERS: RefCell<HashMap<i32, Sender<Result<EsValueFacade, EsValueFacade>>>> = RefCell::new(HashMap::new());
-}
-
 type PromiseAnswersMap = AutoIdMap<PromiseResultContainerOption>;
 
 lazy_static! {
@@ -63,24 +58,6 @@ lazy_static! {
 }
 
 impl EsValueFacade {
-    pub(crate) fn resolve_future(man_obj_id: i32, res: Result<EsValueFacade, EsValueFacade>) {
-        PROMISE_RESOLUTION_TRANSMITTERS.with(|rc| {
-            let map: &mut HashMap<i32, Sender<Result<EsValueFacade, EsValueFacade>>> =
-                &mut *rc.borrow_mut();
-            let opt: Option<Sender<Result<EsValueFacade, EsValueFacade>>> = map.remove(&man_obj_id);
-            if let Some(opt_c) = opt {
-                // todo, if get_result_blocking times out, does this panic and crash the server?
-                let send_res = opt_c.send(res);
-                if send_res.is_err() {
-                    // esvaluefacade was dropped
-                    log::debug!("could not send res, maybe the EsValueFacade was dropped");
-                }
-            } else {
-                panic!("no transmitter found {}", man_obj_id);
-            }
-        })
-    }
-
     /// create a new EsValueFacade representing an undefined value
     pub fn undefined() -> Self {
         EsValueFacade {
@@ -304,12 +281,7 @@ impl EsValueFacade {
         ret
     }
 
-    pub(crate) fn new_v(
-        rt: &Runtime,
-        context: *mut JSContext,
-        global: HandleObject,
-        rval_handle: HandleValue,
-    ) -> Self {
+    pub(crate) fn new_v(context: *mut JSContext, rval_handle: HandleValue) -> Self {
         let mut val_string = None;
         let mut val_i32 = None;
         let mut val_f64 = None;
@@ -357,55 +329,67 @@ impl EsValueFacade {
                             get_res.err().unwrap().err_msg()
                         );
                     }
-                    vals.push(EsValueFacade::new_v(
-                        rt,
-                        context,
-                        global,
-                        arr_element_root.handle(),
-                    ));
+                    vals.push(EsValueFacade::new_v(context, arr_element_root.handle()));
                 }
 
                 val_array = Some(vals);
             } else if jsapi_utils::promises::object_is_promise(obj_root.handle()) {
                 // call esses.registerPromiseForResolutionInRust(prom);
 
-                rooted!(in (context) let mut id_val = UndefinedValue());
+                // todo, throw in an epr, store id in esvf
+                // in wait_for we should add promise reactions in event_queue, then get transmitter there
+                //
 
-                // ok it's a promise, now we're gonna call a method which will add then and catch to
-                // the promise so the result is reported to rust under an id
-                let reg_res: Result<(), EsErrorInfo> = jsapi_utils::functions::call_obj_method_name(
+                let cached_prom_id =
+                    spidermonkeyruntimewrapper::register_cached_object(context, *obj_root);
+
+                let (tx, rx) = channel();
+                let tx2 = tx.clone();
+                assert!(jsapi_utils::promises::add_promise_reactions_callbacks(
                     context,
-                    global,
-                    vec!["esses"],
-                    "registerPromiseForResolutionInRust",
-                    vec![rval],
-                    id_val.handle_mut(),
-                );
+                    obj_root.handle(),
+                    Some(
+                        move |cx, mut args: Vec<HandleValue>, _rval: MutableHandleValue| {
+                            // promsie was resolved
+                            let resolution = args.remove(0);
+                            let res_esvf = EsValueFacade::new_v(cx, resolution);
+                            // remove epr
+                            let _ = spidermonkeyruntimewrapper::consume_cached_object(
+                                cached_prom_id.clone(),
+                            );
+                            match tx.send(Ok(res_esvf)) {
+                                Ok(_) => Ok(()),
+                                Err(e) => Err(format!("send res error: {}", e)),
+                            }
+                        }
+                    ),
+                    Some(
+                        move |cx, mut args: Vec<HandleValue>, _rval: MutableHandleValue| {
+                            // promsie was rejected
+                            let rejection = args.remove(0);
+                            let rej_esvf = EsValueFacade::new_v(cx, rejection);
+                            // remove epr
+                            let _ = spidermonkeyruntimewrapper::consume_cached_object(
+                                cached_prom_id.clone(),
+                            );
+                            match tx2.send(Err(rej_esvf)) {
+                                Ok(_) => Ok(()),
+                                // todo, does not include error (which is "sending on a closed channel") which is not ASCII and thus fails the error handler
+                                Err(_) => Err(format!("send rej error")),
+                            }
+                            // release epr
+                        }
+                    )
+                ));
 
-                if reg_res.is_err() {
-                    panic!(
-                        "could not reg promise due to error {}",
-                        reg_res.err().unwrap().err_msg()
-                    );
-                } else {
-                    let obj_id = id_val.to_int32();
+                let opt_receiver = Some(rx);
 
-                    let (tx, rx) = channel();
-                    let opt_receiver = Some(rx);
+                let rmev: RustManagedEsVar = RustManagedEsVar {
+                    obj_id: cached_prom_id,
+                    opt_receiver,
+                };
 
-                    PROMISE_RESOLUTION_TRANSMITTERS.with(move |rc| {
-                        let map: &mut HashMap<i32, Sender<Result<EsValueFacade, EsValueFacade>>> =
-                            &mut *rc.borrow_mut();
-                        map.insert(obj_id, tx);
-                    });
-
-                    let rmev: RustManagedEsVar = RustManagedEsVar {
-                        obj_id,
-                        opt_receiver,
-                    };
-
-                    val_managed_var = Some(rmev);
-                }
+                val_managed_var = Some(rmev);
             } else if jsapi_utils::functions::object_is_function(obj) {
                 // wrap function in persistentrooted
 
@@ -435,8 +419,7 @@ impl EsValueFacade {
                         );
                     }
 
-                    let prop_esvf =
-                        EsValueFacade::new_v(rt, context, global, prop_val_root.handle());
+                    let prop_esvf = EsValueFacade::new_v(context, prop_val_root.handle());
                     map.insert(prop_name, prop_esvf);
                 }
             }
@@ -477,7 +460,7 @@ impl EsValueFacade {
         self.val_boolean.expect("i am not a boolean")
     }
 
-    pub fn get_managed_object_id(&self) -> i32 {
+    pub fn get_managed_object_id(&self) -> usize {
         let rmev: &RustManagedEsVar = self
             .val_managed_promise
             .as_ref()
@@ -599,15 +582,14 @@ impl EsValueFacade {
         args: Vec<EsValueFacade>,
     ) -> Result<EsValueFacade, EsErrorInfo> {
         trace!("EsValueFacade.invoke_function2()");
-        sm_rt
-            .do_with_jsapi(|rt, cx, global| Self::invoke_function3(cached_id, rt, cx, global, args))
+        sm_rt.do_with_jsapi(|_rt, cx, _global| Self::invoke_function3(cached_id, cx, args))
     }
 
     pub(crate) fn invoke_function3(
         cached_id: usize,
-        rt: &Runtime,
+
         cx: *mut JSContext,
-        global: HandleObject,
+
         args: Vec<EsValueFacade>,
     ) -> Result<EsValueFacade, EsErrorInfo> {
         trace!("EsValueFacade.invoke_function3()");
@@ -631,7 +613,7 @@ impl EsValueFacade {
             );
 
             if res2.is_ok() {
-                Ok(EsValueFacade::new_v(rt, cx, global, rval.handle()))
+                Ok(EsValueFacade::new_v(cx, rval.handle()))
             } else {
                 Err(res2.err().unwrap())
             }
