@@ -354,9 +354,8 @@ impl EsValueFacade {
                             let resolution = args.remove(0);
                             let res_esvf = EsValueFacade::new_v(cx, resolution);
                             // remove epr
-                            let _ = spidermonkeyruntimewrapper::consume_cached_object(
-                                cached_prom_id.clone(),
-                            );
+                            let _ =
+                                spidermonkeyruntimewrapper::consume_cached_object(cached_prom_id);
                             match tx.send(Ok(res_esvf)) {
                                 Ok(_) => Ok(()),
                                 Err(e) => Err(format!("send res error: {}", e)),
@@ -369,13 +368,12 @@ impl EsValueFacade {
                             let rejection = args.remove(0);
                             let rej_esvf = EsValueFacade::new_v(cx, rejection);
                             // remove epr
-                            let _ = spidermonkeyruntimewrapper::consume_cached_object(
-                                cached_prom_id.clone(),
-                            );
+                            let _ =
+                                spidermonkeyruntimewrapper::consume_cached_object(cached_prom_id);
                             match tx2.send(Err(rej_esvf)) {
                                 Ok(_) => Ok(()),
                                 // todo, does not include error (which is "sending on a closed channel") which is not ASCII and thus fails the error handler
-                                Err(_) => Err(format!("send rej error")),
+                                Err(_) => Err("send rej error".to_string()),
                             }
                             // release epr
                         }
@@ -861,7 +859,6 @@ impl Drop for EsValueFacade {
 mod tests {
 
     use crate::esruntime::EsRuntime;
-    use crate::esruntimeinner::EsRuntimeInner;
     use crate::esvaluefacade::EsValueFacade;
     use crate::jsapi_utils::EsErrorInfo;
     use std::collections::HashMap;
@@ -873,123 +870,61 @@ mod tests {
     fn in_and_output_vars() {
         log::info!("test: in_and_output_vars");
 
-        let rt = crate::esruntime::tests::TEST_RT.clone();
-        rt.do_with_inner(|inner| {
-            inner.register_op(
-                "test_op_0",
-                Arc::new(|_rt: &EsRuntimeInner, args: Vec<EsValueFacade>| {
-                    let args1 = args.get(0).expect("did not get a first arg");
-                    let args2 = args.get(1).expect("did not get a second arg");
+        let rt: Arc<EsRuntime> = crate::esruntime::tests::TEST_RT.clone();
+        rt.add_global_sync_function("test_op_0", |args: Vec<EsValueFacade>| {
+            let args1 = args.get(0).expect("did not get a first arg");
+            let args2 = args.get(1).expect("did not get a second arg");
 
-                    let x = *args1.get_i32() as f64;
-                    let y = *args2.get_i32() as f64;
+            let x = *args1.get_i32() as f64;
+            let y = *args2.get_i32() as f64;
 
-                    Ok(EsValueFacade::new_f64(x / y))
-                }),
-            );
-            inner.register_op(
-                "test_op_1",
-                Arc::new(|_rt: &EsRuntimeInner, args: Vec<EsValueFacade>| {
-                    let args1 = args.get(0).expect("did not get a first arg");
-                    let args2 = args.get(1).expect("did not get a second arg");
-
-                    let x = args1.get_i32();
-                    let y = args2.get_i32();
-
-                    Ok(EsValueFacade::new_i32(x * y))
-                }),
-            );
-
-            inner.register_op(
-                "test_op_2",
-                Arc::new(|_rt: &EsRuntimeInner, args: Vec<EsValueFacade>| {
-                    let args1 = args.get(0).expect("did not get a first arg");
-                    let args2 = args.get(1).expect("did not get a second arg");
-
-                    let x = args1.get_i32();
-                    let y = args2.get_i32();
-
-                    Ok(EsValueFacade::new_bool(x > y))
-                }),
-            );
-
-            inner.register_op(
-                "test_op_3",
-                Arc::new(|_rt: &EsRuntimeInner, args: Vec<EsValueFacade>| {
-                    let args1 = args.get(0).expect("did not get a first arg");
-                    let args2 = args.get(1).expect("did not get a second arg");
-
-                    let x = args1.get_i32();
-                    let y = args2.get_i32();
-
-                    let res_str = format!("{}", x * y);
-                    Ok(EsValueFacade::new_str(res_str))
-                }),
-            );
-
-            let res0 = inner.eval_sync(
-                "esses.invoke_rust_op_sync('test_op_0', 13, 17);",
-                "test_vars0.es",
-            );
-            let res1 = inner.eval_sync(
-                "esses.invoke_rust_op_sync('test_op_1', 13, 17);",
-                "test_vars1.es",
-            );
-            let res2 = inner.eval_sync(
-                "esses.invoke_rust_op_sync('test_op_2', 13, 17);",
-                "test_vars2.es",
-            );
-            let res3 = inner.eval_sync(
-                "esses.invoke_rust_op_sync('test_op_3', 13, 17);",
-                "test_vars3.es",
-            );
-            let esvf0 = res0.ok().expect("1 did not get a result");
-            let esvf1 = res1.ok().expect("1 did not get a result");
-            let esvf2 = res2.ok().expect("2 did not get a result");
-            let esvf3 = res3.ok().expect("3 did not get a result");
-
-            assert_eq!(*esvf0.get_f64(), (13_f64 / 17_f64));
-            assert_eq!(esvf1.get_i32().clone(), (13 * 17) as i32);
-            assert_eq!(esvf2.get_boolean(), false);
-            assert_eq!(esvf3.get_string(), format!("{}", 13 * 17).as_str());
+            Ok(EsValueFacade::new_f64(x / y))
         });
-    }
 
-    #[test]
-    fn in_and_output_vars2() {
-        log::info!("test: in_and_output_vars2");
+        rt.add_global_sync_function("test_op_1", |args: Vec<EsValueFacade>| {
+            let args1 = args.get(0).expect("did not get a first arg");
+            let args2 = args.get(1).expect("did not get a second arg");
 
-        let rt = crate::esruntime::tests::TEST_RT.clone();
-        rt.do_with_inner(|inner: &EsRuntimeInner| {
-            inner.register_op(
-                "test_op_4",
-                Arc::new(|_rt: &EsRuntimeInner, args: Vec<EsValueFacade>| {
-                    let func = args.get(0).expect("need at least one arg");
+            let x = args1.get_i32();
+            let y = args2.get_i32();
 
-                    assert!(func.is_function());
-
-                    let a1 = EsValueFacade::new_i32(3);
-                    let a2 = EsValueFacade::new_i32(7);
-
-                    let res = func.invoke_function(vec![a1, a2]);
-
-                    if res.is_ok() {
-                        Ok(res.ok().unwrap())
-                    } else {
-                        Err(res.err().unwrap().err_msg())
-                    }
-                }),
-            );
-
-            let res4 = inner.eval_sync(
-                "esses.invoke_rust_op_sync('test_op_4', (a, b) => {return a * b;});",
-                "test_vars4.es",
-            );
-
-            let esvf4 = res4.ok().expect("4 did not get a result");
-
-            assert_eq!(esvf4.get_i32().clone(), (7 * 3) as i32);
+            Ok(EsValueFacade::new_i32(x * y))
         });
+
+        rt.add_global_sync_function("test_op_2", |args: Vec<EsValueFacade>| {
+            let args1 = args.get(0).expect("did not get a first arg");
+            let args2 = args.get(1).expect("did not get a second arg");
+
+            let x = args1.get_i32();
+            let y = args2.get_i32();
+
+            Ok(EsValueFacade::new_bool(x > y))
+        });
+
+        rt.add_global_sync_function("test_op_3", |args: Vec<EsValueFacade>| {
+            let args1 = args.get(0).expect("did not get a first arg");
+            let args2 = args.get(1).expect("did not get a second arg");
+
+            let x = args1.get_i32();
+            let y = args2.get_i32();
+
+            let res_str = format!("{}", x * y);
+            Ok(EsValueFacade::new_str(res_str))
+        });
+
+        let res0 = rt.eval_sync("test_op_0(13, 17);", "test_vars0.es");
+        let res1 = rt.eval_sync("test_op_1(13, 17);", "test_vars1.es");
+        let res2 = rt.eval_sync("test_op_2(13, 17);", "test_vars2.es");
+        let res3 = rt.eval_sync("test_op_3(13, 17);", "test_vars3.es");
+        let esvf0 = res0.ok().expect("1 did not get a result");
+        let esvf1 = res1.ok().expect("1 did not get a result");
+        let esvf2 = res2.ok().expect("2 did not get a result");
+        let esvf3 = res3.ok().expect("3 did not get a result");
+
+        assert_eq!(*esvf0.get_f64(), (13_f64 / 17_f64));
+        assert_eq!(esvf1.get_i32().clone(), (13 * 17) as i32);
+        assert_eq!(esvf2.get_boolean(), false);
+        assert_eq!(esvf3.get_string(), format!("{}", 13 * 17).as_str());
     }
 
     #[test]

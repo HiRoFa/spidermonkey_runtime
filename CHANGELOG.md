@@ -7,6 +7,7 @@
 * renamed MicroTaskManager to EsEventQueue
 * added utils for converting Handle to RawHandle an vice-versa
 * relative path support for module loading (#32)
+* deprecated and removed invoke_rust_op (replaced with add_global_(a)sync_function)
 
 # 0.4.0
 

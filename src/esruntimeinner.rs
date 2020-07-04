@@ -165,16 +165,6 @@ impl EsRuntimeInner {
         self.event_queue.exe_task(job)
     }
 
-    pub(crate) fn register_op(
-        &self,
-        name: &'static str,
-        op: crate::spidermonkeyruntimewrapper::OP,
-    ) {
-        self.do_in_es_event_queue_mut_sync(Box::new(move |sm_rt: &mut SmRuntime| {
-            sm_rt.register_op(name, op);
-        }));
-    }
-
     pub fn add_global_async_function<F>(&self, name: &'static str, func: F)
     where
         F: Fn(Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send + Sync + 'static,
