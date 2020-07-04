@@ -147,23 +147,6 @@ impl EsRuntimeInner {
         self.event_queue.exe_task(job)
     }
 
-    pub fn do_in_es_event_queue_mut_sync<R: Send + 'static, J>(&self, mutable_job: J) -> R
-    where
-        J: FnOnce(&mut SmRuntime) -> R + Send + 'static,
-    {
-        trace!("do_in_es_runtime_thread_mut_sync");
-        // this is executed in the single thread in the Threadpool, therefore Runtime and global are stored in a thread_local
-
-        let job = || {
-            crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt| {
-                debug!("got rt from thread_local");
-                mutable_job(&mut sm_rt.borrow_mut())
-            })
-        };
-
-        self.event_queue.exe_task(job)
-    }
-
     pub fn add_global_async_function<F>(&self, name: &'static str, func: F)
     where
         F: Fn(Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send + Sync + 'static,

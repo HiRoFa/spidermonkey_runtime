@@ -181,14 +181,6 @@ impl EsRuntime {
         self.do_with_inner(|inner| inner.do_in_es_event_queue_sync(immutable_job))
     }
 
-    /// legacy method which will be removed in #18
-    pub fn do_in_es_event_queue_mut_sync<R: Send + 'static, J>(&self, mutable_job: J) -> R
-    where
-        J: FnOnce(&mut SmRuntime) -> R + Send + 'static,
-    {
-        self.do_with_inner(|inner| inner.do_in_es_event_queue_mut_sync(mutable_job))
-    }
-
     /// add a task the the "helper" thread pool
     pub fn add_helper_task<T>(task: T)
     where
