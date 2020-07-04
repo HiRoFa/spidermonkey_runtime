@@ -367,7 +367,10 @@ unsafe extern "C" fn call_callback(cx: *mut JSContext, argc: u32, vp: *mut JSVal
                 Err(e) => {
                     let s = format!("error while invoking callback: {}", e);
                     trace!("{}", s);
-                    JS_ReportErrorASCII(cx, s.as_ptr() as *const libc::c_char);
+                    JS_ReportErrorASCII(
+                        cx,
+                        b"error while invoking callback".as_ptr() as *const libc::c_char,
+                    );
                     false
                 }
             }

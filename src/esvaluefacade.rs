@@ -11,6 +11,7 @@ use crate::spidermonkeyruntimewrapper::SmRuntime;
 use crate::utils::AutoIdMap;
 use crate::{jsapi_utils, spidermonkeyruntimewrapper};
 use either::Either;
+use log::debug;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsval::{BooleanValue, DoubleValue, Int32Value, JSVal, ObjectValue, UndefinedValue};
@@ -358,7 +359,11 @@ impl EsValueFacade {
                                 spidermonkeyruntimewrapper::consume_cached_object(cached_prom_id);
                             match tx.send(Ok(res_esvf)) {
                                 Ok(_) => Ok(()),
-                                Err(e) => Err(format!("send res error: {}", e)),
+                                // todo, does not include error (which is "sending on a closed channel") which is not ASCII and thus fails the error handler
+                                Err(e) => {
+                                    debug!("send res error: {}", e);
+                                    Err("send res error".to_string())
+                                }
                             }
                         }
                     ),
@@ -373,7 +378,10 @@ impl EsValueFacade {
                             match tx2.send(Err(rej_esvf)) {
                                 Ok(_) => Ok(()),
                                 // todo, does not include error (which is "sending on a closed channel") which is not ASCII and thus fails the error handler
-                                Err(_) => Err("send rej error".to_string()),
+                                Err(e) => {
+                                    debug!("send rejection error: {}", e);
+                                    Err("send rejection error".to_string())
+                                }
                             }
                             // release epr
                         }
