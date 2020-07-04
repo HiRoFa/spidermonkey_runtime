@@ -1,5 +1,5 @@
 use crate::jsapi_utils::objects::get_es_obj_prop_val;
-use crate::jsapi_utils::{get_type_of, report_es_ex, EsErrorInfo};
+use crate::jsapi_utils::{get_pending_exception, get_type_of, EsErrorInfo};
 use log::trace;
 use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::JSClass;
@@ -17,7 +17,6 @@ use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_NewFunction;
 use mozjs::jsapi::JS_NewObject;
 use mozjs::jsapi::JS_ObjectIsFunction;
-use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::MutableHandleObject as RawMutableHandleObject;
 use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsval::JSVal;
@@ -71,7 +70,7 @@ pub fn call_method_name2(
         )
     } {
         Ok(())
-    } else if let Some(err) = report_es_ex(context) {
+    } else if let Some(err) = get_pending_exception(context) {
         Err(err)
     } else {
         Err(EsErrorInfo {
@@ -123,7 +122,7 @@ pub fn call_method_value2(
         )
     } {
         Ok(())
-    } else if let Some(err) = report_es_ex(context) {
+    } else if let Some(err) = get_pending_exception(context) {
         Err(err)
     } else {
         Err(EsErrorInfo {
@@ -367,17 +366,15 @@ unsafe extern "C" fn call_callback(cx: *mut JSContext, argc: u32, vp: *mut JSVal
                 Err(e) => {
                     let s = format!("error while invoking callback: {}", e);
                     trace!("{}", s);
-                    JS_ReportErrorASCII(
-                        cx,
-                        b"error while invoking callback".as_ptr() as *const libc::c_char,
-                    );
+                    crate::jsapi_utils::report_exception2(cx, s);
+
                     false
                 }
             }
         } else {
             trace!("callback not found for id {}", callback_id);
             let s = format!("callback not found for id {}", callback_id);
-            JS_ReportErrorASCII(cx, s.as_ptr() as *const libc::c_char);
+            crate::jsapi_utils::report_exception2(cx, s);
             false
         }
     })
@@ -441,7 +438,7 @@ mod tests {
     use crate::jsapi_utils::functions::{
         call_method_name, call_obj_method_name, new_callback, value_is_function,
     };
-    use crate::jsapi_utils::report_es_ex;
+    use crate::jsapi_utils::get_pending_exception;
     use crate::jsapi_utils::tests::test_with_sm_rt;
     use log::trace;
     use mozjs::jsval::{Int32Value, JSVal, ObjectValue, UndefinedValue};
@@ -462,7 +459,7 @@ mod tests {
                     rval.handle_mut(),
                 );
                 if res.is_err() {
-                    if let Some(err) = report_es_ex(cx) {
+                    if let Some(err) = get_pending_exception(cx) {
                         println!("err: {}", err.message);
                     }
                 } else {
@@ -536,7 +533,7 @@ mod tests {
                 );
 
                 if res.is_err() {
-                    let err_res = report_es_ex(cx);
+                    let err_res = get_pending_exception(cx);
                     if let Some(err) = err_res {
                         println!("err {}", err.message);
                     }

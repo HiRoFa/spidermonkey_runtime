@@ -17,7 +17,7 @@
 //!     // you can use this method in the SmRuntime
 //!     sm_rt.do_with_jsapi(|rt, cx, global| {
 //!         // use jsapi_utils here
-//!         let there_is_a_pending_exception = jsapi_utils::report_es_ex(cx).is_some();
+//!         let there_is_a_pending_exception = jsapi_utils::get_pending_exception(cx).is_some();
 //!     })
 //! })
 //! ```
@@ -72,15 +72,26 @@ pub fn set_gc_zeal_options(_cx: *mut JSContext) {
     debug!("not setting gc_zeal_options");
 }
 
+pub fn report_exception(cx: *mut JSContext, ex: &str) {
+    let ex_str = format!("{}\0", ex);
+    unsafe {
+        mozjs::jsapi::JS_ReportErrorUTF8(cx, ex_str.as_str().as_ptr() as *const libc::c_char)
+    };
+}
+
+pub fn report_exception2(cx: *mut JSContext, ex: String) {
+    let ex_str = format!("{}\0", ex);
+    unsafe {
+        mozjs::jsapi::JS_ReportErrorUTF8(cx, ex_str.as_str().as_ptr() as *const libc::c_char)
+    };
+}
+
 /// see if there is a pending exception and return it as an EsErrorInfo
 #[allow(dead_code)]
-pub fn report_es_ex(context: *mut JSContext) -> Option<EsErrorInfo> {
+pub fn get_pending_exception(context: *mut JSContext) -> Option<EsErrorInfo> {
     trace!("report_es_ex");
 
-    let bln_ex: bool = unsafe { JS_IsExceptionPending(context) };
-    let ret: Option<EsErrorInfo>;
-
-    if bln_ex {
+    if unsafe { JS_IsExceptionPending(context) } {
         rooted!(in(context) let mut error_value = UndefinedValue());
         if unsafe { JS_GetPendingException(context, error_value.handle_mut().into()) } {
             let js_error_obj: *mut mozjs::jsapi::JSObject = error_value.to_object();
@@ -111,17 +122,14 @@ pub fn report_es_ex(context: *mut JSContext) -> Option<EsErrorInfo> {
                 error_info.message, error_info.filename, error_info.lineno, error_info.column
             );
 
-            ret = Some(error_info);
-
             unsafe { JS_ClearPendingException(context) };
+            Some(error_info)
         } else {
-            ret = None;
+            None
         }
     } else {
-        ret = None;
+        None
     }
-
-    ret
 }
 
 /// struct that represents a script exception
@@ -168,7 +176,7 @@ pub fn eval(
     if eval_res.is_ok() {
         Ok(())
     } else {
-        let ex_opt = report_es_ex(context);
+        let ex_opt = get_pending_exception(context);
         if let Some(ex) = ex_opt {
             Err(ex)
         } else {
@@ -230,7 +238,7 @@ pub fn gc(context: *mut JSContext) {
 
 #[cfg(test)]
 mod tests {
-    use crate::jsapi_utils::{es_value_to_str, report_es_ex, EsErrorInfo};
+    use crate::jsapi_utils::{es_value_to_str, get_pending_exception, EsErrorInfo};
 
     use crate::esvaluefacade::EsValueFacade;
     use crate::jsapi_utils;
@@ -261,7 +269,7 @@ mod tests {
                         0,
                         rval.handle_mut(),
                     );
-                    let e_opt = report_es_ex(cx);
+                    let e_opt = get_pending_exception(cx);
                     assert!(e_opt.is_none());
 
                     es_value_to_str(cx, *rval).ok().unwrap()

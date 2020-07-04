@@ -1,11 +1,10 @@
 use crate::eseventqueue::EsEventQueue;
 use crate::esruntime::ModuleCodeLoader;
 use crate::esvaluefacade::EsValueFacade;
-use crate::jsapi_utils::EsErrorInfo;
+use crate::jsapi_utils::{report_exception2, EsErrorInfo};
 use crate::spidermonkeyruntimewrapper::SmRuntime;
 use log::{debug, trace};
 use mozjs::jsapi::CallArgs;
-use mozjs::jsapi::JS_ReportErrorASCII;
 use std::sync::Arc;
 
 pub struct EsRuntimeInner {
@@ -214,7 +213,7 @@ impl EsRuntimeInner {
                     Err(js_err) => {
                         // report es err
                         let s = format!("method failed\ncaused by: {}\0", js_err);
-                        unsafe { JS_ReportErrorASCII(cx, s.as_ptr() as *const libc::c_char) };
+                        report_exception2(cx, s);
                         false
                     }
                 }

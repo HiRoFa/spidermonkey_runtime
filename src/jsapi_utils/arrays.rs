@@ -1,4 +1,4 @@
-use crate::jsapi_utils::{report_es_ex, EsErrorInfo};
+use crate::jsapi_utils::{get_pending_exception, EsErrorInfo};
 use log::trace;
 use mozjs::conversions::ConversionBehavior;
 use mozjs::conversions::FromJSValConvertible;
@@ -21,7 +21,7 @@ pub fn object_is_array(context: *mut JSContext, obj: HandleObject) -> bool {
     let ok = unsafe { IsArray(context, obj.into(), &mut is_array) };
 
     if !ok {
-        if let Some(err) = report_es_ex(context) {
+        if let Some(err) = get_pending_exception(context) {
             trace!("error getting IsArray, ignoring: {}", err.message);
             return false;
         }
@@ -41,7 +41,7 @@ pub fn get_array_length(
     let ok = unsafe { JS_GetArrayLength(context, arr_obj.into(), &mut l) };
 
     if !ok {
-        if let Some(err) = report_es_ex(context) {
+        if let Some(err) = get_pending_exception(context) {
             return Err(err);
         }
     }
@@ -58,7 +58,7 @@ pub fn set_array_element(
 ) -> Result<(), EsErrorInfo> {
     let ok = unsafe { JS_SetElement(context, arr_obj.into(), idx, val.into()) };
     if !ok {
-        if let Some(err) = report_es_ex(context) {
+        if let Some(err) = get_pending_exception(context) {
             return Err(err);
         }
     }
@@ -101,7 +101,7 @@ pub fn get_array_element(
     };
 
     if !ok {
-        if let Some(err) = report_es_ex(context) {
+        if let Some(err) = get_pending_exception(context) {
             return Err(err);
         }
     }
@@ -140,7 +140,7 @@ mod tests {
     use crate::jsapi_utils::functions::call_method_value;
     use crate::jsapi_utils::objects::get_es_obj_prop_val;
     use crate::jsapi_utils::tests::test_with_sm_rt;
-    use crate::jsapi_utils::{es_value_to_str, report_es_ex};
+    use crate::jsapi_utils::{es_value_to_str, get_pending_exception};
     use mozjs::jsval::JSVal;
     use mozjs::jsval::UndefinedValue;
     use mozjs::jsval::{Int32Value, ObjectValue};
@@ -158,7 +158,7 @@ mod tests {
                 );
                 println!("created array");
                 if res.is_err() {
-                    let err_res = report_es_ex(cx);
+                    let err_res = get_pending_exception(cx);
                     if let Some(err) = err_res {
                         println!("err {}", err.message);
                     }

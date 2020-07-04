@@ -1,4 +1,6 @@
-use crate::jsapi_utils::{es_jsstring_to_string, es_value_to_str, report_es_ex, EsErrorInfo};
+use crate::jsapi_utils::{
+    es_jsstring_to_string, es_value_to_str, get_pending_exception, EsErrorInfo,
+};
 use log::trace;
 use mozjs::glue::RUST_JSID_IS_STRING;
 use mozjs::glue::RUST_JSID_TO_STRING;
@@ -95,7 +97,7 @@ pub fn get_es_obj_prop_val_raw(
     };
 
     if !ok {
-        if let Some(err) = report_es_ex(context) {
+        if let Some(err) = get_pending_exception(context) {
             return Err(err);
         }
     }
@@ -164,7 +166,7 @@ pub fn new_object_from_prototype(
     let ret: *mut JSObject =
         unsafe { JS_NewObjectWithGivenProto(context, &CLASS as *const _, prototype.into_handle()) };
     if ret.is_null() {
-        let err_opt = report_es_ex(context);
+        let err_opt = get_pending_exception(context);
         if let Some(err) = err_opt {
             Err(err)
         } else {
@@ -185,7 +187,7 @@ pub fn new_from_constructor(
     let ok =
         unsafe { mozjs::jsapi::Construct1(context, constructor.into(), &args, ret_val.into()) };
     if !ok {
-        if let Some(err) = report_es_ex(context) {
+        if let Some(err) = get_pending_exception(context) {
             return Err(err);
         }
     }
@@ -211,7 +213,7 @@ pub fn get_prototype(
     let ok = unsafe { JS_GetPrototype(context, obj.into_handle(), ret_val.into()) };
 
     if !ok {
-        let err_opt = report_es_ex(context);
+        let err_opt = get_pending_exception(context);
         if let Some(err) = err_opt {
             Err(err)
         } else {
@@ -233,7 +235,7 @@ pub fn get_constructor(
     // todo rebuild with ret_val: MutableHandle instead of returning Value
 
     if ret.is_null() {
-        let err_opt = report_es_ex(context);
+        let err_opt = get_pending_exception(context);
         if let Some(err) = err_opt {
             Err(err)
         } else {
@@ -331,7 +333,7 @@ mod tests {
     use crate::jsapi_utils::objects::{
         get_es_obj_prop_val, get_js_obj_prop_names, get_or_define_namespace,
     };
-    use crate::jsapi_utils::{es_value_to_str, report_es_ex};
+    use crate::jsapi_utils::{es_value_to_str, get_pending_exception};
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use mozjs::jsval::{JSVal, UndefinedValue};
     use std::borrow::Borrow;
@@ -360,7 +362,7 @@ mod tests {
 
                     trace!("4");
 
-                    let e_opt = report_es_ex(cx);
+                    let e_opt = get_pending_exception(cx);
                     assert!(e_opt.is_none());
 
                     trace!("5");
@@ -433,7 +435,7 @@ mod tests {
                     );
 
                     if eval_res.is_err() {
-                        let e_opt = report_es_ex(cx);
+                        let e_opt = get_pending_exception(cx);
                         assert!(e_opt.is_none());
                     }
 

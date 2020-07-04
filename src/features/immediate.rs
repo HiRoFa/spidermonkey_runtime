@@ -1,30 +1,18 @@
 use crate::esruntime::EsRuntime;
+use crate::jsapi_utils::report_exception;
 use log::{error, trace};
-use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsval::ObjectValue;
 
 pub(crate) fn init(rt: &EsRuntime) {
     rt.do_in_es_event_queue_sync(|sm_rt| {
         sm_rt.add_global_function("setImmediate", |cx, args| {
             if args.argc_ == 0 {
-                unsafe {
-                    JS_ReportErrorASCII(
-                        cx,
-                        b"setImmediate requires at least one argument\0".as_ptr()
-                            as *const libc::c_char,
-                    );
-                }
+                report_exception(cx, "setImmediate requires at least one argument");
                 return false;
             }
 
             if args.argc_ > 1 {
-                unsafe {
-                    JS_ReportErrorASCII(
-                        cx,
-                        b"setImmediate does not suppport arguments for now\0".as_ptr()
-                            as *const libc::c_char,
-                    );
-                }
+                report_exception(cx, "setImmediate does not support arguments for now");
                 return false;
             }
 
@@ -32,13 +20,7 @@ pub(crate) fn init(rt: &EsRuntime) {
             let func_val = *func_val_handle;
             let is_func = crate::jsapi_utils::functions::value_is_function(cx, func_val);
             if !is_func {
-                unsafe {
-                    JS_ReportErrorASCII(
-                        cx,
-                        b"setImmediate requires a function as its first argument\0".as_ptr()
-                            as *const libc::c_char,
-                    );
-                }
+                report_exception(cx, "setImmediate requires a function as its first argument");
                 return false;
             }
 

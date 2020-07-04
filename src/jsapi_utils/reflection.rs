@@ -80,7 +80,7 @@
 //!
 
 use crate::jsapi_utils::rooting::EsPersistentRooted;
-use crate::jsapi_utils::{es_jsid_to_string, EsErrorInfo};
+use crate::jsapi_utils::{es_jsid_to_string, report_exception2, EsErrorInfo};
 
 use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::JSClass;
@@ -89,7 +89,6 @@ use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSFreeOp;
 use mozjs::jsapi::JSNative;
 use mozjs::jsapi::JSObject;
-use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::JSCLASS_FOREGROUND_FINALIZE;
 use mozjs::jsval::{NullValue, ObjectValue, UndefinedValue};
 use mozjs::rust::{HandleObject, HandleValue, MutableHandleValue};
@@ -985,8 +984,8 @@ unsafe extern "C" fn proxy_instance_getter(
                             args.rval().set(rval.get());
                         }
                         Err(js_err) => {
-                            let s = format!("method {} failed\ncaused by: {}\0", p_name, js_err);
-                            JS_ReportErrorASCII(cx, s.as_ptr() as *const libc::c_char);
+                            let s = format!("method {} failed\ncaused by: {}", p_name, js_err);
+                            report_exception2(cx, s);
                             return false;
                         }
                     }
@@ -1037,8 +1036,8 @@ unsafe extern "C" fn proxy_static_getter(
                             args.rval().set(rval.get());
                         }
                         Err(js_err) => {
-                            let s = format!("getter {} failed\ncaused by: {}\0", p_name, js_err);
-                            JS_ReportErrorASCII(cx, s.as_ptr() as *const libc::c_char);
+                            let s = format!("getter {} failed\ncaused by: {}", p_name, js_err);
+                            report_exception2(cx, s);
                             return false;
                         }
                     }
@@ -1133,8 +1132,8 @@ unsafe extern "C" fn proxy_instance_setter(
                     trace!("reflection::setter setting val");
                     let js_val_res = prop.1(cx, obj_id, val);
                     if let Err(js_err) = js_val_res {
-                        let s = format!("setter {} failed\ncaused by: {}\0", p_name, js_err);
-                        JS_ReportErrorASCII(cx, s.as_ptr() as *const libc::c_char);
+                        let s = format!("setter {} failed\ncaused by: {}", p_name, js_err);
+                        report_exception2(cx, s);
                         return false;
                     }
                 }
@@ -1178,8 +1177,8 @@ unsafe extern "C" fn proxy_static_setter(
                     trace!("reflection::static_setter setting val");
                     let js_val_res = prop.1(cx, val);
                     if let Err(js_err) = js_val_res {
-                        let s = format!("setter {} failed\ncaused by: {}\0", p_name, js_err);
-                        JS_ReportErrorASCII(cx, s.as_ptr() as *const libc::c_char);
+                        let s = format!("setter {} failed\ncaused by: {}", p_name, js_err);
+                        report_exception2(cx, s);
                         return false;
                     }
                 }
@@ -1553,8 +1552,8 @@ unsafe extern "C" fn proxy_instance_method(
                             args.rval().set(rval.get());
                         }
                         Err(js_err) => {
-                            let s = format!("method {} failed\ncaused by: {}\0", p_name, js_err);
-                            JS_ReportErrorASCII(cx, s.as_ptr() as *const libc::c_char);
+                            let s = format!("method {} failed\ncaused by: {}", p_name, js_err);
+                            report_exception2(cx, s);
                             return false;
                         }
                     }
@@ -1608,8 +1607,8 @@ unsafe extern "C" fn proxy_static_method(
                         }
                         Err(js_err) => {
                             let s =
-                                format!("static method {} failed\ncaused by: {}\0", p_name, js_err);
-                            JS_ReportErrorASCII(cx, s.as_ptr() as *const libc::c_char);
+                                format!("static method {} failed\ncaused by: {}", p_name, js_err);
+                            report_exception2(cx, s);
                             return false;
                         }
                     }
@@ -1690,27 +1689,25 @@ unsafe extern "C" fn proxy_construct(
                 match res {
                     Ok(_) => return true,
                     Err(js_err) => {
-                        let err_str = format!("new_instance failed{}\0", js_err.err_msg());
-                        JS_ReportErrorASCII(cx, err_str.as_ptr() as *const libc::c_char);
+                        let err_str = format!("new_instance failed: {}", js_err.err_msg());
+                        report_exception2(cx, err_str);
                         return false;
                     }
                 }
             } else {
-                JS_ReportErrorASCII(cx, b"constructor failed\0".as_ptr() as *const libc::c_char);
+                let err_str = format!("constructor failed: {}", obj_id_res.err().unwrap());
+                report_exception2(cx, err_str);
 
                 return false;
             }
         } else {
-            JS_ReportErrorASCII(
-                cx,
-                b"class is not constructable\0".as_ptr() as *const libc::c_char,
-            );
+            report_exception2(cx, format!("class '{}' is not constructable", class_name));
 
             return false;
         }
     }
 
-    JS_ReportErrorASCII(cx, b"no such class found\0".as_ptr() as *const libc::c_char);
+    report_exception2(cx, format!("class '{}' not found", class_name));
 
     false
 }

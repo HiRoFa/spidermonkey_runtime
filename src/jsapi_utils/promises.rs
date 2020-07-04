@@ -1,4 +1,4 @@
-use crate::jsapi_utils::{report_es_ex, EsErrorInfo};
+use crate::jsapi_utils::{get_pending_exception, EsErrorInfo};
 use mozjs::jsapi::AddPromiseReactions;
 use mozjs::jsapi::GetPromiseResult;
 use mozjs::jsapi::GetPromiseState;
@@ -134,7 +134,7 @@ pub fn resolve_promise(
     let ok = unsafe { ResolvePromise(context, promise, resolution_value) };
     if ok {
         Ok(())
-    } else if let Some(err) = report_es_ex(context) {
+    } else if let Some(err) = get_pending_exception(context) {
         Err(err)
     } else {
         Err(EsErrorInfo {
@@ -155,7 +155,7 @@ pub fn reject_promise(
     let ok = unsafe { RejectPromise(context, promise, rejection_value) };
     if ok {
         Ok(())
-    } else if let Some(err) = report_es_ex(context) {
+    } else if let Some(err) = get_pending_exception(context) {
         Err(err)
     } else {
         Err(EsErrorInfo {
@@ -170,8 +170,8 @@ pub fn reject_promise(
 #[cfg(test)]
 mod tests {
     use crate::jsapi_utils;
+    use crate::jsapi_utils::get_pending_exception;
     use crate::jsapi_utils::promises::object_is_promise;
-    use crate::jsapi_utils::report_es_ex;
     use crate::jsapi_utils::tests::test_with_sm_rt;
     use log::trace;
     use mozjs::jsval::UndefinedValue;
@@ -199,7 +199,7 @@ mod tests {
                     rval.handle_mut(),
                 );
                 if res.is_err() {
-                    if let Some(err) = report_es_ex(cx) {
+                    if let Some(err) = get_pending_exception(cx) {
                         trace!("err: {}", err.message);
                     }
                 } else {
@@ -232,7 +232,7 @@ mod tests {
                     rval.handle_mut(),
                 );
                 if res.is_err() {
-                    if let Some(err) = report_es_ex(cx) {
+                    if let Some(err) = get_pending_exception(cx) {
                         trace!("err: {}", err.message);
                     }
                 } else {

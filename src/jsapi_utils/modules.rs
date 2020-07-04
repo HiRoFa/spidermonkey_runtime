@@ -1,7 +1,7 @@
 use crate::esruntime::{EsRuntime, EsScriptCode};
 use crate::jsapi_utils;
 use crate::jsapi_utils::rooting::EsPersistentRooted;
-use crate::jsapi_utils::{report_es_ex, EsErrorInfo};
+use crate::jsapi_utils::{get_pending_exception, report_exception2, EsErrorInfo};
 use crate::spidermonkeyruntimewrapper::{register_cached_object, SmRuntime, SM_RT};
 use log::trace;
 use lru::LruCache;
@@ -12,7 +12,6 @@ use mozjs::jsapi::HandleValue as RawHandleValue;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JSString;
-use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsapi::SetModuleDynamicImportHook;
 use mozjs::jsapi::SetModuleMetadataHook;
 use mozjs::jsapi::SetModulePrivate;
@@ -63,7 +62,7 @@ pub fn compile_module(
     // see ModuleInstantiate
     if module_script_root.is_null() {
         // failed
-        if let Some(err) = report_es_ex(context) {
+        if let Some(err) = get_pending_exception(context) {
             return Err(err);
         }
         return Err(EsErrorInfo {
@@ -92,7 +91,7 @@ pub fn compile_module(
     let res =
         unsafe { mozjs::rust::wrappers::ModuleInstantiate(context, module_script_root.handle()) };
     if !res {
-        if let Some(err) = report_es_ex(context) {
+        if let Some(err) = get_pending_exception(context) {
             return Err(err);
         }
         return Err(EsErrorInfo {
@@ -108,7 +107,7 @@ pub fn compile_module(
     let res =
         unsafe { mozjs::rust::wrappers::ModuleEvaluate(context, module_script_root.handle()) };
     if !res {
-        if let Some(err) = report_es_ex(context) {
+        if let Some(err) = get_pending_exception(context) {
             return Err(err);
         }
         return Err(EsErrorInfo {
@@ -384,9 +383,9 @@ unsafe extern "C" fn import_module(
 
         if compiled_mod_obj_res.is_err() {
             let err = compiled_mod_obj_res.err().unwrap();
-            let err_str = format!("error loading module: {}\0", err.err_msg());
-            JS_ReportErrorASCII(cx, err_str.as_ptr() as *const libc::c_char);
-            log::debug!("error loading module, returning null: {}", &err_str);
+            let err_str = format!("error loading module: {}", err.err_msg());
+            log::debug!("error loading module, returning null: {}", err_str);
+            report_exception2(cx, err_str);
             return *ptr::null_mut::<*mut JSObject>();
         }
 

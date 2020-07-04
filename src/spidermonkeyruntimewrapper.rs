@@ -488,7 +488,7 @@ unsafe extern "C" fn enqueue_promise_job(
                     trace!("checking cb.call res");
                     if call_res.is_err() {
                         debug!("job failed");
-                        if let Some(err) = jsapi_utils::report_es_ex(cx) {
+                        if let Some(err) = jsapi_utils::get_pending_exception(cx) {
                             panic!(
                                 "job failed {}:{}:{} -> {}",
                                 err.filename, err.lineno, err.column, err.message

@@ -1,11 +1,11 @@
 use crate::esruntime::EsRuntime;
 use crate::jsapi_utils;
+use crate::jsapi_utils::report_exception;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
 use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JS_DefineFunction;
-use mozjs::jsapi::JS_ReportErrorASCII;
 use mozjs::jsval::{JSVal, ObjectValue, UndefinedValue};
 use mozjs::rust::HandleValue;
 use std::str::FromStr;
@@ -331,10 +331,7 @@ unsafe extern "C" fn console_assert(
     let args = CallArgs::from_vp(vp, argc);
 
     if argc < 2 {
-        JS_ReportErrorASCII(
-            context,
-            b"console.assert requires at least 2 arguments\0".as_ptr() as *const libc::c_char,
-        );
+        report_exception(context, "console.assert requires at least 2 arguments");
     }
 
     let mut values: Vec<JSVal> = vec![];
@@ -346,10 +343,9 @@ unsafe extern "C" fn console_assert(
 
     let assertion_val = values.remove(0);
     if !assertion_val.is_boolean() {
-        JS_ReportErrorASCII(
+        report_exception(
             context,
-            b"first argument to console.assert should be a boolean value\0".as_ptr()
-                as *const libc::c_char,
+            "first argument to console.assert should be a boolean value",
         );
     }
     let assertion: bool = assertion_val.to_boolean();
