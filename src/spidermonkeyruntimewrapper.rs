@@ -242,7 +242,7 @@ impl SmRuntime {
             {
                 rooted!(in (cx) let mut ret_val = UndefinedValue());
                 // run esses.cleanup();
-                let cleanup_res = jsapi_utils::functions::call_obj_method_name(
+                let cleanup_res = jsapi_utils::functions::call_namespace_function_name(
                     cx,
                     global,
                     vec!["esses"],
@@ -284,14 +284,15 @@ impl SmRuntime {
 
         rooted!(in(context) let mut rval = UndefinedValue());
         do_with_rooted_esvf_vec(context, args, |hva| {
-            let res2: Result<(), EsErrorInfo> = jsapi_utils::functions::call_obj_method_name2(
-                context,
-                scope,
-                obj_names,
-                function_name,
-                hva,
-                rval.handle_mut(),
-            );
+            let res2: Result<(), EsErrorInfo> =
+                jsapi_utils::functions::call_namespace_function_name2(
+                    context,
+                    scope,
+                    obj_names,
+                    function_name,
+                    hva,
+                    rval.handle_mut(),
+                );
 
             if res2.is_ok() {
                 Ok(EsValueFacade::new_v(context, rval.handle()))
@@ -313,7 +314,7 @@ impl SmRuntime {
         rooted!(in(context) let mut rval = UndefinedValue());
 
         do_with_rooted_esvf_vec(context, args, |hva| {
-            let res2: Result<(), EsErrorInfo> = jsapi_utils::functions::call_method_name2(
+            let res2: Result<(), EsErrorInfo> = jsapi_utils::functions::call_function_name2(
                 context,
                 scope,
                 function_name,
@@ -799,7 +800,7 @@ mod tests {
                     trace!("test_hva_loop / 2");
                     ret = do_with_rooted_esvf_vec(cx, args, |hva: HandleValueArray| {
                         rooted!(in (cx) let mut rval = UndefinedValue());
-                        jsapi_utils::functions::call_method_value2(
+                        jsapi_utils::functions::call_function_value2(
                             cx,
                             global,
                             func_root.handle(),

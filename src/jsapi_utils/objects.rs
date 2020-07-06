@@ -527,7 +527,7 @@ mod tests {
                 .unwrap();
 
                 rooted!(in (cx) let mut ret_val = UndefinedValue());
-                jsapi_utils::functions::call_method_name(
+                jsapi_utils::functions::call_function_name(
                     cx,
                     b_instance_root.handle(),
                     "a",

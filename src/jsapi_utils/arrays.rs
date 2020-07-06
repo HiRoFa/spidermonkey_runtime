@@ -137,7 +137,7 @@ mod tests {
         get_array_element, get_array_length, new_array, object_is_array, push_array_element,
         set_array_element,
     };
-    use crate::jsapi_utils::functions::call_method_value;
+    use crate::jsapi_utils::functions::call_function_value;
     use crate::jsapi_utils::objects::get_es_obj_prop_val;
     use crate::jsapi_utils::tests::test_with_sm_rt;
     use crate::jsapi_utils::{es_value_to_str, get_pending_exception};
@@ -242,7 +242,7 @@ mod tests {
 
                 rt.evaluate_script(global, "JSON.stringify.bind(JSON);", "get_stringify.es", 0, stringify_func_root.handle_mut()).ok().unwrap();
 
-                call_method_value(context, global, stringify_func_root.handle(), vec![new_rooted_arr_val.get()], stringify_res_root.handle_mut()).ok().unwrap();
+                call_function_value(context, global, stringify_func_root.handle(), vec![new_rooted_arr_val.get()], stringify_res_root.handle_mut()).ok().unwrap();
                 /*
                 // tddo, why does this cause a invalid mem ref when testing with gc_ZEAL
                 call_obj_method_name(

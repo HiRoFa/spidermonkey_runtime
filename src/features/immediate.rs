@@ -42,7 +42,7 @@ pub(crate) fn init(rt: &EsRuntime) {
                     let val = ObjectValue(func_obj);
                     rooted!(in (cx) let mut val_root = val);
 
-                    let res = crate::jsapi_utils::functions::call_method_value(
+                    let res = crate::jsapi_utils::functions::call_function_value(
                         cx,
                         global,
                         val_root.handle(),

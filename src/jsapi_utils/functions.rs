@@ -1,3 +1,4 @@
+use crate::jsapi_utils;
 use crate::jsapi_utils::objects::get_es_obj_prop_val;
 use crate::jsapi_utils::{get_pending_exception, get_type_of, EsErrorInfo};
 use log::trace;
@@ -10,6 +11,7 @@ use mozjs::jsapi::JSFunction;
 use mozjs::jsapi::JSNative;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JSType;
+use mozjs::jsapi::JS_CallFunction;
 use mozjs::jsapi::JS_CallFunctionName;
 use mozjs::jsapi::JS_CallFunctionValue;
 use mozjs::jsapi::JS_DefineFunction;
@@ -21,24 +23,50 @@ use mozjs::jsapi::MutableHandleObject as RawMutableHandleObject;
 use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsval::JSVal;
 use mozjs::jsval::UndefinedValue;
-use mozjs::rust::{HandleObject, HandleValue, MutableHandleObject, MutableHandleValue};
+use mozjs::rust::{
+    transform_u16_to_source_text, Handle, HandleFunction, HandleObject, HandleValue,
+    MutableHandleFunction, MutableHandleObject, MutableHandleValue,
+};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ffi::CString;
 use std::ptr;
 
 pub fn compile_function(
-    _cx: *mut JSContext,
-    _name: &str,
-    _body: &str,
-    _arg_names: Vec<&str>,
-    _rval: MutableHandleObject,
-) -> bool {
-    // todo
-    true
+    cx: *mut JSContext,
+    async_fn: bool,
+    name: &str,
+    body: &str,
+    arg_names: Vec<&str>,
+    rval: MutableHandleFunction,
+) -> Result<(), EsErrorInfo> {
+    trace!("compile_function / 1");
+
+    let as_pfx = if async_fn { "async " } else { "" };
+    let args_str = arg_names.join(", ");
+    let src = format!("({}function {}({}) {{{}}});", as_pfx, name, args_str, body);
+
+    let file_name = format!("compile_func_{}.es", name);
+    rooted!(in (cx) let mut script_val = ptr::null_mut::<mozjs::jsapi::JSScript>());
+    jsapi_utils::scripts::compile_script(
+        cx,
+        src.as_str(),
+        file_name.as_str(),
+        script_val.handle_mut(),
+    );
+
+    rooted!(in (cx) let mut func_val = UndefinedValue());
+    jsapi_utils::scripts::execute_script(cx, script_val.handle(), func_val.handle_mut());
+
+    let mut rval = rval;
+    let func_obj: *mut JSObject = func_val.to_object();
+    rval.set(func_obj as *mut JSFunction);
+
+    Ok(())
 }
 
-/// call a method by namespace and name
-pub fn call_method_name(
+/// call a function by namespace and name
+pub fn call_function_name(
     context: *mut JSContext,
     scope: HandleObject,
     function_name: &str,
@@ -50,7 +78,7 @@ pub fn call_method_name(
     // root the args here
     rooted!(in(context) let _argument_object = unsafe {JS_NewArrayObject(context, &arguments_value_array)});
 
-    call_method_name2(
+    call_function_name2(
         context,
         scope,
         function_name,
@@ -59,15 +87,15 @@ pub fn call_method_name(
     )
 }
 
-/// call a method by name with a rooted arguments array
-pub fn call_method_name2(
+/// call a function by name with a rooted arguments array
+pub fn call_function_name2(
     context: *mut JSContext,
     scope: HandleObject,
     function_name: &str,
     args: HandleValueArray,
     ret_val: MutableHandleValue,
 ) -> Result<(), EsErrorInfo> {
-    trace!("call_method_name2: {}", function_name);
+    trace!("call_function_name2: {}", function_name);
 
     let n = format!("{}\0", function_name);
 
@@ -93,8 +121,24 @@ pub fn call_method_name2(
     }
 }
 
-/// call a method by name
-pub fn call_method_value(
+/// call a function
+pub fn call_function(
+    context: *mut JSContext,
+    this_obj: HandleObject,
+    function: HandleFunction,
+    args: Vec<JSVal>,
+    ret_val: MutableHandleValue,
+) -> Result<(), EsErrorInfo> {
+    let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*args) };
+
+    // root the args here
+    rooted!(in(context) let _argument_object = unsafe {JS_NewArrayObject(context, &arguments_value_array)});
+
+    call_function2(context, this_obj, function, arguments_value_array, ret_val)
+}
+
+/// call a function by value
+pub fn call_function_value(
     context: *mut JSContext,
     this_obj: HandleObject,
     function_val: HandleValue,
@@ -106,7 +150,7 @@ pub fn call_method_value(
     // root the args here
     rooted!(in(context) let _argument_object = unsafe {JS_NewArrayObject(context, &arguments_value_array)});
 
-    call_method_value2(
+    call_function_value2(
         context,
         this_obj,
         function_val,
@@ -115,8 +159,38 @@ pub fn call_method_value(
     )
 }
 
-/// call a method by name with a rooted arguments array
-pub fn call_method_value2(
+/// call a function with a rooted arguments array
+pub fn call_function2(
+    context: *mut JSContext,
+    this_obj: HandleObject,
+    function: HandleFunction,
+    args: HandleValueArray,
+    ret_val: MutableHandleValue,
+) -> Result<(), EsErrorInfo> {
+    if unsafe {
+        JS_CallFunction(
+            context,
+            this_obj.into(),
+            function.into(),
+            &args,
+            ret_val.into(),
+        )
+    } {
+        Ok(())
+    } else if let Some(err) = get_pending_exception(context) {
+        Err(err)
+    } else {
+        Err(EsErrorInfo {
+            message: "unknown error".to_string(),
+            filename: "".to_string(),
+            lineno: 0,
+            column: 0,
+        })
+    }
+}
+
+/// call a function by name with a rooted arguments array
+pub fn call_function_value2(
     context: *mut JSContext,
     this_obj: HandleObject,
     function_val: HandleValue,
@@ -145,37 +219,37 @@ pub fn call_method_value2(
     }
 }
 
-/// call a method by namespace and name
-pub fn call_obj_method_name(
+/// call a function by namespace and name
+pub fn call_namespace_function_name(
     context: *mut JSContext,
     scope: HandleObject,
-    obj_names: Vec<&str>,
+    namespace: Vec<&str>,
     function_name: &str,
     args: Vec<JSVal>,
     ret_val: MutableHandleValue,
 ) -> Result<(), EsErrorInfo> {
     let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*args) };
 
-    trace!("call_obj_method_name: {}", function_name);
+    trace!("call_namespace_function_name: {}", function_name);
 
     // root the args here
     rooted!(in(context) let _argument_object = unsafe {JS_NewArrayObject(context, &arguments_value_array)});
 
-    call_obj_method_name2(
+    call_namespace_function_name2(
         context,
         scope,
-        obj_names,
+        namespace,
         function_name,
         arguments_value_array,
         ret_val,
     )
 }
 
-/// call a method by name on an object by name
+/// call a function by name on an object by name
 /// e.g. esses.cleanup() can be called by calling
-/// call_obj_method_name(cx, glob, vec!["esses"], "cleanup", vec![]);
+/// call_namespace_function_name(cx, glob, vec!["esses"], "cleanup", vec![]);
 #[allow(dead_code)]
-pub fn call_obj_method_name2(
+pub fn call_namespace_function_name2(
     context: *mut JSContext,
     scope: HandleObject,
     obj_names: Vec<&str>,
@@ -183,7 +257,7 @@ pub fn call_obj_method_name2(
     arguments_value_array: HandleValueArray,
     ret_val: MutableHandleValue,
 ) -> Result<(), EsErrorInfo> {
-    trace!("call_obj_method_name2: {}", function_name);
+    trace!("call_namespace_function_name2: {}", function_name);
 
     let mut sub_scope: *mut JSObject = *scope;
     for obj_name in obj_names {
@@ -220,7 +294,7 @@ pub fn call_obj_method_name2(
 
     rooted!(in(context) let sub_scope_root = sub_scope);
 
-    call_method_name2(
+    call_function_name2(
         context,
         sub_scope_root.handle(),
         function_name,
@@ -447,12 +521,15 @@ where
 mod tests {
     use crate::jsapi_utils;
     use crate::jsapi_utils::functions::{
-        call_method_name, call_obj_method_name, new_callback, value_is_function,
+        call_function, call_function_name, call_namespace_function_name, compile_function,
+        new_callback, value_is_function,
     };
     use crate::jsapi_utils::get_pending_exception;
     use crate::jsapi_utils::tests::test_with_sm_rt;
     use log::trace;
+    use mozjs::jsapi::JSFunction;
     use mozjs::jsval::{Int32Value, JSVal, ObjectValue, UndefinedValue};
+    use std::ptr;
     use std::time::Duration;
 
     #[test]
@@ -486,8 +563,8 @@ mod tests {
     }
 
     #[test]
-    fn test_method_by_name() {
-        log::info!("test: test_method_by_name");
+    fn test_function_by_name() {
+        log::info!("test: test_function_by_name");
         let ret = test_with_sm_rt(|sm_rt| {
             sm_rt.do_with_jsapi(|rt, cx, global| {
                 rooted!(in(cx) let mut rval = UndefinedValue());
@@ -495,17 +572,17 @@ mod tests {
                 let _res = jsapi_utils::eval(
                     rt,
                     global,
-                    "this.test_method_by_name_func = function(a, b){return a * b;};",
-                    "test_method_by_name.es",
+                    "this.test_function_by_name_func = function(a, b){return a * b;};",
+                    "test_function_by_name.es",
                     rval.handle_mut(),
                 );
 
                 let a: JSVal = Int32Value(7);
                 let b: JSVal = Int32Value(5);
-                let fres = call_method_name(
+                let fres = call_function_name(
                     cx,
                     global,
-                    "test_method_by_name_func",
+                    "test_function_by_name_func",
                     vec![a, b],
                     rval.handle_mut(),
                 );
@@ -522,15 +599,15 @@ mod tests {
     }
 
     #[test]
-    fn test_obj_method_by_name() {
-        log::info!("test: test_obj_method_by_name");
+    fn test_namespace_function_by_name() {
+        log::info!("test: test_namespace_function_by_name");
         for _x in 0..100 {
-            test_obj_method_by_name2();
+            test_namespace_function_by_name2();
         }
     }
 
-    fn test_obj_method_by_name2() {
-        log::info!("test: test_obj_method_by_name2");
+    fn test_namespace_function_by_name2() {
+        log::info!("test: test_namespace_function_by_name2");
         let ret = test_with_sm_rt(|sm_rt| {
             sm_rt.do_with_jsapi(|rt, cx, global| {
 
@@ -539,7 +616,7 @@ mod tests {
                 let res = jsapi_utils::eval(
                     rt,
                     global,
-                    "this.test_obj_method_by_name = {test_obj_method_by_name_func :function(a, b){return a * b;}};", "test_method_by_name.es",
+                    "this.test_namespace_function_by_name2 = {test_namespace_function_by_name2_func :function(a, b){return a * b;}};", "test_namespace_function_by_name2.es",
                     rval.handle_mut()
                 );
 
@@ -552,11 +629,11 @@ mod tests {
 
                 let a: JSVal = Int32Value(7);
                 let b: JSVal = Int32Value(5);
-                let fres = call_obj_method_name(
+                let fres = call_namespace_function_name(
                     cx,
                     global,
-                    vec!["test_obj_method_by_name"],
-                    "test_obj_method_by_name_func",
+                    vec!["test_namespace_function_by_name2"],
+                    "test_namespace_function_by_name2_func",
                     vec![a, b],
                     rval.handle_mut(),
                 );
@@ -591,7 +668,7 @@ mod tests {
                 });
                 rooted!(in (cx) let func_val = ObjectValue(*cb_root));
                 rooted!(in (cx) let mut frval = UndefinedValue());
-                call_method_name(
+                call_function_name(
                     cx,
                     global,
                     "test_callback_func",
@@ -607,5 +684,46 @@ mod tests {
 
         std::thread::sleep(Duration::from_secs(5));
         trace!("end of test_callback");
+    }
+
+    #[test]
+    fn test_compile_func() {
+        let rt = crate::esruntime::tests::TEST_RT.clone();
+        rt.do_in_es_event_queue_sync(|sm_rt| {
+            sm_rt.do_with_jsapi(|_rt, cx, global| {
+                rooted!(in (cx) let mut function_root = ptr::null_mut::<JSFunction>());
+                trace!("compiling function");
+                let compile_res = compile_function(
+                    cx,
+                    false,
+                    "my_func",
+                    "return a * b;",
+                    vec!["a", "b"],
+                    function_root.handle_mut(),
+                );
+                if let Some(err) = compile_res.err() {
+                    panic!("could not compile function: {}", err.err_msg());
+                }
+
+                trace!("executing function");
+                rooted!(in (cx) let mut frval = UndefinedValue());
+                rooted!(in (cx) let a = Int32Value(13));
+                rooted!(in (cx) let b = Int32Value(3));
+
+                call_function(
+                    cx,
+                    global,
+                    function_root.handle(),
+                    vec![*a, *b],
+                    frval.handle_mut(),
+                )
+                .ok()
+                .expect("func failed");
+
+                assert!(frval.is_int32());
+                assert_eq!(frval.to_int32(), 39);
+                trace!("executed function");
+            });
+        });
     }
 }

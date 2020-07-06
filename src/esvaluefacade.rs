@@ -610,7 +610,7 @@ impl EsValueFacade {
             rooted!(in (cx) let scope = mozjs::jsval::NullValue().to_object_or_null());
             rooted!(in (cx) let function_val = mozjs::jsval::ObjectValue(epr.get()));
 
-            let res2: Result<(), EsErrorInfo> = jsapi_utils::functions::call_method_value(
+            let res2: Result<(), EsErrorInfo> = jsapi_utils::functions::call_function_value(
                 cx,
                 scope.handle(),
                 function_val.handle(),

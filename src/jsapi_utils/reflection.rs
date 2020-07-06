@@ -1459,7 +1459,7 @@ fn dispatch_event_for_proxy(
                 // todo why do we only have a call_method by val and not by HandleObject?
                 // the whole rooting func here could be avoided
                 rooted!(in (cx) let function_val = ObjectValue(func_obj));
-                crate::jsapi_utils::functions::call_method_value(
+                crate::jsapi_utils::functions::call_function_value(
                     cx,
                     this_obj.handle(),
                     function_val.handle(),
@@ -1494,7 +1494,7 @@ fn dispatch_static_event_for_proxy(
             // todo why do we only have a call_method by val and not by HandleObject?
             // the whole rooting func here could be avoided
             rooted!(in (cx) let function_val = ObjectValue(func_obj));
-            crate::jsapi_utils::functions::call_method_value(
+            crate::jsapi_utils::functions::call_function_value(
                 cx,
                 this_obj.handle(),
                 function_val.handle(),

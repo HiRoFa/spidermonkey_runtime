@@ -14,6 +14,8 @@
 * relative path support for module loading (#32) (the module now has a String argument which contains the path of the module which is loading the sub module)
 * deprecated and removed invoke_rust_op (replaced with add_global_(a)sync_function)
 * added util for reporting exceptions (jsapi_utils::report_exception)
+* added utils for compiling script to a JSScript object and executing it
+* added utils for compiling script to a JSFunction object
 
 # 0.4.0
 
