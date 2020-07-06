@@ -49,6 +49,7 @@ pub mod objects;
 pub mod promises;
 pub mod reflection;
 pub mod rooting;
+pub mod scripts;
 
 /// get the type of a JSVal
 /// this is the equivalent of calling ```typeof val``` in script

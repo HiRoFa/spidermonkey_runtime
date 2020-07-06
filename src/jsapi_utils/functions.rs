@@ -26,6 +26,17 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ptr;
 
+pub fn compile_function(
+    _cx: *mut JSContext,
+    _name: &str,
+    _body: &str,
+    _arg_names: Vec<&str>,
+    _rval: MutableHandleObject,
+) -> bool {
+    // todo
+    true
+}
+
 /// call a method by namespace and name
 pub fn call_method_name(
     context: *mut JSContext,

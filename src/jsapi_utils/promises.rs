@@ -22,6 +22,16 @@ pub fn object_is_promise(obj: HandleObject) -> bool {
     object_is_promise_raw(obj.into())
 }
 
+pub fn value_is_promise(val: HandleValue) -> bool {
+    if val.is_object() {
+        let obj: *mut JSObject = val.to_object();
+        let obj_handle = unsafe { HandleObject::from_marked_location(&obj) };
+        object_is_promise(obj_handle)
+    } else {
+        false
+    }
+}
+
 /// Returns true if the given object is an unwrapped PromiseObject, false otherwise.
 pub fn object_is_promise_raw(obj: RawHandleObject) -> bool {
     unsafe { IsPromiseObject(obj) }
