@@ -24,12 +24,11 @@ use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsval::JSVal;
 use mozjs::jsval::UndefinedValue;
 use mozjs::rust::{
-    transform_u16_to_source_text, Handle, HandleFunction, HandleObject, HandleValue,
-    MutableHandleFunction, MutableHandleObject, MutableHandleValue,
+    HandleFunction, HandleObject, HandleValue, MutableHandleFunction, MutableHandleObject,
+    MutableHandleValue,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ffi::CString;
 use std::ptr;
 
 pub fn compile_function(
@@ -48,15 +47,22 @@ pub fn compile_function(
 
     let file_name = format!("compile_func_{}.es", name);
     rooted!(in (cx) let mut script_val = ptr::null_mut::<mozjs::jsapi::JSScript>());
-    jsapi_utils::scripts::compile_script(
+    let compile_res = jsapi_utils::scripts::compile_script(
         cx,
         src.as_str(),
         file_name.as_str(),
         script_val.handle_mut(),
     );
+    if let Some(err) = compile_res.err() {
+        return Err(err);
+    }
 
     rooted!(in (cx) let mut func_val = UndefinedValue());
-    jsapi_utils::scripts::execute_script(cx, script_val.handle(), func_val.handle_mut());
+    let eval_res =
+        jsapi_utils::scripts::execute_script(cx, script_val.handle(), func_val.handle_mut());
+    if let Some(err) = eval_res.err() {
+        return Err(err);
+    }
 
     let mut rval = rval;
     let func_obj: *mut JSObject = func_val.to_object();
