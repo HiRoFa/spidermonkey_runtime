@@ -19,21 +19,31 @@ use std::ffi::CString;
 /// ```no_run
 /// use es_runtime::jsapi_utils::scripts::{execute_script, compile_script};
 /// use es_runtime::jsapi_utils;
-/// let script = "(async function foo() {return 123;})();";
-/// rooted!(in (cx) let mut script_res = ptr::null_mut::<JSScript>());
-/// let compile_res =
-///     compile_script(cx, script, "test_scripts.es", script_res.handle_mut());
-/// if let Some(err) = compile_res.err() {
-///     panic!("could not compile script: {}", err.err_msg());
-/// }
-/// rooted!(in (cx) let mut script_exe_res = UndefinedValue());
-/// let exe_res = execute_script(cx, script_res.handle(), script_exe_res.handle_mut());
-/// if let Some(err) = exe_res.err() {
-///     panic!("script exe failed: {}", err.err_msg());
-/// }
-/// assert!(jsapi_utils::promises::value_is_promise(
-///     script_exe_res.handle()
-/// ));
+/// use mozjs::rooted;
+/// use mozjs::jsapi::JSScript;
+/// use mozjs::jsval::UndefinedValue;
+/// use std::ptr;
+/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+/// let rt = EsRuntimeBuilder::new().build();
+/// rt.do_in_es_event_queue_sync(|sm_rt| {
+///     sm_rt.do_with_jsapi(|_rt, cx, _global| {
+///         let script = "(async function foo() {return 123;})();";
+///         rooted!(in (cx) let mut script_res = ptr::null_mut::<JSScript>());
+///         let compile_res =
+///             compile_script(cx, script, "test_scripts.es", script_res.handle_mut());
+///         if let Some(err) = compile_res.err() {
+///             panic!("could not compile script: {}", err.err_msg());
+///         }
+///         rooted!(in (cx) let mut script_exe_res = UndefinedValue());
+///         let exe_res = execute_script(cx, script_res.handle(), script_exe_res.handle_mut());
+///         if let Some(err) = exe_res.err() {
+///             panic!("script exe failed: {}", err.err_msg());
+///         }
+///         assert!(jsapi_utils::promises::value_is_promise(
+///             script_exe_res.handle()
+///         ));
+///     });
+/// });
 /// ```
 pub fn compile_script(
     cx: *mut JSContext,
