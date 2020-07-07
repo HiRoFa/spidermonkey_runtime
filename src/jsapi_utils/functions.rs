@@ -365,7 +365,6 @@ pub fn object_is_function(obj: *mut JSObject) -> bool {
 }
 
 /// define a new native function on an object
-/// JSNative = Option<unsafe extern "C" fn(*mut JSContext, u32, *mut Value) -> bool>
 // todo refactor to accept MutableHandleValue #26
 pub fn define_native_function(
     cx: *mut JSContext,
@@ -392,7 +391,6 @@ pub fn define_native_function(
 }
 
 /// define a new native function on an object
-/// JSNative = Option<unsafe extern "C" fn(*mut JSContext, u32, *mut Value) -> bool>
 // todo refactor #27
 pub fn define_native_constructor(
     cx: *mut JSContext,
@@ -419,7 +417,6 @@ pub fn define_native_constructor(
 }
 
 /// define a new native function
-/// JSNative = Option<unsafe extern "C" fn(*mut JSContext, u32, *mut Value) -> bool>
 // todo refactor #28
 pub fn new_native_function(
     cx: *mut JSContext,
@@ -533,6 +530,7 @@ static CALLBACK_CLASS: JSClass = JSClass {
     oOps: ptr::null(),
 };
 
+/// closure type which can be used to create a callback
 pub type Callback =
     dyn Fn(*mut JSContext, Vec<HandleValue>, MutableHandleValue) -> Result<(), String> + 'static;
 
@@ -540,6 +538,44 @@ thread_local! {
     static CALLBACKS: RefCell<HashMap<usize, Box<Callback>>> = RefCell::new(HashMap::new());
 }
 
+/// create a new callback function based on a closure
+/// # Example
+/// ```no_run
+/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+/// use es_runtime::jsapi_utils::functions::{new_callback, call_function_name};
+/// use mozjs::rooted;
+/// use mozjs::jsval::{Int32Value, ObjectValue, UndefinedValue};
+/// use log::info;
+/// let rt = EsRuntimeBuilder::new().build();
+/// rt.eval_sync(
+///     "this.test_callback_func = function(cb){cb();};",
+///     "test_callback.es",
+/// )
+/// .ok()
+/// .expect("eval failed");
+///
+/// rt.do_in_es_event_queue_sync(|sm_rt| {
+///     sm_rt.do_with_jsapi(|_rt, cx, global| {
+///         rooted!(in (cx) let mut cb_root = mozjs::jsval::NullValue().to_object_or_null());
+///         new_callback(cx, cb_root.handle_mut(), |_cx, _args, mut rval| {
+///             info!("callback closure was called");
+///             rval.set(Int32Value(1234));
+///             Ok(())
+///         });
+///         rooted!(in (cx) let func_val = ObjectValue(*cb_root));
+///         rooted!(in (cx) let mut frval = UndefinedValue());
+///         call_function_name(
+///             cx,
+///             global,
+///             "test_callback_func",
+///             vec![*func_val],
+///             frval.handle_mut(),
+///         )
+///         .ok()
+///         .expect("call method failed");
+///     });
+/// });
+/// ```
 pub fn new_callback<C>(cx: *mut JSContext, rval: MutableHandleObject, callback: C) -> bool
 where
     C: Fn(*mut JSContext, Vec<HandleValue>, MutableHandleValue) -> Result<(), String> + 'static,
@@ -547,6 +583,7 @@ where
     new_callback_raw(cx, rval.into(), callback)
 }
 
+/// create a new callback function based on a closure
 pub fn new_callback_raw<C>(cx: *mut JSContext, rval: RawMutableHandleObject, callback: C) -> bool
 where
     C: Fn(*mut JSContext, Vec<HandleValue>, MutableHandleValue) -> Result<(), String> + 'static,

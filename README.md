@@ -126,7 +126,11 @@ For a more detailed getting started you should see the examples in the [DOCS](ht
 ## 0.5 goals
 
 * [x] Dynamic imports #4
+
+## 0.6 goals
+
 * [ ] TypedArrays from and to Vecs
+* [ ] EsValueFacade rewrite for easier type support
 * [ ] Complete set of from/to primitives in EsValueFacade
 
 ## 0.9 goals
