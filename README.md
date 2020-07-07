@@ -36,7 +36,7 @@ Cargo.toml
 ```toml
 [dependencies]
 # latest tag
-es_runtime = {git = "https://github.com/DRFos/es_runtime", tag = "0.4.0"}
+es_runtime = {git = "https://github.com/DRFos/es_runtime", tag = "0.5.0"}
 # or just get the latest
 # es_runtime = {git = "https://github.com/DRFos/es_runtime"}
 
