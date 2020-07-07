@@ -41,9 +41,15 @@ pub fn compile_function(
 ) -> Result<(), EsErrorInfo> {
     trace!("compile_function / 1");
 
+    // todo validate argNames
+    // todo validate body
+
     let as_pfx = if async_fn { "async " } else { "" };
     let args_str = arg_names.join(", ");
-    let src = format!("({}function {}({}) {{{}}});", as_pfx, name, args_str, body);
+    let src = format!(
+        "({}function {}({}) {{\n{}\n}});",
+        as_pfx, name, args_str, body
+    );
 
     let file_name = format!("compile_func_{}.es", name);
     rooted!(in (cx) let mut script_val = ptr::null_mut::<mozjs::jsapi::JSScript>());
@@ -63,6 +69,8 @@ pub fn compile_function(
     if let Some(err) = eval_res.err() {
         return Err(err);
     }
+
+    assert!(value_is_function(cx, *func_val));
 
     let mut rval = rval;
     let func_obj: *mut JSObject = func_val.to_object();

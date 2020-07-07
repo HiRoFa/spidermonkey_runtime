@@ -1,21 +1,25 @@
 # 0.5.0 (work in progress)
 
-* Dynamic module imports
-```javascript
+* Script support
+  * Dynamic module imports
+  ```javascript
     let {my, module_stuf} = await import('my_module.mes');
     // or
     import('my_module.mes').then((my_module) => {
          my_module.my();
          let b = my_module.module_stuff;
     });
-```
-* renamed MicroTaskManager to EsEventQueue
-* added utils for converting Handle to RawHandle an vice-versa
-* relative path support for module loading (#32) (the module now has a String argument which contains the path of the module which is loading the sub module)
-* deprecated and removed invoke_rust_op (replaced with add_global_(a)sync_function)
-* added util for reporting exceptions (jsapi_utils::report_exception)
-* added utils for compiling script to a JSScript object and executing it
-* added utils for compiling script to a JSFunction object
+  ```
+* internals
+  * renamed MicroTaskManager to EsEventQueue
+  * relative path support for module loading (#32) (the module now has a String argument which contains the path of the module which is loading the sub module)
+  * deprecated and removed invoke_rust_op (replaced with add_global_(a)sync_function)
+* jsapi_utils
+  * added utils for converting Handle to RawHandle an vice-versa
+  * added util for reporting exceptions (jsapi_utils::report_exception)
+  * added utils for compiling script to a JSScript object and executing it
+  * added utils for compiling script to a JSFunction object
+  * renamed function util methods from \*method* to \*function*
 
 # 0.4.0
 
