@@ -31,6 +31,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ptr;
 
+/// compile a function
 pub fn compile_function(
     cx: *mut JSContext,
     async_fn: bool,
@@ -174,6 +175,41 @@ pub fn call_function_value(
 }
 
 /// call a function with a rooted arguments array
+/// # Example
+/// ```rust
+/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+/// use mozjs::jsval::{UndefinedValue, Int32Value};
+/// use mozjs::{rooted, auto_root};
+/// use mozjs::jsapi::{HandleValueArray, JSFunction};
+/// use es_runtime::jsapi_utils::functions::{compile_function, call_function2};
+/// use std::ptr;
+/// let rt = EsRuntimeBuilder::new().build();
+/// rt.do_in_es_event_queue_sync(|sm_rt| {
+///     sm_rt.do_with_jsapi(|_rt, cx, global| {
+///
+///         // compile a new function
+///         rooted!(in (cx) let mut function_root = ptr::null_mut::<JSFunction>());
+///         compile_function(cx, false, "my_func", "return a * b;", vec!["a", "b"], function_root.handle_mut())
+///             .ok().expect("compile failed");
+///
+///         // execute the function
+///         rooted!(in (cx) let mut func_res_root = UndefinedValue());
+///         auto_root!(in (cx) let mut args_vec = vec![]);
+///         args_vec.push(Int32Value(13));
+///         args_vec.push(Int32Value(3));
+///         // yes to we need a util for this
+///         let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*args_vec) };
+///         call_function2(cx, global, function_root.handle(), arguments_value_array, func_res_root.handle_mut())
+///             .ok().expect("func failed");
+///         
+///         // check result
+///         assert!(func_res_root.is_int32());
+///         let res_i32 = func_res_root.to_int32();
+///         assert_eq!(res_i32, 39);
+///         
+///     });
+/// });
+/// ```
 pub fn call_function2(
     context: *mut JSContext,
     this_obj: HandleObject,
@@ -203,7 +239,7 @@ pub fn call_function2(
     }
 }
 
-/// call a function by name with a rooted arguments array
+/// call a function by value with a rooted arguments array
 pub fn call_function_value2(
     context: *mut JSContext,
     this_obj: HandleObject,

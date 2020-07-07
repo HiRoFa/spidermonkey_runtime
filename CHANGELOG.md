@@ -1,4 +1,6 @@
-# 0.5.0 (work in progress)
+# 0.6.0 (work in progress)
+
+# 0.5.0
 
 * Script support
   * Dynamic module imports
