@@ -2,7 +2,7 @@ use crate::esruntime::{EsRuntime, ModuleCodeLoader};
 use crate::esruntimeinner::EsRuntimeInner;
 use std::time::Duration;
 
-/// The EsRuntimeWrapperBuilder struct can be used to initialize a new EsRuntimeWrapper
+/// The EsRuntimeBuilder struct can be used to initialize a new EsRuntime
 ///
 /// # Example
 ///
@@ -22,7 +22,7 @@ pub struct EsRuntimeBuilder {
 }
 
 impl EsRuntimeBuilder {
-    /// create a new instance of a EsRuntimeWrapperBuilder with it's default options
+    /// create a new instance of a EsRuntimeBuilder with it's default options
     pub fn new() -> Self {
         EsRuntimeBuilder {
             gc_interval: None,
@@ -51,7 +51,7 @@ impl EsRuntimeBuilder {
         self
     }
 
-    /// build a new EsRuntimeWrapper based on the settings of this builder
+    /// build a new EsRuntime based on the settings of this builder
     /// please note that this can be used only once
     pub fn build(&mut self) -> EsRuntime {
         if self.built {
@@ -69,10 +69,10 @@ impl EsRuntimeBuilder {
         };
 
         let inner = EsRuntimeInner::build(mcl_opt, self.module_cache_size);
-        let wrapper = EsRuntime::new_inner(inner);
+        let es_rt = EsRuntime::new_inner(inner);
         if self.gc_interval.is_some() {
-            wrapper.start_gc_deamon(self.gc_interval.unwrap());
+            es_rt.start_gc_deamon(self.gc_interval.unwrap());
         }
-        wrapper
+        es_rt
     }
 }

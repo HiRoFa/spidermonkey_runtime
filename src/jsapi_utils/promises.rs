@@ -22,6 +22,7 @@ pub fn object_is_promise(obj: HandleObject) -> bool {
     object_is_promise_raw(obj.into())
 }
 
+/// return true if the given JSVal is a Promise
 pub fn value_is_promise(val: HandleValue) -> bool {
     if val.is_object() {
         let obj: *mut JSObject = val.to_object();
