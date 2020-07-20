@@ -133,9 +133,18 @@ For a more detailed getting started you should see the examples in the [DOCS](ht
 * [ ] EsValueFacade rewrite for easier type support
 * [ ] Complete set of from/to primitives in EsValueFacade
 
-## 0.9 goals
+## 0.7 goals
 
-* [ ] Use PersistentRooted instead of deprecated Add\*Root and Remove\*Root
+* [ ] fetch API (interface only, resolution is up to impl)
+* [ ] WebAssembly
+
+## 0.8 goals
+
+* [ ] Fix module caching, or check that the current impl actually works
+
+## 0.9 goals 
+
+* [ ] use macro's to define proxies and functions
 
 ## 1.0 goals
 
@@ -145,7 +154,7 @@ For a more detailed getting started you should see the examples in the [DOCS](ht
 
 * [ ] Interactive Debugging
 * [ ] Profiling
-* [ ] WebAssembly support
+* [ ] Use PersistentRooted instead of deprecated Add\*Root and Remove\*Root
 * [ ] Much more
 
 # Other plans
