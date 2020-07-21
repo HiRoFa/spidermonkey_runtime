@@ -141,6 +141,7 @@ For a more detailed getting started you should see the examples in the [DOCS](ht
 ## 0.8 goals
 
 * [ ] Fix module caching, or check that the current impl actually works
+* [ ] WebWorker API (interface only, execution is up to impl)
 
 ## 0.9 goals 
 
