@@ -129,6 +129,15 @@ For a more detailed getting started you should see the examples in the [DOCS](ht
 
 ## 0.6 goals
 
+* [ ] Import native features API
+ '''javascript
+ import {http} from 'esses.com.http';
+ http.doSomething();
+ // and
+ import('esses.com.http').then((http) => {
+    http.doSomething();
+ });
+ '''
 * [ ] TypedArrays from and to Vecs
 * [ ] EsValueFacade rewrite for easier type support
 * [ ] Complete set of from/to primitives in EsValueFacade
