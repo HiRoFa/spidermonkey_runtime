@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 pub struct EsRuntimeInner {
     pub(crate) event_queue: Arc<EsEventQueue>,
-    pub(crate) _pre_cleanup_tasks: Vec<Box<dyn Fn(&EsRuntimeInner) -> () + Send + Sync>>,
+    pub(crate) _pre_cleanup_tasks: Vec<Box<dyn Fn(&EsRuntimeInner) + Send + Sync>>,
     pub(crate) module_source_loader: Option<Box<ModuleCodeLoader>>,
     pub(crate) module_cache_size: usize,
 }
@@ -115,7 +115,7 @@ impl EsRuntimeInner {
 
     pub fn do_in_es_event_queue<J>(&self, job: J)
     where
-        J: FnOnce(&SmRuntime) -> () + Send + 'static,
+        J: FnOnce(&SmRuntime) + Send + 'static,
     {
         trace!("do_in_es_runtime_thread");
         // this is executed in the single thread in the Threadpool, therefore Runtime and global are stored in a thread_local

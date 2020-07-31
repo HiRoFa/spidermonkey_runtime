@@ -63,7 +63,7 @@ use std::ptr::replace;
 
 pub type EsProxyConstructor = dyn Fn(Vec<EsValueFacade>) -> Result<i32, String> + Send;
 pub type EsProxyMethod = dyn Fn(&i32, Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send;
-pub type EsProxyFinalizer = dyn Fn(i32) -> () + Send;
+pub type EsProxyFinalizer = dyn Fn(i32) + Send;
 pub type EsProxyGetter = dyn Fn(&i32) -> Result<EsValueFacade, String> + Send;
 pub type EsProxySetter = dyn Fn(&i32, EsValueFacade) -> Result<(), String> + Send;
 pub type EsProxyStaticMethod = dyn Fn(Vec<EsValueFacade>) -> Result<EsValueFacade, String> + Send;

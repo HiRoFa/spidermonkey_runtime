@@ -8,7 +8,7 @@ use std::thread;
 use std::time::Duration;
 use uuid::Uuid;
 
-type LocalJob = dyn FnOnce() -> () + 'static;
+type LocalJob = dyn FnOnce() + 'static;
 
 thread_local!(
     pub static LOCAL_JOBS: RefCell<Vec<Box<LocalJob>>> = RefCell::new(vec![]);
@@ -21,7 +21,7 @@ thread_local!(
 /// those tasks need not impl the Send trait and there is no locking happening to add
 /// the task to the queue
 pub struct EsEventQueue {
-    jobs: DebugMutex<Vec<Box<dyn FnOnce() -> () + Send + 'static>>>,
+    jobs: DebugMutex<Vec<Box<dyn FnOnce() + Send + 'static>>>,
     empty_cond: Condvar,
     worker_thread_name: String,
 }
@@ -55,7 +55,7 @@ impl EsEventQueue {
     }
 
     /// add a task which will run asynchronously
-    pub fn add_task<T: FnOnce() -> () + Send + 'static>(&self, task: T) {
+    pub fn add_task<T: FnOnce() + Send + 'static>(&self, task: T) {
         trace!("EsEventQueue::add_task");
         {
             let mut lck = self.jobs.lock("add_task").unwrap();
@@ -102,7 +102,7 @@ impl EsEventQueue {
 
     /// method for adding tasks from worker, these do not need to impl Send
     /// also there is no locks we need to wait for
-    pub fn add_task_from_worker<T: FnOnce() -> () + 'static>(&self, task: T) {
+    pub fn add_task_from_worker<T: FnOnce() + 'static>(&self, task: T) {
         // assert current thread is worker thread
         // add to a thread_local st_tasks list
         // plan a job to run a single task from that list
@@ -156,7 +156,7 @@ impl EsEventQueue {
     }
 
     fn worker_loop(&self) {
-        let jobs: Vec<Box<dyn FnOnce() -> () + Send + 'static>>;
+        let jobs: Vec<Box<dyn FnOnce() + Send + 'static>>;
         {
             let mut jobs_lck = self.jobs.lock("worker_loop").unwrap();
 

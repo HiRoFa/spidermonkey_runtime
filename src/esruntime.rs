@@ -173,7 +173,7 @@ impl EsRuntime {
     /// if you want to use the inner SmRuntime on which u can use the jsapi_utils
     pub fn do_in_es_event_queue<J>(&self, immutable_job: J)
     where
-        J: FnOnce(&SmRuntime) -> () + Send + 'static,
+        J: FnOnce(&SmRuntime) + Send + 'static,
     {
         self.do_with_inner(|inner| inner.do_in_es_event_queue(immutable_job))
     }
@@ -190,7 +190,7 @@ impl EsRuntime {
     /// add a task the the "helper" thread pool
     pub fn add_helper_task<T>(task: T)
     where
-        T: FnOnce() -> () + Send + 'static,
+        T: FnOnce() + Send + 'static,
     {
         log::trace!("adding a helper task");
 

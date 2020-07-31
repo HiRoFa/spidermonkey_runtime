@@ -31,7 +31,7 @@ impl EsPersistentRooted {
     }
 
     /// create a new instance of EsPersistentRooted with a given JSObject
-    /// this will init the EsPersistentRooted and thus the obejct wille be rooted after calling this method
+    /// this will init the EsPersistentRooted and thus the object will be rooted after calling this method
     pub fn new_from_obj(cx: *mut JSContext, obj: *mut JSObject) -> Self {
         let mut ret = Self::new();
         unsafe { ret.init(cx, obj) };

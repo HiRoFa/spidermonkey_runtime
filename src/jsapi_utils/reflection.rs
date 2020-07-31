@@ -137,7 +137,7 @@ pub struct ProxyBuilder {
     pub namespace: Vec<&'static str>,
     pub class_name: &'static str,
     constructor: Option<Constructor>,
-    finalizer: Option<Box<dyn Fn(i32) -> ()>>,
+    finalizer: Option<Box<dyn Fn(i32)>>,
     properties: HashMap<&'static str, (Getter, Setter)>,
     methods: HashMap<&'static str, Method>,
     native_methods: HashMap<&'static str, JSNative>,
@@ -498,7 +498,7 @@ impl ProxyBuilder {
     /// you should use this to cleanup any instances you may have created in rust
     pub fn finalizer<F>(&mut self, finalizer: F) -> &mut Self
     where
-        F: Fn(i32) -> () + 'static,
+        F: Fn(i32) + 'static,
     {
         self.finalizer = Some(Box::new(finalizer));
         self

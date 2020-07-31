@@ -6,6 +6,7 @@ use mozjs::conversions::ToJSValConvertible;
 use mozjs::glue::int_to_jsid;
 use mozjs::jsapi::IsArray;
 use mozjs::jsapi::JSContext;
+use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JS_GetArrayLength;
 use mozjs::jsapi::JS_GetPropertyById;
 use mozjs::jsapi::JS_NewArrayObject;
@@ -27,6 +28,13 @@ pub fn object_is_array(context: *mut JSContext, obj: HandleObject) -> bool {
         }
     }
     is_array
+}
+
+/// check whether or not an Object is an Array
+pub fn object_is_array2(context: *mut JSContext, obj: *mut JSObject) -> bool {
+    rooted!(in (context) let obj_root = obj);
+
+    object_is_array(context, obj_root.handle())
 }
 
 /// get the length of an Array
