@@ -154,6 +154,14 @@ For a more detailed getting started you should see the examples in the [DOCS](ht
 
 ## 0.9 goals 
 
+* [ ] Code pre-processing
+  * enable stuff like
+    * macro's
+    * transpilers (like typescript)
+    * conditional statements (e.g. logging based on loglevel)
+    
+## 0.10 goals 
+
 * [ ] use macro's to define proxies and functions
 
 ## 1.0 goals
