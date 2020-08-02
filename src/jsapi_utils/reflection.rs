@@ -117,7 +117,7 @@ pub struct Proxy {
     pub namespace: Vec<&'static str>,
     pub class_name: &'static str,
     constructor: Option<Constructor>,
-    finalizer: Option<Box<dyn Fn(i32) -> ()>>,
+    finalizer: Option<Box<dyn Fn(i32)>>,
     properties: HashMap<&'static str, (Getter, Setter)>,
 
     // todo add cx as second arg to methods
