@@ -426,30 +426,30 @@ pub fn define_native_constructor(
 }
 
 /// define a new native function
-// todo refactor #28
 pub fn new_native_function(
     cx: *mut JSContext,
     function_name: &str,
     native_function: JSNative,
-) -> *mut JSFunction {
+    ret_val: MutableHandleObject,
+) {
     let n = format!("{}\0", function_name);
 
-    let ret: *mut JSFunction =
+    let function: *mut JSFunction =
         unsafe { JS_NewFunction(cx, native_function, 1, 0, n.as_ptr() as *const libc::c_char) };
 
-    ret
-
-    //https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/JSAPI_reference/JS_DefineFunction
+    let mut ret_val = ret_val;
+    ret_val.set(function as *mut JSObject);
 }
 
 pub fn new_native_constructor(
     cx: *mut JSContext,
     constructor_name: &str,
     native_function: JSNative,
-) -> *mut JSFunction {
+    ret_val: MutableHandleObject,
+) {
     let n = format!("{}\0", constructor_name);
 
-    let ret: *mut JSFunction = unsafe {
+    let constructor: *mut JSFunction = unsafe {
         JS_NewFunction(
             cx,
             native_function,
@@ -458,10 +458,8 @@ pub fn new_native_constructor(
             n.as_ptr() as *const libc::c_char,
         )
     };
-
-    ret
-
-    //https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey/JSAPI_reference/JS_DefineFunction
+    let mut ret_val = ret_val;
+    ret_val.set(constructor as *mut JSObject);
 }
 
 static CALLBACK_CLASS_OPS: JSClassOps = JSClassOps {
