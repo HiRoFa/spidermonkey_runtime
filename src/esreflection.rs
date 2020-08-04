@@ -34,7 +34,7 @@
 //!     .event("EventB")
 //!     .build(&rt);
 //!
-//!     rt.eval_sync("let my_instance = new com.my.biz.MyClass(1, 2, 3); my_instance.do_something(); my_instance.my_prop = 541; let a = my_instance.my_prop; my_instance = null;", "es_proxy_example.es").ok().expect("script failed");
+//!     rt.eval_sync("let my_instance = new com.my.biz.MyClass(1, 2, 3); my_instance.do_something(); my_instance.my_prop = 541; let a = my_instance.my_prop; my_instance = null;", "es_proxy_example.es").expect("script failed");
 //!
 //!     // create a static class
 //!
@@ -45,7 +45,7 @@
 //!     .static_event("epiphany")
 //!     .build(&rt);
 //!
-//!     rt.eval_sync("com.my.biz.MyApp.addEventListener('epiphany', (evt) => {console.log('Rust had an epiphany about %s', evt.subject);});com.my.biz.MyApp.inform(1, 2, 3);", "es_proxy_example2.es").ok().unwrap();
+//!     rt.eval_sync("com.my.biz.MyApp.addEventListener('epiphany', (evt) => {console.log('Rust had an epiphany about %s', evt.subject);});com.my.biz.MyApp.inform(1, 2, 3);", "es_proxy_example2.es").expect("script failed");
 //!
 //!     let mut evt_props = HashMap::new();
 //!     evt_props.insert("subject".to_string(), EsValueFacade::new_str("Putting people on Jupiter".to_string()));
@@ -135,8 +135,7 @@ impl EsProxy {
                 rooted!(in (cx) let mut event_obj_root = UndefinedValue());
                 event_obj
                     .to_es_value(cx, event_obj_root.handle_mut())
-                    .ok()
-                    .expect("error converting event_obj esvf to val");
+                    .expect("error converting event_obj esvf to JSVal");
                 proxy.dispatch_event(obj_id, event_name, cx, event_obj_root.handle().into());
             });
         });
@@ -178,7 +177,6 @@ impl EsProxy {
                 rooted!(in (cx) let mut event_obj_root = UndefinedValue());
                 event_obj
                     .to_es_value(cx, event_obj_root.handle_mut())
-                    .ok()
                     .expect("could not convert event_obj_root esvf to jsval");
                 proxy.dispatch_static_event(event_name, cx, event_obj_root.handle().into());
             });
@@ -256,7 +254,7 @@ impl EsProxyBuilder {
     ///    })
     ///    .build(&rt);
     /// // we can then eval script which uses the static getter and setter
-    /// rt.eval_sync("let mc = new my.biz.MyClass();", "test_constructor.es").ok().unwrap();
+    /// rt.eval_sync("let mc = new my.biz.MyClass();", "test_constructor.es").expect("script failed");
     /// // call the gc
     /// rt.cleanup_sync();
     /// ```
@@ -288,7 +286,7 @@ impl EsProxyBuilder {
     ///    .build(&rt);
     /// // we can then eval script which uses the static getter and setter
     /// rt.eval_sync("let mc = new my.biz.MyClass(); mc = null;", "test_finalizer.es")
-    ///     .ok().expect("script failed");
+    ///     .expect("script failed");
     /// // call the gc
     /// rt.cleanup_sync();
     /// ```
@@ -322,7 +320,7 @@ impl EsProxyBuilder {
     ///    .build(&rt);
     /// // we can then eval script which uses the static getter and setter
     /// rt.eval_sync("let mc = new my.biz.MyClass(); mc.doSomething();", "test_method.es")
-    ///     .ok().expect("script failed");
+    ///     .expect("script failed");
     /// ```
     ///
     pub fn method<M>(&mut self, name: &'static str, method: M) -> &mut Self
@@ -360,7 +358,7 @@ impl EsProxyBuilder {
     /// rt.eval_sync("let mc = new my.biz.MyClass(); \
     /// mc.someProp = 4321; \
     /// console.log('someprop = %s', mc.someProp);"
-    /// , "test_property.es").ok().expect("script failed");
+    /// , "test_property.es").expect("script failed");
     /// ```
     ///
     pub fn property<G, S>(&mut self, name: &'static str, getter: G, setter: S) -> &mut Self
@@ -396,7 +394,7 @@ impl EsProxyBuilder {
     /// rt.eval_sync("let mc = new my.biz.MyClass(); \
     /// mc.addEventListener('itHappened', \
     ///     (evtObj) => {console.log('Jup, it happened with %s', evtObj);})"
-    /// , "test_event.es").ok().expect("script failed");
+    /// , "test_event.es").expect("script failed");
     ///
     /// // we can then dispatch the event from rust
     /// es_proxy.dispatch_event(&rt, 1, "itHappened", EsValueFacade::new_i32(123));
@@ -423,7 +421,7 @@ impl EsProxyBuilder {
     ///    .build(&rt);
     ///
     /// // we can then eval script which uses the static getter and setter
-    /// rt.eval_sync("my.biz.MyClass.addEventListener('itHappened', (evtObj) => {console.log('Jup, it happened with %s', evtObj);})", "test_static_event.es").ok().expect("script failed");
+    /// rt.eval_sync("my.biz.MyClass.addEventListener('itHappened', (evtObj) => {console.log('Jup, it happened with %s', evtObj);})", "test_static_event.es").expect("script failed");
     ///
     /// // we can then dispatch the event from rust
     /// es_proxy.dispatch_static_event(&rt, "itHappened", EsValueFacade::new_i32(123));
@@ -457,7 +455,7 @@ impl EsProxyBuilder {
     /// // we can then eval script which uses the static getter and setter
     /// rt.eval_sync("my.biz.MyClass.someProp = 4321; \
     /// console.log('someprop = %s', my.biz.MyClass.someProp);", "test_static_property.es")
-    /// .ok().expect("script failed");
+    /// .expect("script failed");
     /// ```
     ///
     pub fn static_property<G, S>(&mut self, name: &'static str, getter: G, setter: S) -> &mut Self
@@ -489,7 +487,7 @@ impl EsProxyBuilder {
     ///    .build(&rt);
     /// // we can then eval script which uses the static method
     /// rt.eval_sync("my.biz.MyClass.doSomethingStatic();", "test_static_method.es")
-    /// .ok().expect("script failed");
+    /// .expect("script failed");
     /// ```
     ///
     pub fn static_method<M>(&mut self, name: &'static str, method: M) -> &mut Self

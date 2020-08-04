@@ -85,7 +85,7 @@ impl SmRuntime {
     ///         true
     ///     });
     /// });
-    /// let esvf = rt.eval_sync("my_function();", "test_add_global_function_example.es").ok().expect("test_add_global_function_example failed");
+    /// let esvf = rt.eval_sync("my_function();", "test_add_global_function_example.es").expect("test_add_global_function_example failed");
     /// assert_eq!(esvf.get_i32(), &480);
     /// ```
     pub fn add_global_function<F>(&self, name: &'static str, func: F)
@@ -405,7 +405,6 @@ where
     for esvf in vec {
         rooted!(in (context) let mut val_root = UndefinedValue());
         esvf.to_es_value(context, val_root.handle_mut())
-            .ok()
             .expect("esvf.to_es_value failed");
         values.push(*val_root);
     }

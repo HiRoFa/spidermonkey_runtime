@@ -169,7 +169,6 @@ impl EsRuntimeInner {
                 let rval = from_raw_handle_mut(args.rval());
                 prom_res_esvf
                     .to_es_value(cx, rval)
-                    .ok()
                     .expect("could not convert prom_res_esvf to JSVal");
                 true
             });
@@ -197,7 +196,6 @@ impl EsRuntimeInner {
                         // set rval
                         let rval = from_raw_handle_mut(args.rval());
                         esvf.to_es_value(cx, rval)
-                            .ok()
                             .expect("could not convert esvf to JSVal");
                         true
                     }

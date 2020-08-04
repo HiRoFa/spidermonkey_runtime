@@ -242,7 +242,6 @@ impl EsValueFacade {
                                     res.ok()
                                         .unwrap()
                                         .to_es_value(cx, res_root.handle_mut())
-                                        .ok()
                                         .expect("could not convert res.ok().unwrap() to jsval");
                                     trace!("resolving prom");
                                     let resolve_prom_res = jsapi_utils::promises::resolve_promise(
@@ -644,7 +643,6 @@ impl EsValueFacade {
             for esvf in &args {
                 rooted!(in (cx) let mut arg_val = UndefinedValue());
                 esvf.to_es_value(cx, arg_val.handle_mut())
-                    .ok()
                     .expect("could not convert esvf to JSVal 7365");
                 args_rooted_vec.push(*arg_val);
             }
@@ -782,7 +780,6 @@ impl EsValueFacade {
                 rooted!(in (context) let mut arr_elem_val = UndefinedValue());
                 // convert elem to JSVal
                 item.to_es_value(context, arr_elem_val.handle_mut())
-                    .ok()
                     .expect("item.to_es_value failed");
                 // add to array
                 jsapi_utils::arrays::push_array_element(
@@ -805,7 +802,6 @@ impl EsValueFacade {
                 rooted!(in(context) let mut val_root = UndefinedValue());
                 prop_esvf
                     .to_es_value(context, val_root.handle_mut())
-                    .ok()
                     .expect("could not convert prop");
                 jsapi_utils::objects::set_es_obj_prop_value(
                     context,
@@ -871,7 +867,6 @@ impl EsValueFacade {
                         res.ok()
                             .unwrap()
                             .to_es_value(context, res_root.handle_mut())
-                            .ok()
                             .expect("could not convert res.ok() to JSVal 3269");
                         let prom_reso_res = jsapi_utils::promises::resolve_promise(
                             context,
