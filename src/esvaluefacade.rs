@@ -5,6 +5,7 @@ use crate::eseventqueue::EsEventQueue;
 use crate::esruntime::EsRuntime;
 use crate::esruntimeinner::EsRuntimeInner;
 use crate::jsapi_utils::arrays::{get_array_element, get_array_length, new_array, object_is_array};
+use crate::jsapi_utils::objects::NULL_JSOBJECT;
 use crate::jsapi_utils::rooting::EsPersistentRooted;
 use crate::jsapi_utils::{objects, EsErrorInfo};
 use crate::spidermonkeyruntimewrapper::SmRuntime;
@@ -15,9 +16,7 @@ use log::debug;
 use mozjs::jsapi::HandleValueArray;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
-use mozjs::jsval::{
-    BooleanValue, DoubleValue, Int32Value, JSVal, NullValue, ObjectValue, UndefinedValue,
-};
+use mozjs::jsval::{BooleanValue, DoubleValue, Int32Value, JSVal, ObjectValue, UndefinedValue};
 use mozjs::rust::{HandleValue, MutableHandleValue};
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError};
@@ -651,7 +650,7 @@ impl EsValueFacade {
                 unsafe { HandleValueArray::from_rooted_slice(&*args_rooted_vec) };
 
             rooted!(in (cx) let mut rval = UndefinedValue());
-            rooted!(in (cx) let scope = mozjs::jsval::NullValue().to_object_or_null());
+            rooted!(in (cx) let scope = NULL_JSOBJECT);
             rooted!(in (cx) let function_val = mozjs::jsval::ObjectValue(epr.get()));
 
             let res2: Result<(), EsErrorInfo> = jsapi_utils::functions::call_function_value2(
@@ -772,7 +771,7 @@ impl EsValueFacade {
             trace!("to_es_value.5");
             jsapi_utils::new_es_value_from_str(context, self.get_string(), rval);
         } else if self.is_array() {
-            rooted!(in (context) let mut arr_root = NullValue().to_object_or_null());
+            rooted!(in (context) let mut arr_root = NULL_JSOBJECT);
             // create the array
             new_array(context, arr_root.handle_mut());
             // add items
@@ -793,8 +792,8 @@ impl EsValueFacade {
             rval.set(ObjectValue(*arr_root));
         } else if self.is_object() {
             trace!("to_es_value.6");
-            let obj: *mut JSObject = jsapi_utils::objects::new_object(context);
-            rooted!(in(context) let mut obj_root = obj);
+            rooted!(in(context) let mut obj_root = NULL_JSOBJECT);
+            jsapi_utils::objects::new_object(context, obj_root.handle_mut());
             let map = self.get_object();
             for prop in map {
                 let prop_name = prop.0;
@@ -811,7 +810,7 @@ impl EsValueFacade {
                 );
             }
 
-            rval.set(ObjectValue(obj));
+            rval.set(ObjectValue(*obj_root));
         } else if self.is_prepped_promise() {
             return match self.to_es_promise_value(context, rval) {
                 Ok(_) => Ok(()),

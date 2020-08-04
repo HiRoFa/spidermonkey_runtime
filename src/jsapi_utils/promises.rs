@@ -1,3 +1,4 @@
+use crate::jsapi_utils::objects::NULL_JSOBJECT;
 use crate::jsapi_utils::{get_pending_exception, EsErrorInfo};
 use mozjs::jsapi::AddPromiseReactions;
 use mozjs::jsapi::GetPromiseResult;
@@ -9,7 +10,7 @@ use mozjs::jsapi::JSObject;
 use mozjs::jsapi::PromiseState;
 use mozjs::jsapi::SetPromiseRejectionTrackerCallback;
 use mozjs::jsapi::StackFormat;
-use mozjs::jsval::{JSVal, NullValue};
+use mozjs::jsval::JSVal;
 use mozjs::rust::jsapi_wrapped::NewPromiseObject;
 use mozjs::rust::jsapi_wrapped::RejectPromise;
 use mozjs::rust::jsapi_wrapped::ResolvePromise;
@@ -85,8 +86,8 @@ where
     T: Fn(*mut JSContext, Vec<HandleValue>, MutableHandleValue) -> Result<(), String> + 'static,
     C: Fn(*mut JSContext, Vec<HandleValue>, MutableHandleValue) -> Result<(), String> + 'static,
 {
-    rooted!(in (cx) let mut then_rval = NullValue().to_object_or_null());
-    rooted!(in (cx) let mut catch_rval = NullValue().to_object_or_null());
+    rooted!(in (cx) let mut then_rval = NULL_JSOBJECT);
+    rooted!(in (cx) let mut catch_rval = NULL_JSOBJECT);
 
     if let Some(then) = then_opt {
         assert!(crate::jsapi_utils::functions::new_callback(
@@ -122,7 +123,7 @@ pub fn get_promise_state_raw(promise: RawHandleObject) -> PromiseState {
 pub fn new_promise(context: *mut JSContext) -> *mut JSObject {
     // second is executor
 
-    rooted!(in(context) let null = NullValue().to_object_or_null());
+    rooted!(in(context) let null = NULL_JSOBJECT);
     let null_handle: HandleObject = null.handle();
     unsafe { NewPromiseObject(context, null_handle) }
 }

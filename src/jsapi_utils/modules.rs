@@ -1,5 +1,6 @@
 use crate::esruntime::{EsRuntime, EsScriptCode};
 use crate::jsapi_utils;
+use crate::jsapi_utils::objects::NULL_JSOBJECT;
 use crate::jsapi_utils::rooting::EsPersistentRooted;
 use crate::jsapi_utils::{get_pending_exception, report_exception2, EsErrorInfo};
 use crate::spidermonkeyruntimewrapper::{register_cached_object, SmRuntime, SM_RT};
@@ -76,8 +77,8 @@ pub fn compile_module(
 
     trace!("SetModulePrivate: {}", file_name);
 
-    let private_obj = jsapi_utils::objects::new_object(context);
-    rooted!(in (context) let private_obj_root = private_obj);
+    rooted!(in (context) let mut private_obj_root = NULL_JSOBJECT);
+    jsapi_utils::objects::new_object(context, private_obj_root.handle_mut());
     rooted!(in (context) let mut path_root = UndefinedValue());
     jsapi_utils::new_es_value_from_str(context, file_name, path_root.handle_mut());
 
@@ -87,7 +88,7 @@ pub fn compile_module(
         "path",
         path_root.handle(),
     );
-    unsafe { SetModulePrivate(compiled_module, &ObjectValue(private_obj)) };
+    unsafe { SetModulePrivate(compiled_module, &ObjectValue(*private_obj_root)) };
 
     trace!("ModuleInstantiate: {}", file_name);
 
@@ -168,7 +169,9 @@ unsafe extern "C" fn module_dynamic_import(
 
     trace!("module_dynamic_import called");
 
-    rooted!(in (cx) let mut closure_root = jsapi_utils::objects::new_object(cx));
+    rooted!(in (cx) let mut closure_root = NULL_JSOBJECT);
+    jsapi_utils::objects::new_object(cx, closure_root.handle_mut());
+
     rooted!(in (cx) let promise_val_root = ObjectValue(*promise));
     rooted!(in (cx) let specifier_val_root = StringValue(&**specifier));
     jsapi_utils::objects::set_es_obj_prop_value(

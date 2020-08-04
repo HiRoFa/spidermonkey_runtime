@@ -1,14 +1,16 @@
 use crate::esruntime::EsRuntime;
 use crate::jsapi_utils;
+use crate::jsapi_utils::objects::NULL_JSOBJECT;
 use crate::jsapi_utils::report_exception;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
 use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::JSContext;
-use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JS_DefineFunction;
 use mozjs::jsval::{JSVal, ObjectValue, UndefinedValue};
 use mozjs::rust::HandleValue;
 use std::str::FromStr;
+
+// todo rewrite to Proxy
 
 pub(crate) fn init(rt: &EsRuntime) {
     rt.do_in_es_event_queue_sync(Box::new(|sm_rt: &SmRuntime| {
@@ -18,11 +20,10 @@ pub(crate) fn init(rt: &EsRuntime) {
 
         sm_rt.do_with_jsapi(|_rt, context, global| {
             // todo write a define_function method which uses JS_DefineFunction which will effectively do the same as create and set prop
-            let console_obj: *mut JSObject = crate::jsapi_utils::objects::new_object(context);
-            let console_obj_val: JSVal = ObjectValue(console_obj);
+            rooted!(in(context) let mut console_obj_root = NULL_JSOBJECT);
+            crate::jsapi_utils::objects::new_object(context, console_obj_root.handle_mut());
 
-            rooted!(in(context) let console_obj_val_root = console_obj_val);
-            rooted!(in(context) let console_obj_root = console_obj);
+            rooted!(in(context) let console_obj_val_root = ObjectValue(*console_obj_root));
 
             crate::jsapi_utils::objects::set_es_obj_prop_value(
                 context,

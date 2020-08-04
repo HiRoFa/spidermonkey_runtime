@@ -79,9 +79,12 @@
 //! ```
 //!
 
+use crate::jsapi_utils;
+use crate::jsapi_utils::objects::NULL_JSOBJECT;
 use crate::jsapi_utils::rooting::EsPersistentRooted;
 use crate::jsapi_utils::{es_jsid_to_string, report_exception2, EsErrorInfo};
-
+use core::ptr;
+use log::trace;
 use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::JSClass;
 use mozjs::jsapi::JSClassOps;
@@ -90,12 +93,8 @@ use mozjs::jsapi::JSFreeOp;
 use mozjs::jsapi::JSNative;
 use mozjs::jsapi::JSObject;
 use mozjs::jsapi::JSCLASS_FOREGROUND_FINALIZE;
-use mozjs::jsval::{NullValue, ObjectValue, UndefinedValue};
+use mozjs::jsval::{ObjectValue, UndefinedValue};
 use mozjs::rust::{HandleObject, HandleValue, MutableHandleValue};
-
-use crate::jsapi_utils;
-use core::ptr;
-use log::trace;
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -1457,7 +1456,7 @@ fn dispatch_event_for_proxy(
         if let Some(listener_vec) = obj_map.get(evt_type) {
             rooted!(in (cx) let mut ret_val = UndefinedValue());
             // todo this_obj should be the proxy obj..
-            rooted!(in (cx) let this_obj = NullValue().to_object_or_null());
+            rooted!(in (cx) let this_obj = NULL_JSOBJECT);
             // since evt_obj is already rooted here we don;t need the auto_root macro, we can just use call_method_value()
 
             for listener_epr in listener_vec {
@@ -1492,7 +1491,7 @@ fn dispatch_static_event_for_proxy(
     if let Some(listener_vec) = obj_map.get(evt_type) {
         rooted!(in (cx) let mut ret_val = UndefinedValue());
         // todo this_obj should be the proxy obj..
-        rooted!(in (cx) let this_obj = NullValue().to_object_or_null());
+        rooted!(in (cx) let this_obj = NULL_JSOBJECT);
         // since evt_obj is already rooted here we don;t need the auto_root macro, we can just use call_method_value()
 
         for listener_epr in listener_vec {

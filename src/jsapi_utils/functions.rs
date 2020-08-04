@@ -550,6 +550,7 @@ thread_local! {
 /// ```no_run
 /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
 /// use es_runtime::jsapi_utils::functions::{new_callback, call_function_name};
+/// use crate::es_runtime::jsapi_utils::objects::NULL_JSOBJECT;
 /// use mozjs::rooted;
 /// use mozjs::jsval::{Int32Value, ObjectValue, UndefinedValue};
 /// use log::info;
@@ -563,7 +564,7 @@ thread_local! {
 ///
 /// rt.do_in_es_event_queue_sync(|sm_rt| {
 ///     sm_rt.do_with_jsapi(|_rt, cx, global| {
-///         rooted!(in (cx) let mut cb_root = mozjs::jsval::NullValue().to_object_or_null());
+///         rooted!(in (cx) let mut cb_root = NULL_JSOBJECT);
 ///         new_callback(cx, cb_root.handle_mut(), |_cx, _args, mut rval| {
 ///             info!("callback closure was called");
 ///             rval.set(Int32Value(1234));
@@ -619,6 +620,7 @@ mod tests {
         new_callback, value_is_function,
     };
     use crate::jsapi_utils::get_pending_exception;
+    use crate::jsapi_utils::objects::NULL_JSOBJECT;
     use crate::jsapi_utils::tests::test_with_sm_rt;
     use log::trace;
     use mozjs::jsapi::JSFunction;
@@ -755,7 +757,7 @@ mod tests {
 
         rt.do_in_es_event_queue_sync(|sm_rt| {
             sm_rt.do_with_jsapi(|_rt, cx, global| {
-                rooted!(in (cx) let mut cb_root = mozjs::jsval::NullValue().to_object_or_null());
+                rooted!(in (cx) let mut cb_root = NULL_JSOBJECT);
                 new_callback(cx, cb_root.handle_mut(), |_cx, _args, _rval| {
                     trace!("callback closure was called");
                     Ok(())

@@ -70,6 +70,7 @@ impl Drop for EsPersistentRooted {
 
 #[cfg(test)]
 mod tests {
+    use crate::jsapi_utils::objects::NULL_JSOBJECT;
     use crate::jsapi_utils::rooting::EsPersistentRooted;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
     use mozjs::jsval::Int32Value;
@@ -84,11 +85,12 @@ mod tests {
             inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
                 let mut vec = vec![];
                 sm_rt.do_with_jsapi(|_rt, cx, _global| {
-                    //crate::jsapi_utils::set_gc_zeal_options(cx);
                     crate::jsapi_utils::gc(cx);
-                    let my_obj = crate::jsapi_utils::objects::new_object(cx);
+                    rooted!(in (cx) let mut new_obj_root = NULL_JSOBJECT);
+
+                    crate::jsapi_utils::objects::new_object(cx, new_obj_root.handle_mut());
                     let mut r = EsPersistentRooted::new();
-                    unsafe { r.init(cx, my_obj) };
+                    unsafe { r.init(cx, *new_obj_root) };
                     // let r = EsRootedObject::new(cx, my_obj);
                     // move r to vec;
                     vec.push(r);

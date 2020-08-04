@@ -14,19 +14,16 @@ use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_NewGlobalObject;
 use mozjs::jsapi::OnNewGlobalHookOption;
 use mozjs::jsapi::SetJobQueue;
-
 use mozjs::jsapi::JS::HandleValueArray;
-use mozjs::jsval::{NullValue, ObjectValue, UndefinedValue};
+use mozjs::jsval::{ObjectValue, UndefinedValue};
 use mozjs::panic::wrap_panic;
 use mozjs::rust::wrappers::JS_CallFunctionValue;
 use mozjs::rust::HandleObject;
 use mozjs::rust::RealmOptions;
 use mozjs::rust::Runtime;
 use mozjs::rust::SIMPLE_GLOBAL_CLASS;
-
 use std::cell::RefCell;
 use std::collections::HashMap;
-
 use std::os::raw::c_void;
 use std::ptr;
 use std::rc::Rc;
@@ -488,11 +485,8 @@ unsafe extern "C" fn enqueue_promise_job(
                 let sm_rt = &*rc.borrow();
 
                 sm_rt.do_with_jsapi(|_rt, cx, _global| {
-                    trace!("rooting null");
-                    rooted!(in (cx) let null_root = NullValue().to_object_or_null());
-
                     trace!("calling cb.call");
-                    let call_res = cb.call(cx, null_root.handle());
+                    let call_res = cb.call(cx, HandleObject::null());
                     trace!("checking cb.call res");
                     if call_res.is_err() {
                         debug!("job failed");

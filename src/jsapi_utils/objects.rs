@@ -24,47 +24,72 @@ use mozjs::rust::{
 };
 use std::ptr;
 
+pub const NULL_JSOBJECT: *mut JSObject = 0 as *mut JSObject;
+
 /// get a namespace object and create any part that is not yet defined
 pub fn get_or_define_namespace(
     context: *mut JSContext,
     obj: HandleObject,
     namespace: Vec<&str>,
 ) -> *mut JSObject {
+    // todo refactor to rval
+
     trace!("get_or_define_package");
 
-    let mut cur_obj = *obj;
+    rooted!(in(context) let mut cur_obj_root = *obj);
+    rooted!(in(context) let mut sub_val_root = UndefinedValue());
+
     for name in namespace {
         trace!("get_or_define_package, loop step: {}", name);
 
-        rooted!(in(context) let mut cur_root = cur_obj);
+        get_es_obj_prop_val(
+            context,
+            cur_obj_root.handle(),
+            name,
+            sub_val_root.handle_mut(),
+        )
+        .ok()
+        .unwrap();
 
-        rooted!(in(context) let mut sub_root = UndefinedValue());
-        get_es_obj_prop_val(context, cur_root.handle(), name, sub_root.handle_mut())
+        if sub_val_root.is_null_or_undefined() {
+            trace!("get_or_define_package, loop step: {} is null, create", name);
+            // create
+
+            rooted!(in(context) let mut new_obj_root = NULL_JSOBJECT);
+
+            define_new_object(
+                context,
+                cur_obj_root.handle(),
+                name,
+                new_obj_root.handle_mut(),
+            );
+
+            get_es_obj_prop_val(
+                context,
+                cur_obj_root.handle(),
+                name,
+                sub_val_root.handle_mut(),
+            )
             .ok()
             .unwrap();
 
-        if sub_root.is_null_or_undefined() {
-            trace!("get_or_define_package, loop step: {} is null, create", name);
-            // create
-            let new_obj = new_object(context);
-            trace!(
-                "get_or_define_package, loop step: {} is null, created",
-                name
-            );
-            rooted!(in(context) let mut new_obj_val_root = ObjectValue(new_obj));
-            set_es_obj_prop_value(context, cur_root.handle(), name, new_obj_val_root.handle());
-            trace!(
-                "get_or_define_package, loop step: {} is null, prop_set",
-                name
-            );
-            cur_obj = new_obj;
-        } else {
-            trace!("get_or_define_package, loop step: {} exists", name);
-            cur_obj = sub_root.to_object();
+            assert!(!sub_val_root.is_null_or_undefined());
         }
+        cur_obj_root.handle_mut().set(sub_val_root.to_object());
     }
 
-    cur_obj
+    *cur_obj_root
+}
+
+pub fn define_new_object(
+    context: *mut JSContext,
+    obj: HandleObject,
+    prop_name: &str,
+    ret_val: MutableHandleObject,
+) {
+    new_object(context, ret_val);
+    rooted!(in (context) let val_root = ObjectValue(*ret_val));
+    set_es_obj_prop_value(context, obj, prop_name, val_root.handle());
 }
 
 /// get a single member of a JSObject
@@ -153,8 +178,9 @@ pub fn get_es_obj_prop_val_as_i32(
 
 /// create a new object in the engine
 #[allow(dead_code)]
-pub fn new_object(context: *mut JSContext) -> *mut JSObject {
-    unsafe { JS_NewPlainObject(context) }
+pub fn new_object(context: *mut JSContext, ret_val: MutableHandleObject) {
+    let mut ret_val = ret_val;
+    ret_val.set(unsafe { JS_NewPlainObject(context) });
 }
 
 /// create a new object based on a prototype object
@@ -162,7 +188,9 @@ pub fn new_object(context: *mut JSContext) -> *mut JSObject {
 pub fn new_object_from_prototype(
     context: *mut JSContext,
     prototype: HandleObject,
-) -> Result<*mut JSObject, EsErrorInfo> {
+    ret_val: MutableHandleObject,
+) -> Result<(), EsErrorInfo> {
+    let mut ret_val = ret_val;
     let ret: *mut JSObject =
         unsafe { JS_NewObjectWithGivenProto(context, &CLASS as *const _, prototype.into_handle()) };
     if ret.is_null() {
@@ -170,10 +198,12 @@ pub fn new_object_from_prototype(
         if let Some(err) = err_opt {
             Err(err)
         } else {
-            Ok(ret)
+            ret_val.set(ret);
+            Ok(())
         }
     } else {
-        Ok(ret)
+        ret_val.set(ret);
+        Ok(())
     }
 }
 
@@ -195,7 +225,7 @@ pub fn new_from_constructor(
 }
 
 static CLASS: JSClass = JSClass {
-    name: b"EventTargetPrototype\0" as *const u8 as *const libc::c_char,
+    name: b"BasicClassPrototype\0" as *const u8 as *const libc::c_char,
     flags: 0,
     cOps: 0 as *const _,
     spec: ptr::null(),
@@ -330,6 +360,7 @@ mod tests {
     use crate::esruntime::EsRuntime;
     use crate::esvaluefacade::EsValueFacade;
     use crate::jsapi_utils;
+    use crate::jsapi_utils::objects::NULL_JSOBJECT;
     use crate::jsapi_utils::objects::{
         get_es_obj_prop_val, get_js_obj_prop_names, get_or_define_namespace,
     };
@@ -497,7 +528,6 @@ mod tests {
     fn test_constructor() {
         log::info!("test: test_constructor");
         use mozjs::jsapi::HandleValueArray;
-        use mozjs::jsval::NullValue;
 
         let rt_arc: Arc<EsRuntime> = crate::esruntime::tests::TEST_RT.clone();
         let rt: &EsRuntime = rt_arc.borrow();
@@ -515,7 +545,7 @@ mod tests {
                     panic!("eval failed: {}", eval_res.err().unwrap().err_msg());
                 }
 
-                rooted!(in (cx) let mut b_instance_root = NullValue().to_object_or_null());
+                rooted!(in (cx) let mut b_instance_root = NULL_JSOBJECT);
                 let args = HandleValueArray::new();
                 jsapi_utils::objects::new_from_constructor(
                     cx,

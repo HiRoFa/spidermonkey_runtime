@@ -155,10 +155,10 @@ mod tests {
     };
     use crate::jsapi_utils::functions::call_function_value;
     use crate::jsapi_utils::objects::get_es_obj_prop_val;
+    use crate::jsapi_utils::objects::NULL_JSOBJECT;
     use crate::jsapi_utils::tests::test_with_sm_rt;
     use crate::jsapi_utils::{es_value_to_str, get_pending_exception};
     use mozjs::jsval::JSVal;
-    use mozjs::jsval::NullValue;
     use mozjs::jsval::UndefinedValue;
     use mozjs::jsval::{Int32Value, ObjectValue};
 
@@ -226,7 +226,7 @@ mod tests {
 
                 let items: Vec<JSVal> = vec![*v1_root.handle(), *v2_root.handle()];
 
-                rooted!(in (context) let mut array_rval = NullValue().to_object_or_null());
+                rooted!(in (context) let mut array_rval = NULL_JSOBJECT);
                 new_array2(context, items, array_rval.handle_mut());
 
                 rooted!(in (context) let v3_root = Int32Value(7));
