@@ -63,8 +63,12 @@ pub fn set_gc_zeal_options(cx: *mut JSContext) {
     use mozjs::jsapi::JS_SetGCZeal;
     debug!("setting gc_zeal_options");
 
-    let level = 2;
-    let frequency = 1; //JS_DEFAULT_ZEAL_FREQ;
+    // normal
+    let level = 0;
+    let frequency = 10;
+    // extreme
+    //let level = 14;
+    //let frequency = 1; //JS_DEFAULT_ZEAL_FREQ;
     unsafe { JS_SetGCZeal(cx, level, frequency) };
 }
 

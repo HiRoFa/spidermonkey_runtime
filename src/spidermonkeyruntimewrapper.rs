@@ -587,14 +587,10 @@ impl PromiseJobCallback {
             cx,
             a_this_obj,
             callable.handle(),
-            &HandleValueArray {
-                length_: 0 as ::libc::size_t,
-                elements_: ptr::null_mut(),
-            },
+            &HandleValueArray::new(),
             rval.handle_mut(),
         );
         trace!("PromiseJobCallback.call / 4");
-        //maybe_resume_unwind();
         if !ok {
             return Err(());
         }

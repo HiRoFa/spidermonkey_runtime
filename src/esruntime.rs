@@ -298,7 +298,7 @@ pub mod tests {
         rt.do_in_es_event_queue_sync(|sm_rt| {
             sm_rt.do_with_jsapi(|_rt, _cx, _global| {
                 // uncomment this to test with gc in sadistic mode
-                // crate::jsapi_utils::set_gc_zeal_options(_cx);
+                crate::jsapi_utils::set_gc_zeal_options(_cx);
             })
         });
 
@@ -401,8 +401,14 @@ pub mod tests {
     }
 
     #[test]
+    fn call_method_2() {
+        call_method();
+        call_method();
+    }
+
+    #[test]
     fn call_method() {
-        log::info!("test: call_method");
+        log::debug!("test: call_method");
         let rt: Arc<EsRuntime> = TEST_RT.clone();
         rt.eval_sync(
             "this.myObj = {childObj: {myMethod: function(a, b){return a*b;}}};",
@@ -443,10 +449,16 @@ pub mod tests {
                     async_method_2();\
                     ";
 
+        log::info!("test: test_async_await / 1");
         let prom_facade = rt.eval_sync(code, "call_method").ok().unwrap();
+        log::info!("test: test_async_await / 2");
         let wait_res = prom_facade.get_promise_result_blocking(Duration::from_secs(60));
+        log::info!("test: test_async_await / 3");
         let prom_res = wait_res.ok().unwrap();
+        log::info!("test: test_async_await / 4");
         let esvf_res = prom_res.ok().unwrap();
+        log::info!("test: test_async_await / 5");
         assert_eq!(&123, esvf_res.get_i32());
+        log::info!("test: test_async_await / 6");
     }
 }
