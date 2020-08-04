@@ -1,12 +1,11 @@
 use crate::esruntime::EsRuntime;
 use crate::jsapi_utils;
-use crate::jsapi_utils::objects::NULL_JSOBJECT;
+use crate::jsapi_utils::reflection::ProxyBuilder;
 use crate::jsapi_utils::report_exception;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
 use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::JSContext;
-use mozjs::jsapi::JS_DefineFunction;
-use mozjs::jsval::{JSVal, ObjectValue, UndefinedValue};
+use mozjs::jsval::{JSVal, UndefinedValue};
 use mozjs::rust::HandleValue;
 use std::str::FromStr;
 
@@ -14,107 +13,16 @@ use std::str::FromStr;
 
 pub(crate) fn init(rt: &EsRuntime) {
     rt.do_in_es_event_queue_sync(Box::new(|sm_rt: &SmRuntime| {
-        // todo move this to a new_object_in_global method in sm_rt
-        // that should return a persistentrooted
-        // then also create a add_property method
-
         sm_rt.do_with_jsapi(|_rt, context, global| {
-            // todo write a define_function method which uses JS_DefineFunction which will effectively do the same as create and set prop
-            rooted!(in(context) let mut console_obj_root = NULL_JSOBJECT);
-            crate::jsapi_utils::objects::new_object(context, console_obj_root.handle_mut());
-
-            rooted!(in(context) let console_obj_val_root = ObjectValue(*console_obj_root));
-
-            crate::jsapi_utils::objects::set_es_obj_prop_value(
-                context,
-                global,
-                "console",
-                console_obj_val_root.handle(),
-            );
-
-            let function = unsafe {
-                JS_DefineFunction(
-                    context,
-                    console_obj_root.handle().into(),
-                    b"log\0".as_ptr() as *const libc::c_char,
-                    Some(console_log),
-                    1,
-                    0,
-                )
-            };
-            assert!(!function.is_null());
-
-            let function = unsafe {
-                JS_DefineFunction(
-                    context,
-                    console_obj_root.handle().into(),
-                    b"debug\0".as_ptr() as *const libc::c_char,
-                    Some(console_debug),
-                    1,
-                    0,
-                )
-            };
-            assert!(!function.is_null());
-
-            let function = unsafe {
-                JS_DefineFunction(
-                    context,
-                    console_obj_root.handle().into(),
-                    b"warn\0".as_ptr() as *const libc::c_char,
-                    Some(console_warn),
-                    1,
-                    0,
-                )
-            };
-            assert!(!function.is_null());
-
-            let function = unsafe {
-                JS_DefineFunction(
-                    context,
-                    console_obj_root.handle().into(),
-                    b"info\0".as_ptr() as *const libc::c_char,
-                    Some(console_info),
-                    1,
-                    0,
-                )
-            };
-            assert!(!function.is_null());
-
-            let function = unsafe {
-                JS_DefineFunction(
-                    context,
-                    console_obj_root.handle().into(),
-                    b"trace\0".as_ptr() as *const libc::c_char,
-                    Some(console_trace),
-                    1,
-                    0,
-                )
-            };
-            assert!(!function.is_null());
-
-            let function = unsafe {
-                JS_DefineFunction(
-                    context,
-                    console_obj_root.handle().into(),
-                    b"error\0".as_ptr() as *const libc::c_char,
-                    Some(console_error),
-                    1,
-                    0,
-                )
-            };
-            assert!(!function.is_null());
-
-            let function = unsafe {
-                JS_DefineFunction(
-                    context,
-                    console_obj_root.handle().into(),
-                    b"assert\0".as_ptr() as *const libc::c_char,
-                    Some(console_assert),
-                    2,
-                    0,
-                )
-            };
-            assert!(!function.is_null());
+            ProxyBuilder::new(vec![], "console")
+                .static_native_method("log", Some(console_log))
+                .static_native_method("trace", Some(console_trace))
+                .static_native_method("info", Some(console_info))
+                .static_native_method("warn", Some(console_warn))
+                .static_native_method("error", Some(console_error))
+                .static_native_method("assert", Some(console_assert))
+                .static_native_method("debug", Some(console_debug))
+                .build(context, global);
         });
     }));
 }
