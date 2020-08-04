@@ -255,7 +255,9 @@ impl Proxy {
             );
 
         let cname = ret.get_canonical_name();
-        rooted!(in (cx) let cname_root = crate::jsapi_utils::new_es_value_from_str(cx, cname.as_str()));
+        rooted!(in (cx) let mut cname_root = UndefinedValue());
+        crate::jsapi_utils::new_es_value_from_str(cx, cname.as_str(), cname_root.handle_mut());
+
         crate::jsapi_utils::objects::set_es_obj_prop_val_permanent(
             cx,
             unsafe { HandleObject::from_marked_location(&(func as *mut JSObject)) },
@@ -304,7 +306,13 @@ impl Proxy {
             unsafe { mozjs::jsapi::JS_NewObject(cx, &ES_PROXY_CLASS) };
 
         rooted!(in (cx) let obj_instance_root = obj_instance);
-        rooted!(in (cx) let pname_root = crate::jsapi_utils::new_es_value_from_str(cx, &self.get_canonical_name()));
+        rooted!(in (cx) let mut pname_root = UndefinedValue());
+        crate::jsapi_utils::new_es_value_from_str(
+            cx,
+            &self.get_canonical_name(),
+            pname_root.handle_mut(),
+        );
+
         rooted!(in (cx) let obj_id_root = mozjs::jsval::Int32Value(obj_id));
 
         crate::jsapi_utils::objects::set_es_obj_prop_val_permanent(

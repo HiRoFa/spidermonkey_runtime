@@ -278,7 +278,11 @@ impl SmRuntime {
         function_name: &str,
         args: Vec<EsValueFacade>,
     ) -> Result<EsValueFacade, EsErrorInfo> {
-        trace!("sm_rt.call_obj_method_name({}, ...)", function_name);
+        trace!(
+            "sm_rt.call_obj_method_name({}, with {} args)",
+            function_name,
+            args.len()
+        );
 
         let context = rt.cx();
 
@@ -399,7 +403,11 @@ where
     auto_root!(in (context) let mut values = vec![]);
 
     for esvf in vec {
-        values.push(esvf.to_es_value(context));
+        rooted!(in (context) let mut val_root = UndefinedValue());
+        esvf.to_es_value(context, val_root.handle_mut())
+            .ok()
+            .expect("esvf.to_es_value failed");
+        values.push(*val_root);
     }
 
     trace!("sm_rt::do_with_rooted_esvf_vec, init hva");

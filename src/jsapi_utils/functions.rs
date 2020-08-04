@@ -123,10 +123,14 @@ pub fn call_function_name2(
             ret_val.into(),
         )
     } {
+        trace!("call_function_name2 -> OK");
+
         Ok(())
     } else if let Some(err) = get_pending_exception(context) {
+        trace!("call_function_name2 -> err: {}", err.err_msg());
         Err(err)
     } else {
+        trace!("call_function_name2 -> unknown err");
         Err(EsErrorInfo {
             message: "unknown error".to_string(),
             filename: "".to_string(),
@@ -307,10 +311,15 @@ pub fn call_namespace_function_name2(
     arguments_value_array: HandleValueArray,
     ret_val: MutableHandleValue,
 ) -> Result<(), EsErrorInfo> {
-    trace!("call_namespace_function_name2: {}", function_name);
+    trace!(
+        "call_namespace_function_name2: {} > {}",
+        obj_names.join("."),
+        function_name
+    );
 
     let mut sub_scope: *mut JSObject = *scope;
     for obj_name in obj_names {
+        trace!("get namespace part: {}", obj_name);
         rooted!(in(context) let sub_scope_root = sub_scope);
         rooted!(in(context) let mut new_subscope_root = UndefinedValue());
         let res = get_es_obj_prop_val(

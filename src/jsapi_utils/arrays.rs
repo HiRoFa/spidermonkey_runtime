@@ -12,8 +12,8 @@ use mozjs::jsapi::JS_GetPropertyById;
 use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_SetElement;
 use mozjs::jsapi::JS::HandleValueArray;
-use mozjs::jsval::{JSVal, ObjectValue};
-use mozjs::rust::{HandleObject, HandleValue, MutableHandleValue};
+use mozjs::jsval::JSVal;
+use mozjs::rust::{HandleObject, HandleValue, MutableHandleObject, MutableHandleValue};
 
 /// check whether or not an Object is an Array
 pub fn object_is_array(context: *mut JSContext, obj: HandleObject) -> bool {
@@ -118,11 +118,19 @@ pub fn get_array_element(
 }
 
 /// create a new array obj
-pub fn new_array(context: *mut JSContext, items: Vec<JSVal>, ret_val: &mut MutableHandleValue) {
+pub fn new_array(context: *mut JSContext, ret_val: MutableHandleObject) {
+    let arguments_value_array = HandleValueArray::new();
+    let res = unsafe { JS_NewArrayObject(context, &arguments_value_array) };
+    let mut ret_val = ret_val;
+    ret_val.set(res);
+}
+
+/// create a new array obj
+pub fn new_array2(context: *mut JSContext, items: Vec<JSVal>, ret_val: MutableHandleObject) {
     let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*items) };
     let res = unsafe { JS_NewArrayObject(context, &arguments_value_array) };
-
-    ret_val.set(ObjectValue(res));
+    let mut ret_val = ret_val;
+    ret_val.set(res);
 }
 
 /// convert an Array to a Vec<i32>
@@ -142,7 +150,7 @@ pub fn to_i32_array<T>(context: *mut JSContext, obj: MutableHandleValue, vec: Ve
 #[cfg(test)]
 mod tests {
     use crate::jsapi_utils::arrays::{
-        get_array_element, get_array_length, new_array, object_is_array, push_array_element,
+        get_array_element, get_array_length, new_array2, object_is_array, push_array_element,
         set_array_element,
     };
     use crate::jsapi_utils::functions::call_function_value;
@@ -150,6 +158,7 @@ mod tests {
     use crate::jsapi_utils::tests::test_with_sm_rt;
     use crate::jsapi_utils::{es_value_to_str, get_pending_exception};
     use mozjs::jsval::JSVal;
+    use mozjs::jsval::NullValue;
     use mozjs::jsval::UndefinedValue;
     use mozjs::jsval::{Int32Value, ObjectValue};
 
@@ -217,40 +226,47 @@ mod tests {
 
                 let items: Vec<JSVal> = vec![*v1_root.handle(), *v2_root.handle()];
 
-                rooted!(in (context) let mut array_rval = UndefinedValue());
-                new_array(context, items, &mut array_rval.handle_mut());
-
-                rooted!(in (context) let test_create_array_root = array_rval.get().to_object());
+                rooted!(in (context) let mut array_rval = NullValue().to_object_or_null());
+                new_array2(context, items, array_rval.handle_mut());
 
                 rooted!(in (context) let v3_root = Int32Value(7));
-                let _set_res = set_array_element(
-                    context,
-                    test_create_array_root.handle(),
-                    2,
-                    v3_root.handle(),
-                );
+                let _set_res = set_array_element(context, array_rval.handle(), 2, v3_root.handle());
 
                 for _x in 0..100 {
-                    let length_res = get_array_length(context, test_create_array_root.handle());
+                    let length_res = get_array_length(context, array_rval.handle());
                     assert_eq!(3, length_res.ok().unwrap());
                 }
 
                 for _x in 0..11 {
                     rooted!(in (context) let v4_root = Int32Value(21));
-                    push_array_element(context, test_create_array_root.handle(), v4_root.handle())
+                    push_array_element(context, array_rval.handle(), v4_root.handle())
                         .ok()
                         .unwrap();
                 }
 
                 rooted!(in (context) let mut stringify_res_root = UndefinedValue());
 
-                rooted!(in (context) let new_rooted_arr_val = ObjectValue(test_create_array_root.get()));
-
                 rooted!(in (context) let mut stringify_func_root = UndefinedValue());
 
-                rt.evaluate_script(global, "JSON.stringify.bind(JSON);", "get_stringify.es", 0, stringify_func_root.handle_mut()).ok().unwrap();
+                rt.evaluate_script(
+                    global,
+                    "JSON.stringify.bind(JSON);",
+                    "get_stringify.es",
+                    0,
+                    stringify_func_root.handle_mut(),
+                )
+                .ok()
+                .unwrap();
 
-                call_function_value(context, global, stringify_func_root.handle(), vec![new_rooted_arr_val.get()], stringify_res_root.handle_mut()).ok().unwrap();
+                call_function_value(
+                    context,
+                    global,
+                    stringify_func_root.handle(),
+                    vec![ObjectValue(array_rval.get())],
+                    stringify_res_root.handle_mut(),
+                )
+                .ok()
+                .unwrap();
                 /*
                 // tddo, why does this cause a invalid mem ref when testing with gc_ZEAL
                 call_obj_method_name(
@@ -266,7 +282,10 @@ mod tests {
                 */
 
                 let stringify_res_str = es_value_to_str(context, *stringify_res_root.handle());
-                assert_eq!(stringify_res_str.ok().unwrap().as_str(), "[12,15,7,21,21,21,21,21,21,21,21,21,21,21]");
+                assert_eq!(
+                    stringify_res_str.ok().unwrap().as_str(),
+                    "[12,15,7,21,21,21,21,21,21,21,21,21,21,21]"
+                );
 
                 true
             })

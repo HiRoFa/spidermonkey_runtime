@@ -1,6 +1,7 @@
 use crate::eseventqueue::EsEventQueue;
 use crate::esruntime::ModuleCodeLoader;
 use crate::esvaluefacade::EsValueFacade;
+use crate::jsapi_utils::handles::from_raw_handle_mut;
 use crate::jsapi_utils::{report_exception2, EsErrorInfo};
 use crate::spidermonkeyruntimewrapper::SmRuntime;
 use log::{debug, trace};
@@ -165,7 +166,11 @@ impl EsRuntimeInner {
 
                 let func_rc_clone = func_rc.clone();
                 let prom_res_esvf = EsValueFacade::new_promise(move || func_rc_clone(args_vec));
-                args.rval().set(prom_res_esvf.to_es_value(cx));
+                let rval = from_raw_handle_mut(args.rval());
+                prom_res_esvf
+                    .to_es_value(cx, rval)
+                    .ok()
+                    .expect("could not convert prom_res_esvf to JSVal");
                 true
             });
         });
@@ -190,7 +195,10 @@ impl EsRuntimeInner {
                 match func_res {
                     Ok(esvf) => {
                         // set rval
-                        args.rval().set(esvf.to_es_value(cx));
+                        let rval = from_raw_handle_mut(args.rval());
+                        esvf.to_es_value(cx, rval)
+                            .ok()
+                            .expect("could not convert esvf to JSVal");
                         true
                     }
                     Err(js_err) => {

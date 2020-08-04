@@ -57,7 +57,7 @@
 use crate::esruntime::EsRuntime;
 use crate::esvaluefacade::EsValueFacade;
 use crate::jsapi_utils::reflection::{get_proxy, ProxyBuilder};
-use mozjs::jsval::JSVal;
+use mozjs::jsval::UndefinedValue;
 use std::collections::{HashMap, HashSet};
 use std::ptr::replace;
 
@@ -132,8 +132,11 @@ impl EsProxy {
         rt.do_in_es_event_queue(move |sm_rt| {
             sm_rt.do_with_jsapi(move |_rt, cx, _global| {
                 let proxy = get_proxy(p_name.as_str()).unwrap();
-                let event_obj_value: JSVal = event_obj.to_es_value(cx);
-                rooted!(in (cx) let event_obj_root = event_obj_value);
+                rooted!(in (cx) let mut event_obj_root = UndefinedValue());
+                event_obj
+                    .to_es_value(cx, event_obj_root.handle_mut())
+                    .ok()
+                    .expect("error converting event_obj esvf to val");
                 proxy.dispatch_event(obj_id, event_name, cx, event_obj_root.handle().into());
             });
         });
@@ -172,8 +175,11 @@ impl EsProxy {
         rt.do_in_es_event_queue(move |sm_rt| {
             sm_rt.do_with_jsapi(move |_rt, cx, _global| {
                 let proxy = get_proxy(p_name.as_str()).unwrap();
-                let event_obj_value: JSVal = event_obj.to_es_value(cx);
-                rooted!(in (cx) let event_obj_root = event_obj_value);
+                rooted!(in (cx) let mut event_obj_root = UndefinedValue());
+                event_obj
+                    .to_es_value(cx, event_obj_root.handle_mut())
+                    .ok()
+                    .expect("could not convert event_obj_root esvf to jsval");
                 proxy.dispatch_static_event(event_name, cx, event_obj_root.handle().into());
             });
         });
@@ -554,7 +560,7 @@ impl EsProxyBuilder {
                     let es_method_name = method_entry.0;
 
                     let es_method = method_entry.1;
-                    builder.method(es_method_name, move |cx, obj_id, args, mut rval| {
+                    builder.method(es_method_name, move |cx, obj_id, args, rval| {
                         let mut es_args: Vec<EsValueFacade> = vec![];
                         for arg_val in args {
                             let esvf = EsValueFacade::new_v(cx, arg_val);
@@ -563,10 +569,7 @@ impl EsProxyBuilder {
 
                         let res = es_method(&obj_id, es_args);
                         match res {
-                            Ok(esvf) => {
-                                rval.set(esvf.to_es_value(cx));
-                                Ok(())
-                            }
+                            Ok(esvf) => esvf.to_es_value(cx, rval),
                             Err(err_str) => Err(err_str),
                         }
                     });
@@ -579,16 +582,13 @@ impl EsProxyBuilder {
                     let (es_getter, es_setter) = method_entry.1;
                     builder.property(
                         es_prop_name,
-                        move |_cx, obj_id, mut rval| {
+                        move |_cx, obj_id, rval| {
                             crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
                                 let sm_rt = &*sm_rt_rc.borrow();
                                 sm_rt.do_with_jsapi(|_rt, cx, _global| {
                                     let res = es_getter(&obj_id);
                                     match res {
-                                        Ok(esvf) => {
-                                            rval.set(esvf.to_es_value(cx));
-                                            Ok(())
-                                        }
+                                        Ok(esvf) => esvf.to_es_value(cx, rval),
                                         Err(err_str) => Err(err_str),
                                     }
                                 })
@@ -610,7 +610,7 @@ impl EsProxyBuilder {
                     let es_method_name = method_entry.0;
 
                     let es_method = method_entry.1;
-                    builder.static_method(es_method_name, move |cx, args, mut rval| {
+                    builder.static_method(es_method_name, move |cx, args, rval| {
                         let mut es_args: Vec<EsValueFacade> = vec![];
                         for arg_val in args {
                             let esvf = EsValueFacade::new_v(cx, arg_val);
@@ -619,10 +619,7 @@ impl EsProxyBuilder {
 
                         let res = es_method(es_args);
                         match res {
-                            Ok(esvf) => {
-                                rval.set(esvf.to_es_value(cx));
-                                Ok(())
-                            }
+                            Ok(esvf) => esvf.to_es_value(cx, rval),
                             Err(err_str) => Err(err_str),
                         }
                     });
@@ -635,16 +632,13 @@ impl EsProxyBuilder {
                     let (es_getter, es_setter) = method_entry.1;
                     builder.static_property(
                         es_prop_name,
-                        move |_cx, mut rval| {
+                        move |_cx, rval| {
                             crate::spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
                                 let sm_rt = &*sm_rt_rc.borrow();
                                 sm_rt.do_with_jsapi(|_rt, cx, _global| {
                                     let res = es_getter();
                                     match res {
-                                        Ok(esvf) => {
-                                            rval.set(esvf.to_es_value(cx));
-                                            Ok(())
-                                        }
+                                        Ok(esvf) => esvf.to_es_value(cx, rval),
                                         Err(err_str) => Err(err_str),
                                     }
                                 })

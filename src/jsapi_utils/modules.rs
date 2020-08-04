@@ -16,6 +16,7 @@ use mozjs::jsapi::SetModuleDynamicImportHook;
 use mozjs::jsapi::SetModuleMetadataHook;
 use mozjs::jsapi::SetModulePrivate;
 use mozjs::jsapi::SetModuleResolveHook;
+use mozjs::jsval::UndefinedValue;
 use mozjs::jsval::{NullValue, ObjectValue, StringValue};
 use mozjs::rust::{transform_u16_to_source_text, Runtime};
 use std::cell::RefCell;
@@ -77,7 +78,9 @@ pub fn compile_module(
 
     let private_obj = jsapi_utils::objects::new_object(context);
     rooted!(in (context) let private_obj_root = private_obj);
-    rooted!(in (context) let path_root = jsapi_utils::new_es_value_from_str(context, file_name));
+    rooted!(in (context) let mut path_root = UndefinedValue());
+    jsapi_utils::new_es_value_from_str(context, file_name, path_root.handle_mut());
+
     jsapi_utils::objects::set_es_obj_prop_value(
         context,
         private_obj_root.handle(),
@@ -285,7 +288,9 @@ unsafe extern "C" fn module_dynamic_import(
                         trace!("dyn module {} was not compiled ok, rejecting promise", file_name.as_str());
 
                         let err_str= format!("module failed to compile: {}", compiled_mod_obj_res.err().unwrap().err_msg());
-                        rooted!(in (cx) let prom_reject_val = jsapi_utils::new_es_value_from_str(cx, err_str.as_str()));
+                        rooted!(in (cx) let mut prom_reject_val = UndefinedValue());
+                        jsapi_utils::new_es_value_from_str(cx, err_str.as_str(), prom_reject_val.handle_mut());
+
                         trace!("rejecting dynamic module promise: failed {}", err_str);
                         jsapi_utils::promises::reject_promise(
                             cx,
@@ -299,7 +304,9 @@ unsafe extern "C" fn module_dynamic_import(
                     // reject promise
                     let err_str= format!("module not found: {}", file_name);
                     trace!("rejecting dynamic module promise: failed {}", err_str);
-                    rooted!(in (cx) let prom_reject_val = jsapi_utils::new_es_value_from_str(cx, err_str.as_str()));
+                    rooted!(in (cx) let mut prom_reject_val = UndefinedValue());
+                    jsapi_utils::new_es_value_from_str(cx, err_str.as_str(), prom_reject_val.handle_mut());
+
                     jsapi_utils::promises::reject_promise(
                         cx,
                         promise_root.handle(),
@@ -327,7 +334,9 @@ unsafe extern "C" fn set_module_metadata(
     // lets just see what we get here first
     let path = get_path_from_module_private(cx, private_value);
 
-    rooted!(in (cx) let path_root = jsapi_utils::new_es_value_from_str(cx, path.as_str()));
+    rooted!(in (cx) let mut path_root = UndefinedValue());
+    jsapi_utils::new_es_value_from_str(cx, path.as_str(), path_root.handle_mut());
+
     jsapi_utils::objects::set_es_obj_prop_value_raw(
         cx,
         meta_object,
