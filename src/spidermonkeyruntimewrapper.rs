@@ -85,7 +85,7 @@ impl SmRuntime {
     ///         true
     ///     });
     /// });
-    /// let esvf = rt.eval_sync("my_function();", "test_add_global_function_example.es").expect("test_add_global_function_example failed");
+    /// let esvf = rt.eval_sync("my_function();", "test_add_global_function_example.es").ok().expect("test_add_global_function_example failed");
     /// assert_eq!(esvf.get_i32(), &480);
     /// ```
     pub fn add_global_function<F>(&self, name: &'static str, func: F)

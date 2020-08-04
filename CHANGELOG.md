@@ -1,5 +1,7 @@
 # 0.6.0 (work in progress)
 
+* refactored EsValueFacade.to_es_value to accept rval instead of returning JSVal
+
 # 0.5.0
 
 * Script support
