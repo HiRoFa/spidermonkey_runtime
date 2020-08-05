@@ -10,7 +10,9 @@ use mozjs::jsapi::HandleValueArray;
 use mozjs::jsapi::JSClass;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
+use mozjs::jsapi::JS_DeepFreezeObject;
 use mozjs::jsapi::JS_DefineProperty;
+use mozjs::jsapi::JS_FreezeObject;
 use mozjs::jsapi::JS_GetConstructor;
 use mozjs::jsapi::JS_GetProperty;
 use mozjs::jsapi::JS_GetPrototype;
@@ -29,14 +31,14 @@ pub const NULL_JSOBJECT: *mut JSObject = 0 as *mut JSObject;
 /// get a namespace object and create any part that is not yet defined
 pub fn get_or_define_namespace(
     context: *mut JSContext,
-    obj: HandleObject,
+    global: HandleObject,
     namespace: Vec<&str>,
 ) -> *mut JSObject {
     // todo refactor to rval
 
     trace!("get_or_define_package");
 
-    rooted!(in(context) let mut cur_obj_root = *obj);
+    rooted!(in(context) let mut cur_obj_root = *global);
     rooted!(in(context) let mut sub_val_root = UndefinedValue());
 
     for name in namespace {
@@ -177,10 +179,53 @@ pub fn get_es_obj_prop_val_as_i32(
 }
 
 /// create a new object in the engine
-#[allow(dead_code)]
 pub fn new_object(context: *mut JSContext, ret_val: MutableHandleObject) {
     let mut ret_val = ret_val;
     ret_val.set(unsafe { JS_NewPlainObject(context) });
+}
+
+/// create a new objectValue in the engine
+pub fn new_object_value(context: *mut JSContext, ret_val: MutableHandleValue) {
+    let mut ret_val = ret_val;
+    ret_val.set(unsafe { ObjectValue(JS_NewPlainObject(context)) });
+}
+
+/// freeze an Object
+pub fn freeze_object(context: *mut JSContext, obj: HandleObject) -> Result<(), EsErrorInfo> {
+    let res = unsafe { JS_FreezeObject(context, obj.into()) };
+    if res {
+        Ok(())
+    } else {
+        if let Some(err) = crate::jsapi_utils::get_pending_exception(context) {
+            Err(err)
+        } else {
+            Err(EsErrorInfo {
+                message: "unknown error".to_string(),
+                filename: "".to_string(),
+                lineno: 0,
+                column: 0,
+            })
+        }
+    }
+}
+
+/// deep freeze an Object
+pub fn deep_freeze_object(context: *mut JSContext, obj: HandleObject) -> Result<(), EsErrorInfo> {
+    let res = unsafe { JS_DeepFreezeObject(context, obj.into()) };
+    if res {
+        Ok(())
+    } else {
+        if let Some(err) = crate::jsapi_utils::get_pending_exception(context) {
+            Err(err)
+        } else {
+            Err(EsErrorInfo {
+                message: "unknown error".to_string(),
+                filename: "".to_string(),
+                lineno: 0,
+                column: 0,
+            })
+        }
+    }
 }
 
 /// create a new object based on a prototype object
