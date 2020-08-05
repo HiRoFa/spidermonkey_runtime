@@ -1,6 +1,9 @@
 # 0.6.0 (work in progress)
 
-* refactored EsValueFacade.to_es_value to accept rval instead of returning JSVal
+* internals
+  * refactored EsValueFacade.to_es_value to accept rval instead of returning JSVal
+* jsapi_utils
+  * added freeze_object and deep_freeze_object utils to jsapi_utils::objects
 
 # 0.5.0
 
