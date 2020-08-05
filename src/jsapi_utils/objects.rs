@@ -195,17 +195,15 @@ pub fn freeze_object(context: *mut JSContext, obj: HandleObject) -> Result<(), E
     let res = unsafe { JS_FreezeObject(context, obj.into()) };
     if res {
         Ok(())
+    } else if let Some(err) = crate::jsapi_utils::get_pending_exception(context) {
+        Err(err)
     } else {
-        if let Some(err) = crate::jsapi_utils::get_pending_exception(context) {
-            Err(err)
-        } else {
-            Err(EsErrorInfo {
-                message: "unknown error".to_string(),
-                filename: "".to_string(),
-                lineno: 0,
-                column: 0,
-            })
-        }
+        Err(EsErrorInfo {
+            message: "unknown error".to_string(),
+            filename: "".to_string(),
+            lineno: 0,
+            column: 0,
+        })
     }
 }
 
@@ -214,17 +212,15 @@ pub fn deep_freeze_object(context: *mut JSContext, obj: HandleObject) -> Result<
     let res = unsafe { JS_DeepFreezeObject(context, obj.into()) };
     if res {
         Ok(())
+    } else if let Some(err) = crate::jsapi_utils::get_pending_exception(context) {
+        Err(err)
     } else {
-        if let Some(err) = crate::jsapi_utils::get_pending_exception(context) {
-            Err(err)
-        } else {
-            Err(EsErrorInfo {
-                message: "unknown error".to_string(),
-                filename: "".to_string(),
-                lineno: 0,
-                column: 0,
-            })
-        }
+        Err(EsErrorInfo {
+            message: "unknown error".to_string(),
+            filename: "".to_string(),
+            lineno: 0,
+            column: 0,
+        })
     }
 }
 
