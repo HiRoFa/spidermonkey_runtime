@@ -133,9 +133,7 @@ impl EsProxy {
             sm_rt.do_with_jsapi(move |_rt, cx, _global| {
                 let proxy = get_proxy(p_name.as_str()).unwrap();
                 rooted!(in (cx) let mut event_obj_root = UndefinedValue());
-                event_obj
-                    .to_es_value(cx, event_obj_root.handle_mut())
-                    .expect("error converting event_obj esvf to JSVal");
+                event_obj.to_es_value(cx, event_obj_root.handle_mut());
                 proxy.dispatch_event(obj_id, event_name, cx, event_obj_root.handle().into());
             });
         });
@@ -175,9 +173,7 @@ impl EsProxy {
             sm_rt.do_with_jsapi(move |_rt, cx, _global| {
                 let proxy = get_proxy(p_name.as_str()).unwrap();
                 rooted!(in (cx) let mut event_obj_root = UndefinedValue());
-                event_obj
-                    .to_es_value(cx, event_obj_root.handle_mut())
-                    .expect("could not convert event_obj_root esvf to jsval");
+                event_obj.to_es_value(cx, event_obj_root.handle_mut());
                 proxy.dispatch_static_event(event_name, cx, event_obj_root.handle().into());
             });
         });
@@ -568,7 +564,10 @@ impl EsProxyBuilder {
 
                         let res = es_method(&obj_id, es_args);
                         match res {
-                            Ok(esvf) => esvf.to_es_value(cx, rval),
+                            Ok(esvf) => {
+                                esvf.to_es_value(cx, rval);
+                                Ok(())
+                            }
                             Err(err_str) => Err(err_str),
                         }
                     });
@@ -587,7 +586,10 @@ impl EsProxyBuilder {
                                 sm_rt.do_with_jsapi(|_rt, cx, _global| {
                                     let res = es_getter(&obj_id);
                                     match res {
-                                        Ok(esvf) => esvf.to_es_value(cx, rval),
+                                        Ok(esvf) => {
+                                            esvf.to_es_value(cx, rval);
+                                            Ok(())
+                                        }
                                         Err(err_str) => Err(err_str),
                                     }
                                 })
@@ -618,7 +620,10 @@ impl EsProxyBuilder {
 
                         let res = es_method(es_args);
                         match res {
-                            Ok(esvf) => esvf.to_es_value(cx, rval),
+                            Ok(esvf) => {
+                                esvf.to_es_value(cx, rval);
+                                Ok(())
+                            }
                             Err(err_str) => Err(err_str),
                         }
                     });
@@ -637,7 +642,10 @@ impl EsProxyBuilder {
                                 sm_rt.do_with_jsapi(|_rt, cx, _global| {
                                     let res = es_getter();
                                     match res {
-                                        Ok(esvf) => esvf.to_es_value(cx, rval),
+                                        Ok(esvf) => {
+                                            esvf.to_es_value(cx, rval);
+                                            Ok(())
+                                        }
                                         Err(err_str) => Err(err_str),
                                     }
                                 })

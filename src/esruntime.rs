@@ -211,7 +211,7 @@ impl EsRuntime {
     ///      Ok(EsValueFacade::new_i32(361))
     /// });
     /// let esvf = rt.eval_sync("test_add_global_sync();", "test_add_global_sync_function.es").ok().expect("test_add_global_sync_function failed");
-    /// assert_eq!(esvf.get_i32(), &361);
+    /// assert_eq!(esvf.get_i32(), 361);
     /// ```
     pub fn add_global_sync_function<F>(&self, name: &'static str, func: F)
     where
@@ -237,7 +237,7 @@ impl EsRuntime {
     /// let esvf = rt.eval_sync("test_add_global_async();", "test_add_global_async_function.es").ok().expect("test_add_global_async_function failed");
     /// assert!(esvf.is_promise());
     /// let prom_res = esvf.get_promise_result_blocking(Duration::from_secs(5)).ok().expect("promise timed out");
-    /// assert_eq!(prom_res.ok().expect("test_add_global_async_function failed").get_i32(), &351);
+    /// assert_eq!(prom_res.ok().expect("test_add_global_async_function failed").get_i32(), 351);
     /// ```
     pub fn add_global_async_function<F>(&self, name: &'static str, func: F)
     where
@@ -362,7 +362,7 @@ pub mod tests {
             .ok()
             .expect("script failed");
         assert!(esvf.is_string());
-        assert_eq!(esvf.get_string().as_str(), "object");
+        assert_eq!(esvf.get_string(), "object");
     }
 
     #[test]
@@ -397,7 +397,7 @@ pub mod tests {
 
         let esvf = flubber_res.ok().unwrap();
 
-        assert_eq!(esvf.get_i32(), &60);
+        assert_eq!(esvf.get_i32(), 60);
     }
 
     #[test]
@@ -458,7 +458,7 @@ pub mod tests {
         log::info!("test: test_async_await / 4");
         let esvf_res = prom_res.ok().unwrap();
         log::info!("test: test_async_await / 5");
-        assert_eq!(&123, esvf_res.get_i32());
+        assert_eq!(123, esvf_res.get_i32());
         log::info!("test: test_async_await / 6");
     }
 }

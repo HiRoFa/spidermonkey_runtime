@@ -167,9 +167,7 @@ impl EsRuntimeInner {
                 let func_rc_clone = func_rc.clone();
                 let prom_res_esvf = EsValueFacade::new_promise(move || func_rc_clone(args_vec));
                 let rval = from_raw_handle_mut(args.rval());
-                prom_res_esvf
-                    .to_es_value(cx, rval)
-                    .expect("could not convert prom_res_esvf to JSVal");
+                prom_res_esvf.to_es_value(cx, rval);
                 true
             });
         });
@@ -195,8 +193,7 @@ impl EsRuntimeInner {
                     Ok(esvf) => {
                         // set rval
                         let rval = from_raw_handle_mut(args.rval());
-                        esvf.to_es_value(cx, rval)
-                            .expect("could not convert esvf to JSVal");
+                        esvf.to_es_value(cx, rval);
                         true
                     }
                     Err(js_err) => {

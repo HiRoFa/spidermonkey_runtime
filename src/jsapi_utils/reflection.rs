@@ -69,7 +69,7 @@
 //!            "test_proxy.es",
 //!        ).ok().unwrap();
 //!
-//!        assert_eq!(&123, esvf.get_i32());
+//!        assert_eq!(123, esvf.get_i32());
 //!
 //!        // dispatch event from rust
 //!        rooted!(in (cx) let event_obj_root = UndefinedValue());
@@ -684,7 +684,7 @@ mod tests {
                         )
                         .ok()
                         .unwrap();
-                    assert_eq!(&123, esvf.get_i32());
+                    assert_eq!(123, esvf.get_i32());
                 });
             });
             inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
@@ -743,7 +743,7 @@ mod tests {
                         )
                         .ok()
                         .unwrap();
-                    assert_eq!(&123, esvf.get_i32());
+                    assert_eq!(123, esvf.get_i32());
                 });
             });
             inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {

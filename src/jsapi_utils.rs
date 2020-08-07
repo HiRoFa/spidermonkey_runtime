@@ -301,7 +301,7 @@ mod tests {
             inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
                 let res: Result<EsValueFacade, EsErrorInfo> =
                     sm_rt.eval("let a = 'i am eval'; a", "test_eval.es");
-                res.ok().unwrap().get_string().clone()
+                res.ok().unwrap().get_string().to_string()
             })
         });
 

@@ -18,131 +18,31 @@ use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsval::{BooleanValue, DoubleValue, Int32Value, JSVal, ObjectValue, UndefinedValue};
 use mozjs::rust::{HandleValue, MutableHandleValue};
+use std::collections::hash_map::RandomState;
 use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-struct RustManagedEsVar {
-    obj_id: usize,
+// placeholder for promises that were passed from the script engine to rust
+struct CachedJSPromise {
+    // todo this is now unused, figure out whats wise, let the responses delete the cached object or on drop
+    cached_obj_id: usize,
     opt_receiver: Option<Receiver<Result<EsValueFacade, EsValueFacade>>>,
 }
 
-/// the EsValueFacade is a converter between rust variables and script objects
-/// when receiving a EsValueFacade from the script engine it's data is always a clone from the actual data so we need not worry about the value being garbage collected
-///
-/// # Example
-///
-/// ```no_run
-/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-///
-/// let rt = EsRuntimeBuilder::default().build();
-/// let esvf = rt.eval_sync("123", "test_es_value_facade.es").ok().unwrap();
-/// assert!(esvf.is_i32());
-/// assert_eq!(esvf.get_i32(), &123);
-/// ```
-pub struct EsValueFacade {
-    val_string: Option<String>,
-    val_i32: Option<i32>,
-    val_f64: Option<f64>,
-    val_boolean: Option<bool>,
-    val_managed_promise: Option<RustManagedEsVar>,
-    val_object: Option<HashMap<String, EsValueFacade>>,
-    val_array: Option<Vec<EsValueFacade>>,
-    val_prepped_promise: Option<usize>,
-    val_js_function: Option<(usize, Arc<EsRuntimeInner>)>,
+// placeholder for functions that were passed from the script engine to rust
+struct CachedJSFunction {
+    cached_obj_id: usize,
+    rti_ref: Arc<EsRuntimeInner>,
 }
 
-type PromiseAnswersMap = AutoIdMap<PromiseResultContainerOption>;
-
-lazy_static! {
-    static ref PROMISE_ANSWERS: Arc<DebugMutex<PromiseAnswersMap>> =
-        Arc::new(DebugMutex::new(AutoIdMap::new(), "PROMISE_ANSWERS"));
+struct RustPromise {
+    id: usize,
 }
 
-impl EsValueFacade {
-    /// create a new EsValueFacade representing an undefined value
-    pub fn undefined() -> Self {
-        EsValueFacade {
-            val_string: None,
-            val_f64: None,
-            val_i32: None,
-            val_boolean: None,
-            val_managed_promise: None,
-            val_object: None,
-            val_array: None,
-            val_prepped_promise: None,
-            val_js_function: None,
-        }
-    }
-
-    /// create a new EsValueFacade representing a float
-    pub fn new_f64(num: f64) -> Self {
-        let mut ret = Self::undefined();
-        ret.val_f64 = Some(num);
-        ret
-    }
-
-    /// create a new EsValueFacade representing a basic object with properties as defined in the HashMap
-    pub fn new_obj(props: HashMap<String, EsValueFacade>) -> Self {
-        let mut ret = Self::undefined();
-        ret.val_object = Some(props);
-        ret
-    }
-
-    /// create a new EsValueFacade representing a signed integer
-    pub fn new_i32(num: i32) -> Self {
-        let mut ret = Self::undefined();
-        ret.val_i32 = Some(num);
-        ret
-    }
-
-    /// create a new EsValueFacade representing a String
-    pub fn new_str(s: String) -> Self {
-        let mut ret = Self::undefined();
-        ret.val_string = Some(s);
-        ret
-    }
-
-    /// create a new EsValueFacade representing a bool
-    pub fn new_bool(b: bool) -> Self {
-        let mut ret = Self::undefined();
-        ret.val_boolean = Some(b);
-        ret
-    }
-
-    /// create a new EsValueFacade representing an Array
-    pub fn new_array(vals: Vec<EsValueFacade>) -> Self {
-        let mut ret = Self::undefined();
-        ret.val_array = Some(vals);
-        ret
-    }
-
-    /// create a new EsValueFacade representing a Promise, the passed closure will actually run in a seperate helper thread and resolve the Promise that is created in the script runtime
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
-    /// use std::time::Duration;
-    ///
-    /// let rt = EsRuntimeBuilder::new().build();
-    /// rt.eval_sync("let myFunc = function(a){\
-    ///     a.then((res) => {\
-    ///         console.log('a resolved with %s', res);\
-    ///     });\
-    /// };", "test_new_promise.es");
-    /// let esvf_arg = EsValueFacade::new_promise(|| {
-    ///     // do complicated calculations or whatever here, it will run async
-    ///     // then return Ok to resolve the promise or Err to reject it
-    ///     Ok(EsValueFacade::new_i32(123))
-    /// });
-    /// rt.call_sync(vec![], "myFunc", vec![esvf_arg]);
-    /// // wait for promise to resolve
-    /// std::thread::sleep(Duration::from_secs(1));
-    /// ```
-    pub fn new_promise<C>(resolver: C) -> EsValueFacade
+impl RustPromise {
+    fn new_esvf<C>(resolver: C) -> EsValueFacade
     where
         C: FnOnce() -> Result<EsValueFacade, String> + Send + 'static,
     {
@@ -238,10 +138,7 @@ impl EsValueFacade {
                                 if res.is_ok() {
                                     trace!("rooting result");
                                     rooted!(in (cx) let mut res_root = UndefinedValue());
-                                    res.ok()
-                                        .unwrap()
-                                        .to_es_value(cx, res_root.handle_mut())
-                                        .expect("could not convert res.ok().unwrap() to jsval");
+                                    res.ok().unwrap().to_es_value(cx, res_root.handle_mut());
                                     trace!("resolving prom");
                                     let resolve_prom_res = jsapi_utils::promises::resolve_promise(
                                         cx,
@@ -297,41 +194,500 @@ impl EsValueFacade {
         // run task
         EsRuntime::add_helper_task(task);
 
-        let mut ret = Self::undefined();
+        RustPromise { id }.to_es_value_facade()
+    }
+}
 
-        ret.val_prepped_promise = Some(id);
+// todo impl from_jsval?
+pub trait EsValueConvertible {
+    fn to_es_value(&self, cx: *mut JSContext, return_val: MutableHandleValue);
+    fn to_es_value_facade(self) -> EsValueFacade
+    where
+        Self: Sized + Send + 'static,
+    {
+        EsValueFacade {
+            convertible: Box::new(self),
+        }
+    }
 
-        ret
+    fn is_null(&self) -> bool {
+        false
+    }
+
+    fn is_undefined(&self) -> bool {
+        false
+    }
+
+    fn is_bool(&self) -> bool {
+        false
+    }
+    fn get_bool(&self) -> bool {
+        panic!("i am not a boolean");
+    }
+    fn is_str(&self) -> bool {
+        false
+    }
+    fn get_str(&self) -> &str {
+        panic!("i am not a string");
+    }
+    fn is_i32(&self) -> bool {
+        false
+    }
+    fn get_i32(&self) -> i32 {
+        panic!("i am not an i32");
+    }
+    fn is_f64(&self) -> bool {
+        false
+    }
+    fn get_f64(&self) -> f64 {
+        panic!("i am not an f64");
+    }
+    fn is_function(&self) -> bool {
+        false
+    }
+    fn invoke_function(&self, _args: Vec<EsValueFacade>) -> Result<EsValueFacade, EsErrorInfo> {
+        panic!("i am not a function");
+    }
+    fn is_promise(&self) -> bool {
+        false
+    }
+    fn await_promise_blocking(
+        &self,
+        _timeout: Duration,
+    ) -> Result<Result<EsValueFacade, EsValueFacade>, RecvTimeoutError> {
+        panic!("i am not a promise");
+    }
+    fn is_object(&self) -> bool {
+        false
+    }
+    fn get_object(&self) -> &HashMap<String, EsValueFacade> {
+        panic!("i am not an object");
+    }
+    fn is_array(&self) -> bool {
+        false
+    }
+    fn get_array(&self) -> &Vec<EsValueFacade> {
+        panic!("i am not an array");
+    }
+}
+
+struct EsUndefinedValue {}
+
+impl EsValueConvertible for EsUndefinedValue {
+    fn to_es_value(&self, _cx: *mut JSContext, _rval: MutableHandleValue) {
+        //
+    }
+}
+
+impl EsValueConvertible for CachedJSPromise {
+    fn to_es_value(&self, _cx: *mut JSContext, _rval: MutableHandleValue) {
+        unimplemented!()
+    }
+
+    fn is_promise(&self) -> bool {
+        true
+    }
+
+    fn await_promise_blocking(
+        &self,
+        timeout: Duration,
+    ) -> Result<Result<EsValueFacade, EsValueFacade>, RecvTimeoutError> {
+        if !self.is_promise() {
+            return Ok(Err(EsValueFacade::new_str(
+                "esvf was not a Promise".to_string(),
+            )));
+        }
+
+        if EsEventQueue::looks_like_eventqueue_thread() {
+            log::error!("waiting for esvf prom from event queue thread, bad dev bad!");
+            panic!("you really should not wait for promises in a RT's event queue thread");
+        }
+
+        let rx = self.opt_receiver.as_ref().expect("not a waiting promise");
+        rx.recv_timeout(timeout)
+    }
+}
+
+impl EsValueConvertible for RustPromise {
+    fn to_es_value(&self, cx: *mut JSContext, rval: MutableHandleValue) {
+        let mut rval = rval;
+        trace!("to_es_value.7 prepped_promise");
+        let map: &mut PromiseAnswersMap = &mut PROMISE_ANSWERS.lock("to_es_value.7").unwrap();
+        let id = self.id;
+        if let Some(opt) = map.get(&id) {
+            trace!("create promise");
+            // create promise
+            let prom = jsapi_utils::promises::new_promise(cx);
+            trace!("rooting promise");
+            rooted!(in (cx) let prom_root = prom);
+
+            if opt.is_none() {
+                trace!("set rooted Promise obj and weakref in right");
+                // set rooted Promise obj and weakref in right
+
+                let (pid, rti_ref) = spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
+                    let sm_rt: &SmRuntime = &*sm_rt_rc.borrow();
+
+                    let pid = spidermonkeyruntimewrapper::register_cached_object(cx, prom);
+
+                    let weakref = sm_rt.opt_esrt_inner.as_ref().unwrap().clone();
+
+                    (pid, weakref)
+                });
+                map.replace(&id, Some(Either::Right((pid, rti_ref))));
+            } else {
+                trace!("remove eith from map and resolve promise with left");
+                // remove eith from map and resolve promise with left
+                let eith = map.remove(&id).unwrap();
+
+                if eith.is_left() {
+                    let res = eith.left().unwrap();
+                    if res.is_ok() {
+                        rooted!(in (cx) let mut res_root = UndefinedValue());
+                        res.ok().unwrap().to_es_value(cx, res_root.handle_mut());
+                        let prom_reso_res = jsapi_utils::promises::resolve_promise(
+                            cx,
+                            prom_root.handle(),
+                            res_root.handle(),
+                        );
+                        if prom_reso_res.is_err() {
+                            panic!(
+                                "could not resolve promise: {}",
+                                prom_reso_res.err().unwrap().err_msg()
+                            );
+                        }
+                    } else {
+                        // reject prom
+                        let err_str = res.err().unwrap();
+                        rooted!(in (cx) let mut res_root = UndefinedValue());
+                        jsapi_utils::new_es_value_from_str(
+                            cx,
+                            err_str.as_str(),
+                            res_root.handle_mut(),
+                        );
+
+                        let prom_reje_res = jsapi_utils::promises::reject_promise(
+                            cx,
+                            prom_root.handle(),
+                            res_root.handle(),
+                        );
+                        if prom_reje_res.is_err() {
+                            panic!(
+                                "could not reject promise: {}",
+                                prom_reje_res.err().unwrap().err_msg()
+                            );
+                        }
+                    }
+                } else {
+                    panic!("eith had unexpected right for id {}", id);
+                }
+            }
+            rval.set(ObjectValue(prom));
+        } else {
+            panic!("PROMISE_ANSWERS had no val for id {}", id);
+        }
+    }
+}
+
+impl CachedJSFunction {
+    fn invoke_function1(&self, args: Vec<EsValueFacade>) -> Result<EsValueFacade, EsErrorInfo> {
+        let rt_arc = self.rti_ref.clone();
+        let cached_id = self.cached_obj_id;
+
+        let job = move |sm_rt: &SmRuntime| Self::invoke_function2(cached_id, sm_rt, args);
+
+        rt_arc.do_in_es_event_queue_sync(job)
+    }
+
+    fn invoke_function2(
+        cached_id: usize,
+        sm_rt: &SmRuntime,
+        args: Vec<EsValueFacade>,
+    ) -> Result<EsValueFacade, EsErrorInfo> {
+        trace!("EsValueFacade.invoke_function2()");
+        sm_rt.do_with_jsapi(|_rt, cx, _global| Self::invoke_function3(cached_id, cx, args))
+    }
+
+    fn invoke_function3(
+        cached_id: usize,
+        cx: *mut JSContext,
+        args: Vec<EsValueFacade>,
+    ) -> Result<EsValueFacade, EsErrorInfo> {
+        trace!("EsValueFacade.invoke_function3()");
+        spidermonkeyruntimewrapper::do_with_cached_object(cached_id, |epr: &EsPersistentRooted| {
+            auto_root!(in (cx) let mut args_rooted_vec = vec![]);
+
+            for esvf in &args {
+                rooted!(in (cx) let mut arg_val = UndefinedValue());
+                esvf.to_es_value(cx, arg_val.handle_mut());
+                args_rooted_vec.push(*arg_val);
+            }
+
+            let arguments_value_array =
+                unsafe { HandleValueArray::from_rooted_slice(&*args_rooted_vec) };
+
+            rooted!(in (cx) let mut rval = UndefinedValue());
+            rooted!(in (cx) let scope = NULL_JSOBJECT);
+            rooted!(in (cx) let function_val = mozjs::jsval::ObjectValue(epr.get()));
+
+            let res2: Result<(), EsErrorInfo> = jsapi_utils::functions::call_function_value2(
+                cx,
+                scope.handle(),
+                function_val.handle(),
+                arguments_value_array,
+                rval.handle_mut(),
+            );
+
+            if res2.is_ok() {
+                Ok(EsValueFacade::new_v(cx, rval.handle()))
+            } else {
+                Err(res2.err().unwrap())
+            }
+        })
+    }
+}
+
+impl EsValueConvertible for CachedJSFunction {
+    fn to_es_value(&self, _cx: *mut JSContext, _rval: MutableHandleValue) {
+        unimplemented!()
+    }
+
+    fn is_function(&self) -> bool {
+        true
+    }
+
+    fn invoke_function(&self, args: Vec<EsValueFacade>) -> Result<EsValueFacade, EsErrorInfo> {
+        self.invoke_function1(args)
+    }
+}
+
+impl EsValueConvertible for String {
+    fn to_es_value(&self, cx: *mut JSContext, rval: MutableHandleValue) {
+        jsapi_utils::new_es_value_from_str(cx, self.as_str(), rval);
+    }
+
+    fn is_str(&self) -> bool {
+        true
+    }
+
+    fn get_str(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl EsValueConvertible for i32 {
+    fn to_es_value(&self, _cx: *mut JSContext, rval: MutableHandleValue) {
+        let mut rval = rval;
+        rval.set(Int32Value(self.clone()))
+    }
+
+    fn is_i32(&self) -> bool {
+        true
+    }
+
+    fn get_i32(&self) -> i32 {
+        self.clone()
+    }
+}
+
+impl EsValueConvertible for bool {
+    fn to_es_value(&self, _cx: *mut JSContext, rval: MutableHandleValue) {
+        let mut rval = rval;
+        rval.set(BooleanValue(self.clone()))
+    }
+
+    fn is_bool(&self) -> bool {
+        true
+    }
+
+    fn get_bool(&self) -> bool {
+        self.clone()
+    }
+}
+
+impl EsValueConvertible for f64 {
+    fn to_es_value(&self, _cx: *mut JSContext, rval: MutableHandleValue) {
+        let mut rval = rval;
+        rval.set(DoubleValue(self.clone()))
+    }
+
+    fn is_f64(&self) -> bool {
+        true
+    }
+
+    fn get_f64(&self) -> f64 {
+        self.clone()
+    }
+}
+
+impl EsValueConvertible for Vec<EsValueFacade> {
+    fn to_es_value(&self, cx: *mut JSContext, rval: MutableHandleValue) {
+        rooted!(in (cx) let mut arr_root = NULL_JSOBJECT);
+        // create the array
+        new_array(cx, arr_root.handle_mut());
+        // add items
+        for item in self {
+            rooted!(in (cx) let mut arr_elem_val = UndefinedValue());
+            // convert elem to JSVal
+            item.to_es_value(cx, arr_elem_val.handle_mut());
+            // add to array
+            jsapi_utils::arrays::push_array_element(cx, arr_root.handle(), arr_elem_val.handle())
+                .ok()
+                .expect("jsapi_utils::arrays::push_array_element failed");
+        }
+        let mut rval = rval;
+        rval.set(ObjectValue(*arr_root));
+    }
+
+    fn is_array(&self) -> bool {
+        true
+    }
+
+    fn get_array(&self) -> &Vec<EsValueFacade> {
+        self
+    }
+}
+
+impl EsValueConvertible for HashMap<String, EsValueFacade> {
+    fn to_es_value(&self, cx: *mut JSContext, rval: MutableHandleValue) {
+        trace!("to_es_value.6");
+        rooted!(in(cx) let mut obj_root = NULL_JSOBJECT);
+        jsapi_utils::objects::new_object(cx, obj_root.handle_mut());
+
+        for prop in self {
+            let prop_name = prop.0;
+            let prop_esvf = prop.1;
+            rooted!(in(cx) let mut val_root = UndefinedValue());
+            prop_esvf.to_es_value(cx, val_root.handle_mut());
+            jsapi_utils::objects::set_es_obj_prop_value(
+                cx,
+                obj_root.handle(),
+                prop_name,
+                val_root.handle(),
+            );
+        }
+        let mut rval = rval;
+        rval.set(ObjectValue(*obj_root));
+    }
+
+    fn is_object(&self) -> bool {
+        true
+    }
+
+    fn get_object(&self) -> &HashMap<String, EsValueFacade, RandomState> {
+        self
+    }
+}
+
+/// the EsValueFacade is a converter between rust variables and script objects
+/// when receiving a EsValueFacade from the script engine it's data is always a clone from the actual data so we need not worry about the value being garbage collected
+///
+/// # Example
+///
+/// ```no_run
+/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+///
+/// let rt = EsRuntimeBuilder::default().build();
+/// let esvf = rt.eval_sync("123", "test_es_value_facade.es").ok().unwrap();
+/// assert!(esvf.is_i32());
+/// assert_eq!(esvf.get_i32(), 123);
+/// ```
+pub struct EsValueFacade {
+    convertible: Box<dyn EsValueConvertible + Send>,
+}
+
+type PromiseAnswersMap = AutoIdMap<PromiseResultContainerOption>;
+
+lazy_static! {
+    static ref PROMISE_ANSWERS: Arc<DebugMutex<PromiseAnswersMap>> =
+        Arc::new(DebugMutex::new(AutoIdMap::new(), "PROMISE_ANSWERS"));
+}
+
+impl EsValueFacade {
+    /// create a new EsValueFacade representing an undefined value
+    pub fn undefined() -> Self {
+        EsUndefinedValue {}.to_es_value_facade()
+    }
+
+    /// create a new EsValueFacade representing a float
+    pub fn new_f64(num: f64) -> Self {
+        num.to_es_value_facade()
+    }
+
+    /// create a new EsValueFacade representing a basic object with properties as defined in the HashMap
+    pub fn new_obj(props: HashMap<String, EsValueFacade>) -> Self {
+        props.to_es_value_facade()
+    }
+
+    /// create a new EsValueFacade representing a signed integer
+    pub fn new_i32(num: i32) -> Self {
+        num.to_es_value_facade()
+    }
+
+    /// create a new EsValueFacade representing a String
+    pub fn new_str(s: String) -> Self {
+        s.to_es_value_facade()
+    }
+
+    /// create a new EsValueFacade representing a bool
+    pub fn new_bool(b: bool) -> Self {
+        b.to_es_value_facade()
+    }
+
+    /// create a new EsValueFacade representing an Array
+    pub fn new_array(vals: Vec<EsValueFacade>) -> Self {
+        vals.to_es_value_facade()
+    }
+
+    /// create a new EsValueFacade representing a Promise, the passed closure will actually run in a seperate helper thread and resolve the Promise that is created in the script runtime
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use std::time::Duration;
+    ///
+    /// let rt = EsRuntimeBuilder::new().build();
+    /// rt.eval_sync("let myFunc = function(a){\
+    ///     a.then((res) => {\
+    ///         console.log('a resolved with %s', res);\
+    ///     });\
+    /// };", "test_new_promise.es");
+    /// let esvf_arg = EsValueFacade::new_promise(|| {
+    ///     // do complicated calculations or whatever here, it will run async
+    ///     // then return Ok to resolve the promise or Err to reject it
+    ///     Ok(EsValueFacade::new_i32(123))
+    /// });
+    /// rt.call_sync(vec![], "myFunc", vec![esvf_arg]);
+    /// // wait for promise to resolve
+    /// std::thread::sleep(Duration::from_secs(1));
+    /// ```
+    pub fn new_promise<C>(resolver: C) -> EsValueFacade
+    where
+        C: FnOnce() -> Result<EsValueFacade, String> + Send + 'static,
+    {
+        RustPromise::new_esvf(resolver)
     }
 
     pub(crate) fn new_v(context: *mut JSContext, rval_handle: HandleValue) -> Self {
-        let mut val_string = None;
-        let mut val_i32 = None;
-        let mut val_f64 = None;
-        let mut val_boolean = None;
-        let mut val_managed_var = None;
-        let mut val_object = None;
-        let mut val_array = None;
-        let mut val_js_function = None;
-
         let rval: JSVal = *rval_handle;
 
         trace!("EsValueFacade::new_v");
 
         if rval.is_boolean() {
             trace!("EsValueFacade::new_v -> boolean");
-            val_boolean = Some(rval.to_boolean());
+            rval.to_boolean().to_es_value_facade()
         } else if rval.is_int32() {
             trace!("EsValueFacade::new_v -> int32");
-            val_i32 = Some(rval.to_int32());
+            rval.to_int32().to_es_value_facade()
         } else if rval.is_double() {
             trace!("EsValueFacade::new_v -> double");
-            val_f64 = Some(rval.to_number());
+            rval.to_number().to_es_value_facade()
         } else if rval.is_string() {
             trace!("EsValueFacade::new_v -> string");
             let es_str = jsapi_utils::es_value_to_str(context, rval).ok().unwrap();
-
-            val_string = Some(es_str);
+            es_str.to_es_value_facade()
         } else if rval.is_object() {
             trace!("EsValueFacade::new_v -> object");
             let mut map = HashMap::new();
@@ -361,7 +717,7 @@ impl EsValueFacade {
                     vals.push(EsValueFacade::new_v(context, arr_element_root.handle()));
                 }
 
-                val_array = Some(vals);
+                vals.to_es_value_facade()
             } else if jsapi_utils::promises::object_is_promise(obj_root.handle()) {
                 trace!("EsValueFacade::new_v -> object -> promise");
                 // call esses.registerPromiseForResolutionInRust(prom);
@@ -419,12 +775,12 @@ impl EsValueFacade {
 
                 let opt_receiver = Some(rx);
 
-                let rmev: RustManagedEsVar = RustManagedEsVar {
-                    obj_id: cached_prom_id,
+                let rmev: CachedJSPromise = CachedJSPromise {
+                    cached_obj_id: cached_prom_id,
                     opt_receiver,
                 };
 
-                val_managed_var = Some(rmev);
+                rmev.to_es_value_facade()
             } else if jsapi_utils::functions::object_is_function(obj) {
                 trace!("EsValueFacade::new_v -> object -> function");
                 // wrap function in persistentrooted
@@ -433,8 +789,13 @@ impl EsValueFacade {
                     let sm_rt: &SmRuntime = &*sm_rt_rc.borrow();
                     sm_rt.clone_esrt_inner()
                 });
-                let cached_id = spidermonkeyruntimewrapper::register_cached_object(context, obj);
-                val_js_function = Some((cached_id, rti_ref));
+                let cached_obj_id =
+                    spidermonkeyruntimewrapper::register_cached_object(context, obj);
+                let cf = CachedJSFunction {
+                    cached_obj_id,
+                    rti_ref,
+                };
+                cf.to_es_value_facade()
             } else {
                 trace!("EsValueFacade::new_v -> object -> object");
                 let prop_names: Vec<String> =
@@ -459,66 +820,44 @@ impl EsValueFacade {
                     let prop_esvf = EsValueFacade::new_v(context, prop_val_root.handle());
                     map.insert(prop_name, prop_esvf);
                 }
+                map.to_es_value_facade()
             }
-
-            val_object = Some(map);
         } else if rval.is_null() {
             trace!("EsValueFacade::new_v -> null");
+            // todo impl EsNull
+            EsUndefinedValue {}.to_es_value_facade()
         } else if rval.is_undefined() {
             trace!("EsValueFacade::new_v -> undefined");
+            EsUndefinedValue {}.to_es_value_facade()
         } else {
             trace!("EsValueFacade::new_v -> unknown");
-        }
-
-        EsValueFacade {
-            val_string,
-            val_i32,
-            val_f64,
-            val_boolean,
-            val_managed_promise: val_managed_var,
-            val_object,
-            val_array,
-            val_prepped_promise: None,
-            val_js_function,
+            EsUndefinedValue {}.to_es_value_facade()
         }
     }
 
     /// get the String value
-    pub fn get_string(&self) -> &String {
-        self.val_string.as_ref().expect("not a string")
+    pub fn get_string(&self) -> &str {
+        self.convertible.get_str()
     }
 
     /// get the i32 value
-    pub fn get_i32(&self) -> &i32 {
-        &self.val_i32.as_ref().expect("i am not a i32")
+    pub fn get_i32(&self) -> i32 {
+        self.convertible.get_i32()
     }
 
     /// get the f64 value
-    pub fn get_f64(&self) -> &f64 {
-        &self.val_f64.as_ref().expect("i am not a f64")
+    pub fn get_f64(&self) -> f64 {
+        self.convertible.get_f64()
     }
 
     /// get the boolean value
     pub fn get_boolean(&self) -> bool {
-        self.val_boolean.expect("i am not a boolean")
-    }
-
-    pub fn get_managed_object_id(&self) -> usize {
-        let rmev: &RustManagedEsVar = self
-            .val_managed_promise
-            .as_ref()
-            .expect("not a managed var");
-        rmev.obj_id
+        self.convertible.get_bool()
     }
 
     /// check if this esvf was a promise which was returned from the script engine
     pub fn is_promise(&self) -> bool {
-        self.is_managed_object()
-    }
-
-    /// check if this esvf was a promise which was initialized from rust by calling EsValueFacade::new_promise()
-    pub fn is_prepped_promise(&self) -> bool {
-        self.val_prepped_promise.is_some()
+        self.convertible.is_promise()
     }
 
     /// wait for a promise to resolve in rust
@@ -538,29 +877,14 @@ impl EsValueFacade {
     /// // get the ok result, fail is promise was rejected
     /// let esvf = wait_res.ok().expect("promise was rejected");
     /// // check the result
-    /// assert_eq!(esvf.get_i32(), &123);
+    /// assert_eq!(esvf.get_i32(), 123);
     /// ```
     pub fn get_promise_result_blocking(
         &self,
         timeout: Duration,
     ) -> Result<Result<EsValueFacade, EsValueFacade>, RecvTimeoutError> {
-        if !self.is_promise() {
-            return Ok(Err(EsValueFacade::new_str(
-                "esvf was not a Promise".to_string(),
-            )));
-        }
-
-        if EsEventQueue::looks_like_eventqueue_thread() {
-            log::error!("waiting for esvf prom from event queue thread, bad dev bad!");
-            panic!("you really should not wait for promises in a RT's event queue thread");
-        }
-
-        let rmev: &RustManagedEsVar = self
-            .val_managed_promise
-            .as_ref()
-            .expect("not a managed var");
-        let rx = rmev.opt_receiver.as_ref().expect("not a waiting promise");
-        rx.recv_timeout(timeout)
+        // todo
+        self.convertible.await_promise_blocking(timeout)
     }
 
     /// get the value as a Map of EsValueFacades, this works when the value was an object in the script engine
@@ -575,7 +899,7 @@ impl EsValueFacade {
     /// assert!(map.contains_key("b"));
     /// ```
     pub fn get_object(&self) -> &HashMap<String, EsValueFacade> {
-        self.val_object.as_ref().unwrap()
+        self.convertible.get_object()
     }
 
     /// get the value as a Vec of EsValueFacades, this works when the value was an array in the script engine
@@ -590,7 +914,7 @@ impl EsValueFacade {
     /// assert_eq!(arr.len(), 3);
     /// ```
     pub fn get_array(&self) -> &Vec<EsValueFacade> {
-        self.val_array.as_ref().unwrap()
+        self.convertible.get_array()
     }
 
     /// invoke the function that was returned from the script engine
@@ -607,334 +931,79 @@ impl EsValueFacade {
     ///     .ok().expect("function failed");
     /// // check that 19 / 2 = 9
     /// let res_i32 = res_esvf.get_i32();
-    /// assert_eq!(res_i32, &9);
+    /// assert_eq!(res_i32, 9);
     /// ```
     pub fn invoke_function(&self, args: Vec<EsValueFacade>) -> Result<EsValueFacade, EsErrorInfo> {
         trace!("EsValueFacade.invoke_function()");
-        let rt_arc = self.val_js_function.as_ref().unwrap().1.clone();
-        let cached_id = self.val_js_function.as_ref().unwrap().0;
-
-        let job = move |sm_rt: &SmRuntime| Self::invoke_function2(cached_id, sm_rt, args);
-
-        rt_arc.do_in_es_event_queue_sync(job)
-    }
-
-    pub(crate) fn invoke_function2(
-        cached_id: usize,
-        sm_rt: &SmRuntime,
-        args: Vec<EsValueFacade>,
-    ) -> Result<EsValueFacade, EsErrorInfo> {
-        trace!("EsValueFacade.invoke_function2()");
-        sm_rt.do_with_jsapi(|_rt, cx, _global| Self::invoke_function3(cached_id, cx, args))
-    }
-
-    pub(crate) fn invoke_function3(
-        cached_id: usize,
-
-        cx: *mut JSContext,
-
-        args: Vec<EsValueFacade>,
-    ) -> Result<EsValueFacade, EsErrorInfo> {
-        trace!("EsValueFacade.invoke_function3()");
-        spidermonkeyruntimewrapper::do_with_cached_object(cached_id, |epr: &EsPersistentRooted| {
-            auto_root!(in (cx) let mut args_rooted_vec = vec![]);
-
-            for esvf in &args {
-                rooted!(in (cx) let mut arg_val = UndefinedValue());
-                esvf.to_es_value(cx, arg_val.handle_mut())
-                    .expect("could not convert esvf to JSVal 7365");
-                args_rooted_vec.push(*arg_val);
-            }
-
-            let arguments_value_array =
-                unsafe { HandleValueArray::from_rooted_slice(&*args_rooted_vec) };
-
-            rooted!(in (cx) let mut rval = UndefinedValue());
-            rooted!(in (cx) let scope = NULL_JSOBJECT);
-            rooted!(in (cx) let function_val = mozjs::jsval::ObjectValue(epr.get()));
-
-            let res2: Result<(), EsErrorInfo> = jsapi_utils::functions::call_function_value2(
-                cx,
-                scope.handle(),
-                function_val.handle(),
-                arguments_value_array,
-                rval.handle_mut(),
-            );
-
-            if res2.is_ok() {
-                Ok(EsValueFacade::new_v(cx, rval.handle()))
-            } else {
-                Err(res2.err().unwrap())
-            }
-        })
+        self.convertible.invoke_function(args)
     }
 
     /// check if the value is a String
     pub fn is_string(&self) -> bool {
-        self.val_string.is_some()
+        self.convertible.is_str()
     }
 
     /// check if the value is a i32
     pub fn is_i32(&self) -> bool {
-        self.val_i32.is_some()
+        self.convertible.is_i32()
     }
 
     /// check if the value is a f64
     pub fn is_f64(&self) -> bool {
-        self.val_f64.is_some()
+        self.convertible.is_f64()
     }
 
     /// check if the value is a bool
     pub fn is_boolean(&self) -> bool {
-        self.val_boolean.is_some()
-    }
-
-    /// check if the value is a promise
-    pub fn is_managed_object(&self) -> bool {
-        self.val_managed_promise.is_some()
+        self.convertible.is_bool()
     }
 
     /// check if the value is an object
     pub fn is_object(&self) -> bool {
-        self.val_object.is_some()
+        self.convertible.is_object()
     }
 
     /// check if the value is an array
     pub fn is_array(&self) -> bool {
-        self.val_array.is_some()
+        self.convertible.is_array()
     }
 
     /// check if the value is an function
     pub fn is_function(&self) -> bool {
-        self.val_js_function.is_some()
+        self.convertible.is_function()
     }
 
-    pub fn as_js_expression_str(&self) -> String {
-        if self.is_boolean() {
-            if self.get_boolean() {
-                "true".to_string()
-            } else {
-                "false".to_string()
-            }
-        } else if self.is_i32() {
-            format!("{}", self.get_i32())
-        } else if self.is_f64() {
-            format!("{}", self.get_f64())
-        } else if self.is_string() {
-            format!("\"{}\"", self.get_string())
-        } else if self.is_managed_object() {
-            format!("/* Future {} */", self.get_managed_object_id())
-        } else if self.is_array() {
-            // todo
-            "[]".to_string()
-        } else if self.is_object() {
-            let mut res: String = String::new();
-            let map = self.get_object();
-            res.push('{');
-            for e in map {
-                if res.len() > 1 {
-                    res.push_str(", ");
-                }
-                res.push('"');
-                res.push_str(e.0);
-                res.push_str("\": ");
-
-                res.push_str(e.1.as_js_expression_str().as_str());
-            }
-
-            res.push('}');
-            res
-        } else {
-            "null".to_string()
-        }
-    }
-
-    // todo, refactor to have a rval: MutableHandleValue
-    pub(crate) fn to_es_value(
-        &self,
-        context: *mut JSContext,
-        rval: MutableHandleValue,
-    ) -> Result<(), String> {
+    pub(crate) fn to_es_value(&self, context: *mut JSContext, return_val: MutableHandleValue) {
         trace!("to_es_value.1");
-        let mut rval = rval;
 
-        if self.is_i32() {
-            trace!("to_es_value.2");
-            rval.set(Int32Value(*self.get_i32()));
-        } else if self.is_f64() {
-            trace!("to_es_value.3");
-            rval.set(DoubleValue(*self.get_f64()));
-        } else if self.is_boolean() {
-            trace!("to_es_value.4");
-            rval.set(BooleanValue(self.get_boolean()))
-        } else if self.is_string() {
-            trace!("to_es_value.5");
-            jsapi_utils::new_es_value_from_str(context, self.get_string(), rval);
-        } else if self.is_array() {
-            rooted!(in (context) let mut arr_root = NULL_JSOBJECT);
-            // create the array
-            new_array(context, arr_root.handle_mut());
-            // add items
-            for item in self.val_array.as_ref().unwrap() {
-                rooted!(in (context) let mut arr_elem_val = UndefinedValue());
-                // convert elem to JSVal
-                item.to_es_value(context, arr_elem_val.handle_mut())
-                    .expect("item.to_es_value failed");
-                // add to array
-                jsapi_utils::arrays::push_array_element(
-                    context,
-                    arr_root.handle(),
-                    arr_elem_val.handle(),
-                )
-                .ok()
-                .expect("jsapi_utils::arrays::push_array_element failed");
-            }
-            rval.set(ObjectValue(*arr_root));
-        } else if self.is_object() {
-            trace!("to_es_value.6");
-            rooted!(in(context) let mut obj_root = NULL_JSOBJECT);
-            jsapi_utils::objects::new_object(context, obj_root.handle_mut());
-            let map = self.get_object();
-            for prop in map {
-                let prop_name = prop.0;
-                let prop_esvf = prop.1;
-                rooted!(in(context) let mut val_root = UndefinedValue());
-                prop_esvf
-                    .to_es_value(context, val_root.handle_mut())
-                    .expect("could not convert prop");
-                jsapi_utils::objects::set_es_obj_prop_value(
-                    context,
-                    obj_root.handle(),
-                    prop_name,
-                    val_root.handle(),
-                );
-            }
-
-            rval.set(ObjectValue(*obj_root));
-        } else if self.is_prepped_promise() {
-            return match self.to_es_promise_value(context, rval) {
-                Ok(_) => Ok(()),
-                Err(err) => Err(err.err_msg()),
-            };
-        } else {
-            // todo, other val types
-            trace!("to_es_value.7");
-            return Err("unknown type".to_string());
-        }
-        Ok(())
-    }
-
-    fn to_es_promise_value(
-        &self,
-        context: *mut JSContext,
-        rval: MutableHandleValue,
-    ) -> Result<(), EsErrorInfo> {
-        let mut rval = rval;
-        trace!("to_es_value.7 prepped_promise");
-        let map: &mut PromiseAnswersMap = &mut PROMISE_ANSWERS.lock("to_es_value.7").unwrap();
-        let id = self.val_prepped_promise.as_ref().unwrap();
-        if let Some(opt) = map.get(id) {
-            trace!("create promise");
-            // create promise
-            let prom = jsapi_utils::promises::new_promise(context);
-            trace!("rooting promise");
-            rooted!(in (context) let prom_root = prom);
-
-            if opt.is_none() {
-                trace!("set rooted Promise obj and weakref in right");
-                // set rooted Promise obj and weakref in right
-
-                let (pid, rti_ref) = spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
-                    let sm_rt: &SmRuntime = &*sm_rt_rc.borrow();
-
-                    let pid = spidermonkeyruntimewrapper::register_cached_object(context, prom);
-
-                    let weakref = sm_rt.opt_esrt_inner.as_ref().unwrap().clone();
-
-                    (pid, weakref)
-                });
-                map.replace(id, Some(Either::Right((pid, rti_ref))));
-            } else {
-                trace!("remove eith from map and resolve promise with left");
-                // remove eith from map and resolve promise with left
-                let eith = map.remove(id).unwrap();
-
-                if eith.is_left() {
-                    let res = eith.left().unwrap();
-                    if res.is_ok() {
-                        rooted!(in (context) let mut res_root = UndefinedValue());
-                        res.ok()
-                            .unwrap()
-                            .to_es_value(context, res_root.handle_mut())
-                            .expect("could not convert res.ok() to JSVal 3269");
-                        let prom_reso_res = jsapi_utils::promises::resolve_promise(
-                            context,
-                            prom_root.handle(),
-                            res_root.handle(),
-                        );
-                        if prom_reso_res.is_err() {
-                            panic!(
-                                "could not resolve promise: {}",
-                                prom_reso_res.err().unwrap().err_msg()
-                            );
-                        }
-                    } else {
-                        // reject prom
-                        let err_str = res.err().unwrap();
-                        rooted!(in (context) let mut res_root = UndefinedValue());
-                        jsapi_utils::new_es_value_from_str(
-                            context,
-                            err_str.as_str(),
-                            res_root.handle_mut(),
-                        );
-
-                        let prom_reje_res = jsapi_utils::promises::reject_promise(
-                            context,
-                            prom_root.handle(),
-                            res_root.handle(),
-                        );
-                        if prom_reje_res.is_err() {
-                            panic!(
-                                "could not reject promise: {}",
-                                prom_reje_res.err().unwrap().err_msg()
-                            );
-                        }
-                    }
-                } else {
-                    panic!("eith had unexpected right for id {}", id);
-                }
-            }
-            rval.set(ObjectValue(prom));
-        } else {
-            panic!("PROMISE_ANSWERS had no val for id {}", id);
-        }
-        Ok(())
+        self.convertible.to_es_value(context, return_val)
     }
 }
 
 type PromiseResultContainer = Either<Result<EsValueFacade, String>, (usize, Weak<EsRuntimeInner>)>;
 type PromiseResultContainerOption = Option<PromiseResultContainer>;
 
-impl Drop for EsValueFacade {
+impl Drop for RustPromise {
     fn drop(&mut self) {
-        if self.is_prepped_promise() {
-            // drop from map if val is None, task has not run yet and to_es_val was not called
-            let map: &mut PromiseAnswersMap =
-                &mut PROMISE_ANSWERS.lock("EsValueFacade::drop").unwrap();
-            let id = self.val_prepped_promise.as_ref().unwrap();
-            if let Some(opt) = map.get(id) {
-                if opt.is_none() {
-                    map.remove(id);
-                }
+        // drop from map if val is None, task has not run yet and to_es_val was not called
+        let map: &mut PromiseAnswersMap = &mut PROMISE_ANSWERS.lock("EsValueFacade::drop").unwrap();
+        let id = self.id;
+        if let Some(opt) = map.get(&id) {
+            if opt.is_none() {
+                map.remove(&id);
             }
-        } else if self.is_function() {
-            let rt_arc = self.val_js_function.as_ref().unwrap().1.clone();
-            let cached_obj_id = self.val_js_function.as_ref().unwrap().0;
-
-            rt_arc.do_in_es_event_queue(move |_sm_rt| {
-                spidermonkeyruntimewrapper::consume_cached_object(cached_obj_id);
-            });
         }
+    }
+}
+
+impl Drop for CachedJSFunction {
+    fn drop(&mut self) {
+        let rt_arc = self.rti_ref.clone();
+        let cached_obj_id = self.cached_obj_id;
+
+        rt_arc.do_in_es_event_queue(move |_sm_rt| {
+            spidermonkeyruntimewrapper::consume_cached_object(cached_obj_id);
+        });
     }
 }
 
@@ -958,8 +1027,8 @@ mod tests {
             let args1 = args.get(0).expect("did not get a first arg");
             let args2 = args.get(1).expect("did not get a second arg");
 
-            let x = *args1.get_i32() as f64;
-            let y = *args2.get_i32() as f64;
+            let x = args1.get_i32() as f64;
+            let y = args2.get_i32() as f64;
 
             Ok(EsValueFacade::new_f64(x / y))
         });
@@ -1004,8 +1073,8 @@ mod tests {
         let esvf2 = res2.ok().expect("2 did not get a result");
         let esvf3 = res3.ok().expect("3 did not get a result");
 
-        assert_eq!(*esvf0.get_f64(), (13_f64 / 17_f64));
-        assert_eq!(esvf1.get_i32().clone(), (13 * 17) as i32);
+        assert_eq!(esvf0.get_f64(), (13_f64 / 17_f64));
+        assert_eq!(esvf1.get_i32(), (13 * 17) as i32);
         assert_eq!(esvf2.get_boolean(), false);
         assert_eq!(esvf3.get_string(), format!("{}", 13 * 17).as_str());
     }
@@ -1145,7 +1214,7 @@ mod tests {
         let esvf_a = map.get(&"a".to_string()).unwrap();
 
         assert!(esvf_a.is_i32());
-        assert_eq!(esvf_a.get_i32(), &1);
+        assert_eq!(esvf_a.get_i32(), 1);
     }
 
     #[test]
@@ -1166,7 +1235,7 @@ mod tests {
         let esvf_0 = vec.get(1).unwrap();
 
         assert!(esvf_0.is_i32());
-        assert_eq!(esvf_0.get_i32(), &7);
+        assert_eq!(esvf_0.get_i32(), 7);
 
         let mut props = HashMap::new();
         props.insert("a".to_string(), EsValueFacade::new_i32(12));
@@ -1251,7 +1320,7 @@ mod tests {
 
         let res_str = res_str_esvf.get_string();
 
-        assert_eq!(&"123foo", res_str);
+        assert_eq!("123foo", res_str);
 
         let res2 = p2_esvf_rej
             .ok()
@@ -1264,7 +1333,7 @@ mod tests {
 
         let res_str_rej = res_str_esvf_rej.get_string();
 
-        assert_eq!(&"456bar", res_str_rej);
+        assert_eq!("456bar", res_str_rej);
     }
 
     #[test]
@@ -1294,6 +1363,6 @@ mod tests {
 
         let res_str = res_str_esvf.get_string();
 
-        assert_eq!(&"123foo", res_str);
+        assert_eq!("123foo", res_str);
     }
 }
