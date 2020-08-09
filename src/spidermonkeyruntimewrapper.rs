@@ -443,7 +443,7 @@ where
     })
 }
 
-pub fn consume_cached_object(id: usize) -> EsPersistentRooted {
+pub fn remove_cached_object(id: usize) -> EsPersistentRooted {
     trace!("consume cached obj with id {}", id);
     OBJECT_CACHE.with(|object_cache_rc| {
         let map = &mut *object_cache_rc.borrow_mut();

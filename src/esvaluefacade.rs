@@ -26,9 +26,20 @@ use std::time::Duration;
 
 // placeholder for promises that were passed from the script engine to rust
 struct CachedJSPromise {
-    // todo this is now unused, figure out whats wise, let the responses delete the cached object or on drop
     cached_obj_id: usize,
     opt_receiver: Option<Receiver<Result<EsValueFacade, EsValueFacade>>>,
+    rti_ref: Arc<EsRuntimeInner>,
+}
+
+impl Drop for CachedJSPromise {
+    fn drop(&mut self) {
+        let rt_arc = self.rti_ref.clone();
+        let cached_obj_id = self.cached_obj_id;
+
+        rt_arc.do_in_es_event_queue(move |_sm_rt| {
+            spidermonkeyruntimewrapper::remove_cached_object(cached_obj_id);
+        });
+    }
 }
 
 // placeholder for functions that were passed from the script engine to rust
@@ -124,12 +135,10 @@ impl RustPromise {
                             // resolve or reject promise
                             sm_rt.do_with_jsapi(move |_rt, cx, _global| {
                                 let prom_obj: *mut JSObject = {
-                                    let prom_epr: EsPersistentRooted =
-                                        spidermonkeyruntimewrapper::consume_cached_object(
-                                            prom_regged_id,
-                                        );
-                                    trace!("epr should drop here");
-                                    prom_epr.get()
+                                    let epr = spidermonkeyruntimewrapper::remove_cached_object(
+                                        prom_regged_id,
+                                    );
+                                    epr.get()
                                 };
                                 trace!("epr should be dropped here");
                                 rooted!(in (cx) let mut prom_obj_root = prom_obj);
@@ -198,9 +207,9 @@ impl RustPromise {
     }
 }
 
-// todo impl from_jsval?
 pub trait EsValueConvertible {
     fn to_es_value(&self, cx: *mut JSContext, return_val: MutableHandleValue);
+
     fn to_es_value_facade(self) -> EsValueFacade
     where
         Self: Sized + Send + 'static,
@@ -495,7 +504,6 @@ impl EsValueConvertible for bool {
         let mut rval = rval;
         rval.set(BooleanValue(self.clone()))
     }
-
     fn is_bool(&self) -> bool {
         true
     }
@@ -510,7 +518,6 @@ impl EsValueConvertible for f64 {
         let mut rval = rval;
         rval.set(DoubleValue(self.clone()))
     }
-
     fn is_f64(&self) -> bool {
         true
     }
@@ -670,168 +677,165 @@ impl EsValueFacade {
         RustPromise::new_esvf(resolver)
     }
 
-    pub(crate) fn new_v(context: *mut JSContext, rval_handle: HandleValue) -> Self {
-        let rval: JSVal = *rval_handle;
+    pub(crate) fn new_v(context: *mut JSContext, val_handle: HandleValue) -> Self {
+        let val: JSVal = *val_handle;
 
         trace!("EsValueFacade::new_v");
 
-        if rval.is_boolean() {
+        if val.is_boolean() {
             trace!("EsValueFacade::new_v -> boolean");
-            rval.to_boolean().to_es_value_facade()
-        } else if rval.is_int32() {
+            val.to_boolean().to_es_value_facade()
+        } else if val.is_int32() {
             trace!("EsValueFacade::new_v -> int32");
-            rval.to_int32().to_es_value_facade()
-        } else if rval.is_double() {
+            val.to_int32().to_es_value_facade()
+        } else if val.is_double() {
             trace!("EsValueFacade::new_v -> double");
-            rval.to_number().to_es_value_facade()
-        } else if rval.is_string() {
+            val.to_number().to_es_value_facade()
+        } else if val.is_string() {
             trace!("EsValueFacade::new_v -> string");
-            let es_str = jsapi_utils::es_value_to_str(context, rval).ok().unwrap();
-            es_str.to_es_value_facade()
-        } else if rval.is_object() {
+            jsapi_utils::es_value_to_str(context, val)
+                .ok()
+                .expect("could not convert jsval to string")
+                .to_es_value_facade()
+        } else if val.is_object() {
             trace!("EsValueFacade::new_v -> object");
-            let mut map = HashMap::new();
-            let obj: *mut JSObject = rval.to_object();
-            rooted!(in(context) let obj_root = obj);
-
-            if object_is_array(context, obj_root.handle()) {
-                trace!("EsValueFacade::new_v -> object -> array");
-                let mut vals = vec![];
-                // add vals
-
-                let arr_len = get_array_length(context, obj_root.handle()).ok().unwrap();
-                for x in 0..arr_len {
-                    rooted!(in (context) let mut arr_element_root = UndefinedValue());
-                    let get_res = get_array_element(
-                        context,
-                        obj_root.handle(),
-                        x,
-                        arr_element_root.handle_mut(),
-                    );
-                    if get_res.is_err() {
-                        panic!(
-                            "could not get element of array: {}",
-                            get_res.err().unwrap().err_msg()
-                        );
-                    }
-                    vals.push(EsValueFacade::new_v(context, arr_element_root.handle()));
-                }
-
-                vals.to_es_value_facade()
-            } else if jsapi_utils::promises::object_is_promise(obj_root.handle()) {
-                trace!("EsValueFacade::new_v -> object -> promise");
-                // call esses.registerPromiseForResolutionInRust(prom);
-
-                // todo, throw in an epr, store id in esvf
-                // in wait_for we should add promise reactions in event_queue, then get transmitter there
-                //
-
-                let cached_prom_id =
-                    spidermonkeyruntimewrapper::register_cached_object(context, *obj_root);
-
-                let (tx, rx) = channel();
-                let tx2 = tx.clone();
-                assert!(jsapi_utils::promises::add_promise_reactions_callbacks(
-                    context,
-                    obj_root.handle(),
-                    Some(
-                        move |cx, mut args: Vec<HandleValue>, _rval: MutableHandleValue| {
-                            // promsie was resolved
-                            let resolution = args.remove(0);
-                            let res_esvf = EsValueFacade::new_v(cx, resolution);
-                            // remove epr
-                            let _ =
-                                spidermonkeyruntimewrapper::consume_cached_object(cached_prom_id);
-                            match tx.send(Ok(res_esvf)) {
-                                Ok(_) => Ok(()),
-                                // todo, does not include error (which is "sending on a closed channel") which is not ASCII and thus fails the error handler
-                                Err(e) => {
-                                    debug!("send res error: {}", e);
-                                    Err("send res error".to_string())
-                                }
-                            }
-                        }
-                    ),
-                    Some(
-                        move |cx, mut args: Vec<HandleValue>, _rval: MutableHandleValue| {
-                            // promsie was rejected
-                            let rejection = args.remove(0);
-                            let rej_esvf = EsValueFacade::new_v(cx, rejection);
-                            // remove epr
-                            let _ =
-                                spidermonkeyruntimewrapper::consume_cached_object(cached_prom_id);
-                            match tx2.send(Err(rej_esvf)) {
-                                Ok(_) => Ok(()),
-                                // todo, does not include error (which is "sending on a closed channel") which is not ASCII and thus fails the error handler
-                                Err(e) => {
-                                    debug!("send rejection error: {}", e);
-                                    Err("send rejection error".to_string())
-                                }
-                            }
-                            // release epr
-                        }
-                    )
-                ));
-
-                let opt_receiver = Some(rx);
-
-                let rmev: CachedJSPromise = CachedJSPromise {
-                    cached_obj_id: cached_prom_id,
-                    opt_receiver,
-                };
-
-                rmev.to_es_value_facade()
-            } else if jsapi_utils::functions::object_is_function(obj) {
-                trace!("EsValueFacade::new_v -> object -> function");
-                // wrap function in persistentrooted
-
-                let rti_ref = spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
-                    let sm_rt: &SmRuntime = &*sm_rt_rc.borrow();
-                    sm_rt.clone_esrt_inner()
-                });
-                let cached_obj_id =
-                    spidermonkeyruntimewrapper::register_cached_object(context, obj);
-                let cf = CachedJSFunction {
-                    cached_obj_id,
-                    rti_ref,
-                };
-                cf.to_es_value_facade()
-            } else {
-                trace!("EsValueFacade::new_v -> object -> object");
-                let prop_names: Vec<String> =
-                    objects::get_js_obj_prop_names(context, obj_root.handle());
-                for prop_name in prop_names {
-                    rooted!(in (context) let mut prop_val_root = UndefinedValue());
-                    let prop_val_res = objects::get_es_obj_prop_val(
-                        context,
-                        obj_root.handle(),
-                        prop_name.as_str(),
-                        prop_val_root.handle_mut(),
-                    );
-
-                    if prop_val_res.is_err() {
-                        panic!(
-                            "error getting prop {}: {}",
-                            prop_name,
-                            prop_val_res.err().unwrap().err_msg()
-                        );
-                    }
-
-                    let prop_esvf = EsValueFacade::new_v(context, prop_val_root.handle());
-                    map.insert(prop_name, prop_esvf);
-                }
-                map.to_es_value_facade()
-            }
-        } else if rval.is_null() {
+            let obj: *mut JSObject = val.to_object();
+            Self::new_v_from_object(context, obj)
+        } else if val.is_null() {
             trace!("EsValueFacade::new_v -> null");
             // todo impl EsNull
             EsUndefinedValue {}.to_es_value_facade()
-        } else if rval.is_undefined() {
+        } else if val.is_undefined() {
             trace!("EsValueFacade::new_v -> undefined");
             EsUndefinedValue {}.to_es_value_facade()
         } else {
             trace!("EsValueFacade::new_v -> unknown");
             EsUndefinedValue {}.to_es_value_facade()
+        }
+    }
+
+    fn new_v_from_object(context: *mut JSContext, obj: *mut JSObject) -> Self {
+        rooted!(in(context) let obj_root = obj);
+
+        if object_is_array(context, obj_root.handle()) {
+            trace!("EsValueFacade::new_v -> object -> array");
+            let mut vals = vec![];
+            // add vals
+
+            let arr_len = get_array_length(context, obj_root.handle()).ok().unwrap();
+            for x in 0..arr_len {
+                rooted!(in (context) let mut arr_element_root = UndefinedValue());
+                let get_res =
+                    get_array_element(context, obj_root.handle(), x, arr_element_root.handle_mut());
+                if get_res.is_err() {
+                    panic!(
+                        "could not get element of array: {}",
+                        get_res.err().unwrap().err_msg()
+                    );
+                }
+                vals.push(EsValueFacade::new_v(context, arr_element_root.handle()));
+            }
+
+            vals.to_es_value_facade()
+        } else if jsapi_utils::promises::object_is_promise(obj_root.handle()) {
+            trace!("EsValueFacade::new_v -> object -> promise");
+
+            let cached_prom_id =
+                spidermonkeyruntimewrapper::register_cached_object(context, *obj_root);
+
+            let (tx, rx) = channel();
+            let tx2 = tx.clone();
+            assert!(jsapi_utils::promises::add_promise_reactions_callbacks(
+                context,
+                obj_root.handle(),
+                Some(
+                    move |cx, mut args: Vec<HandleValue>, _rval: MutableHandleValue| {
+                        // promsie was resolved
+                        let resolution = args.remove(0);
+                        let res_esvf = EsValueFacade::new_v(cx, resolution);
+
+                        match tx.send(Ok(res_esvf)) {
+                            Ok(_) => Ok(()),
+                            // todo, does not include error (which is "sending on a closed channel") which is not ASCII and thus fails the error handler
+                            Err(e) => {
+                                debug!("send res error: {}", e);
+                                Err("send res error".to_string())
+                            }
+                        }
+                    }
+                ),
+                Some(
+                    move |cx, mut args: Vec<HandleValue>, _rval: MutableHandleValue| {
+                        // promsie was rejected
+                        let rejection = args.remove(0);
+                        let rej_esvf = EsValueFacade::new_v(cx, rejection);
+
+                        match tx2.send(Err(rej_esvf)) {
+                            Ok(_) => Ok(()),
+                            // todo, does not include error (which is "sending on a closed channel") which is not ASCII and thus fails the error handler
+                            Err(e) => {
+                                debug!("send rejection error: {}", e);
+                                Err("send rejection error".to_string())
+                            }
+                        }
+                        // release epr
+                    }
+                )
+            ));
+
+            let opt_receiver = Some(rx);
+
+            let rti_ref = spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
+                let sm_rt: &SmRuntime = &*sm_rt_rc.borrow();
+                sm_rt.clone_esrt_inner()
+            });
+            let rmev: CachedJSPromise = CachedJSPromise {
+                cached_obj_id: cached_prom_id,
+                opt_receiver,
+                rti_ref,
+            };
+
+            rmev.to_es_value_facade()
+        } else if jsapi_utils::functions::object_is_function(obj) {
+            trace!("EsValueFacade::new_v -> object -> function");
+            // wrap function in persistentrooted
+
+            let rti_ref = spidermonkeyruntimewrapper::SM_RT.with(|sm_rt_rc| {
+                let sm_rt: &SmRuntime = &*sm_rt_rc.borrow();
+                sm_rt.clone_esrt_inner()
+            });
+            let cached_obj_id = spidermonkeyruntimewrapper::register_cached_object(context, obj);
+            let cf = CachedJSFunction {
+                cached_obj_id,
+                rti_ref,
+            };
+            cf.to_es_value_facade()
+        } else {
+            let mut map = HashMap::new();
+            trace!("EsValueFacade::new_v -> object -> object");
+            let prop_names: Vec<String> =
+                objects::get_js_obj_prop_names(context, obj_root.handle());
+            for prop_name in prop_names {
+                rooted!(in (context) let mut prop_val_root = UndefinedValue());
+                let prop_val_res = objects::get_es_obj_prop_val(
+                    context,
+                    obj_root.handle(),
+                    prop_name.as_str(),
+                    prop_val_root.handle_mut(),
+                );
+
+                if prop_val_res.is_err() {
+                    panic!(
+                        "error getting prop {}: {}",
+                        prop_name,
+                        prop_val_res.err().unwrap().err_msg()
+                    );
+                }
+
+                let prop_esvf = EsValueFacade::new_v(context, prop_val_root.handle());
+                map.insert(prop_name, prop_esvf);
+            }
+            map.to_es_value_facade()
         }
     }
 
@@ -1002,7 +1006,7 @@ impl Drop for CachedJSFunction {
         let cached_obj_id = self.cached_obj_id;
 
         rt_arc.do_in_es_event_queue(move |_sm_rt| {
-            spidermonkeyruntimewrapper::consume_cached_object(cached_obj_id);
+            spidermonkeyruntimewrapper::remove_cached_object(cached_obj_id);
         });
     }
 }

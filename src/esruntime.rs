@@ -331,7 +331,7 @@ pub mod tests {
             sm_rt.cleanup();
 
             sm_rt.do_with_jsapi(|_rt, cx: *mut mozjs::jsapi::JSContext, _global| {
-                let p = crate::spidermonkeyruntimewrapper::consume_cached_object(id);
+                let p = crate::spidermonkeyruntimewrapper::remove_cached_object(id);
                 let p_obj = p.get();
                 rooted!(in (cx) let p_root = p_obj);
                 rooted!(in (cx) let mut rval = mozjs::jsval::UndefinedValue());

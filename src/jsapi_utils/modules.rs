@@ -247,7 +247,7 @@ unsafe extern "C" fn module_dynamic_import(
                     cache.contains(&file_name)
                 });
 
-                let closure_epr = crate::spidermonkeyruntimewrapper::consume_cached_object(closure_id);
+                let closure_epr = crate::spidermonkeyruntimewrapper::remove_cached_object(closure_id);
                 rooted!(in (cx) let closure_root = closure_epr.get());
                 rooted!(in (cx) let mut promise_val_root = NullValue());
                 rooted!(in (cx) let mut specifier_val_root = NullValue());

@@ -35,7 +35,7 @@ pub(crate) fn init(rt: &EsRuntime) {
             rt.do_in_es_event_queue(move |sm_rt| {
                 sm_rt.do_with_jsapi(|_rt, cx, global| {
                     let func_epr =
-                        crate::spidermonkeyruntimewrapper::consume_cached_object(cached_id);
+                        crate::spidermonkeyruntimewrapper::remove_cached_object(cached_id);
                     let func_obj = func_epr.get();
 
                     rooted!(in (cx) let mut rval = mozjs::jsval::UndefinedValue());

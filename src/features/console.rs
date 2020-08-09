@@ -270,7 +270,6 @@ unsafe extern "C" fn console_assert(
 
 #[cfg(test)]
 mod tests {
-    use crate::esvaluefacade::EsValueFacade;
     use crate::features::console::parse_field_value;
 
     #[test]
