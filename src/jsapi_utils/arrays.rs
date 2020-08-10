@@ -1,8 +1,7 @@
-use crate::jsapi_utils::{get_pending_exception, EsErrorInfo};
+use crate::jsapi_utils::{
+    get_pending_exception, get_pending_exception_or_generic_err, EsErrorInfo,
+};
 use log::trace;
-use mozjs::conversions::ConversionBehavior;
-use mozjs::conversions::FromJSValConvertible;
-use mozjs::conversions::ToJSValConvertible;
 use mozjs::glue::int_to_jsid;
 use mozjs::jsapi::IsArray;
 use mozjs::jsapi::JSContext;
@@ -59,18 +58,85 @@ pub fn get_array_length(
 
 /// set an element of an Array
 pub fn set_array_element(
-    context: *mut JSContext,
+    cx: *mut JSContext,
     arr_obj: HandleObject,
     idx: u32,
     val: HandleValue,
 ) -> Result<(), EsErrorInfo> {
-    let ok = unsafe { JS_SetElement(context, arr_obj.into(), idx, val.into()) };
+    let ok = unsafe { JS_SetElement(cx, arr_obj.into(), idx, val.into()) };
     if !ok {
-        if let Some(err) = get_pending_exception(context) {
-            return Err(err);
-        }
+        return Err(get_pending_exception_or_generic_err(
+            cx,
+            "failed to set_array_element",
+        ));
     }
 
+    Ok(())
+}
+
+/// set an element of an Array
+pub fn set_array_element_object(
+    cx: *mut JSContext,
+    arr_obj: HandleObject,
+    idx: u32,
+    val: HandleObject,
+) -> Result<(), EsErrorInfo> {
+    let ok = unsafe { mozjs::jsapi::JS_SetElement1(cx, arr_obj.into(), idx, val.into()) };
+    if !ok {
+        return Err(get_pending_exception_or_generic_err(
+            cx,
+            "failed to set_array_element_object",
+        ));
+    }
+
+    Ok(())
+}
+
+pub fn set_array_element_i32(
+    cx: *mut JSContext,
+    arr_obj: HandleObject,
+    index: u32,
+    val: i32,
+) -> Result<(), EsErrorInfo> {
+    let ret = unsafe { mozjs::jsapi::JS_SetElement3(cx, arr_obj.into(), index, val) };
+    if !ret {
+        return Err(get_pending_exception_or_generic_err(
+            cx,
+            "failed to set_array_element_i32",
+        ));
+    }
+    Ok(())
+}
+
+pub fn set_array_element_u32(
+    cx: *mut JSContext,
+    arr_obj: HandleObject,
+    index: u32,
+    val: u32,
+) -> Result<(), EsErrorInfo> {
+    let ret = unsafe { mozjs::jsapi::JS_SetElement4(cx, arr_obj.into(), index, val) };
+    if !ret {
+        return Err(get_pending_exception_or_generic_err(
+            cx,
+            "failed to set_array_element_u32",
+        ));
+    }
+    Ok(())
+}
+
+pub fn set_array_element_f64(
+    cx: *mut JSContext,
+    arr_obj: HandleObject,
+    index: u32,
+    val: f64,
+) -> Result<(), EsErrorInfo> {
+    let ret = unsafe { mozjs::jsapi::JS_SetElement5(cx, arr_obj.into(), index, val) };
+    if !ret {
+        return Err(get_pending_exception_or_generic_err(
+            cx,
+            "failed to set_array_element_f64",
+        ));
+    }
     Ok(())
 }
 
@@ -131,20 +197,6 @@ pub fn new_array2(context: *mut JSContext, items: Vec<JSVal>, ret_val: MutableHa
     let res = unsafe { JS_NewArrayObject(context, &arguments_value_array) };
     let mut ret_val = ret_val;
     ret_val.set(res);
-}
-
-/// convert an Array to a Vec<i32>
-pub fn to_i32_vec(context: *mut JSContext, obj: HandleValue) -> Vec<i32> {
-    let converted =
-        unsafe { Vec::<i32>::from_jsval(context, obj, ConversionBehavior::Default) }.unwrap();
-    // todo use mem_replace to return vec
-    let vec_ref: &Vec<i32> = converted.get_success_value().unwrap();
-    vec_ref.to_vec()
-}
-
-/// convert a Vec<i32> to an Array
-pub fn to_i32_array<T>(context: *mut JSContext, obj: MutableHandleValue, vec: Vec<i32>) {
-    unsafe { vec.to_jsval(context, obj) };
 }
 
 #[cfg(test)]

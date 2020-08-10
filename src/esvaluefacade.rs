@@ -487,7 +487,7 @@ impl EsValueConvertible for String {
 impl EsValueConvertible for i32 {
     fn to_es_value(&self, _cx: *mut JSContext, rval: MutableHandleValue) {
         let mut rval = rval;
-        rval.set(Int32Value(self.clone()))
+        rval.set(Int32Value(*self))
     }
 
     fn is_i32(&self) -> bool {
@@ -495,35 +495,35 @@ impl EsValueConvertible for i32 {
     }
 
     fn get_i32(&self) -> i32 {
-        self.clone()
+        *self
     }
 }
 
 impl EsValueConvertible for bool {
     fn to_es_value(&self, _cx: *mut JSContext, rval: MutableHandleValue) {
         let mut rval = rval;
-        rval.set(BooleanValue(self.clone()))
+        rval.set(BooleanValue(*self))
     }
     fn is_bool(&self) -> bool {
         true
     }
 
     fn get_bool(&self) -> bool {
-        self.clone()
+        *self
     }
 }
 
 impl EsValueConvertible for f64 {
     fn to_es_value(&self, _cx: *mut JSContext, rval: MutableHandleValue) {
         let mut rval = rval;
-        rval.set(DoubleValue(self.clone()))
+        rval.set(DoubleValue(*self))
     }
     fn is_f64(&self) -> bool {
         true
     }
 
     fn get_f64(&self) -> f64 {
-        self.clone()
+        *self
     }
 }
 
@@ -694,7 +694,6 @@ impl EsValueFacade {
         } else if val.is_string() {
             trace!("EsValueFacade::new_v -> string");
             jsapi_utils::es_value_to_str(context, val)
-                .ok()
                 .expect("could not convert jsval to string")
                 .to_es_value_facade()
         } else if val.is_object() {

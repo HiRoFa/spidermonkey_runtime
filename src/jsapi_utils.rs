@@ -50,6 +50,7 @@ pub mod promises;
 pub mod reflection;
 pub mod rooting;
 pub mod scripts;
+pub mod typed_arrays;
 
 /// get the type of a JSVal
 /// this is the equivalent of calling ```typeof val``` in script
@@ -89,6 +90,19 @@ pub fn report_exception2(cx: *mut JSContext, ex: String) {
     unsafe {
         mozjs::jsapi::JS_ReportErrorUTF8(cx, ex_str.as_str().as_ptr() as *const libc::c_char)
     };
+}
+
+fn get_pending_exception_or_generic_err(cx: *mut JSContext, gen_err: &'static str) -> EsErrorInfo {
+    if let Some(err) = crate::jsapi_utils::get_pending_exception(cx) {
+        err
+    } else {
+        EsErrorInfo {
+            message: gen_err.to_string(),
+            filename: "".to_string(),
+            lineno: 0,
+            column: 0,
+        }
+    }
 }
 
 /// see if there is a pending exception and return it as an EsErrorInfo
