@@ -1,22 +1,8 @@
 use log::trace;
-use mozjs::conversions::{ConversionBehavior, FromJSValConvertible, ToJSValConvertible};
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
 use mozjs::jsval::Int32Value;
-use mozjs::rust::{HandleObject, HandleValue, MutableHandleObject, MutableHandleValue};
-/// convert an Array to a Vec<i32>
-pub fn to_i32_vec(context: *mut JSContext, obj: HandleValue) -> Vec<i32> {
-    let converted =
-        unsafe { Vec::<i32>::from_jsval(context, obj, ConversionBehavior::Default) }.unwrap();
-    // todo use mem_replace to return vec
-    let vec_ref: &Vec<i32> = converted.get_success_value().unwrap();
-    vec_ref.to_vec()
-}
-
-/// convert a Vec<i32> to an Array
-pub fn to_i32_array<T>(context: *mut JSContext, obj: MutableHandleValue, vec: Vec<i32>) {
-    unsafe { vec.to_jsval(context, obj) };
-}
+use mozjs::rust::{HandleObject, MutableHandleObject};
 
 // https://doc.servo.org/mozjs/jsapi/fn.JS_IsInt8Array.html
 // https://doc.servo.org/mozjs/jsapi/fn.JS_IsInt16Array.html

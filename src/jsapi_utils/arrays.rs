@@ -2,6 +2,9 @@ use crate::jsapi_utils::{
     get_pending_exception, get_pending_exception_or_generic_err, EsErrorInfo,
 };
 use log::trace;
+use mozjs::conversions::{
+    ConversionBehavior, ConversionResult, FromJSValConvertible, ToJSValConvertible,
+};
 use mozjs::glue::int_to_jsid;
 use mozjs::jsapi::IsArray;
 use mozjs::jsapi::JSContext;
@@ -13,6 +16,90 @@ use mozjs::jsapi::JS_SetElement;
 use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsval::JSVal;
 use mozjs::rust::{HandleObject, HandleValue, MutableHandleObject, MutableHandleValue};
+
+/// convert an Array to a Vec<T>, should work for all which impl the FromJSValConvertible trait like:
+/// bool
+/// u8
+/// i8
+/// u16
+/// i16
+/// u32
+/// i32
+/// u64
+/// i64
+/// f32
+/// f64
+/// String
+/// # Example
+/// ```no_run
+/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+/// use es_runtime::jsapi_utils;
+/// use mozjs::jsval::UndefinedValue;
+/// use mozjs::rooted;
+/// use es_runtime::jsapi_utils::arrays::array_to_vec;
+/// let rt = EsRuntimeBuilder::new().build();
+/// rt.do_in_es_event_queue_sync(|sm_rt| {
+/// sm_rt.do_with_jsapi(|rt, cx, global| {
+///  rooted!(in (cx) let mut rval = UndefinedValue());
+///  jsapi_utils::eval(rt, global, "([4, 7, 9]);", "test_array_to_vec.es", rval.handle_mut());
+///  let conv_res = array_to_vec(cx, rval.handle());
+///  let conv_res_sucv = conv_res.get_success_value();
+///  let vec: &Vec<u8> = conv_res_sucv.expect("array_to_vec failed");
+///  assert_eq!(vec.len(), 3);
+/// })
+/// });
+/// ```
+pub fn array_to_vec<T: FromJSValConvertible<Config = ConversionBehavior>>(
+    context: *mut JSContext,
+    arr_val_handle: HandleValue,
+) -> ConversionResult<Vec<T>> {
+    unsafe { Vec::<T>::from_jsval(context, arr_val_handle, ConversionBehavior::Default) }.unwrap()
+}
+
+/// convert a Vec<T> to an Array, please note that this does not create typed arrays, use the typed_arrays mod for that
+///
+/// should work for all which impl the FromJSValConvertible trait like:
+/// bool
+/// u8
+/// i8
+/// u16
+/// i16
+/// u32
+/// i32
+/// u64
+/// i64
+/// f32
+/// f64
+/// String
+/// # Example
+/// ```no_run
+/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+/// use es_runtime::jsapi_utils;
+/// use mozjs::rooted;
+/// use mozjs::jsval::UndefinedValue;
+/// use es_runtime::jsapi_utils::arrays::{array_to_vec, vec_to_array, get_array_length};
+/// use mozjs::rust::HandleObject;
+///   
+/// let vec = vec![2, 6, 0, 12];
+///
+/// let rt = EsRuntimeBuilder::new().build();
+/// rt.do_in_es_event_queue_sync(|sm_rt| {
+/// sm_rt.do_with_jsapi(|rt, cx, global| {
+///  rooted!(in (cx) let mut rval = UndefinedValue());
+///  vec_to_array(cx, rval.handle_mut(), vec);
+///  let arr_obj_handle = unsafe{HandleObject::from_marked_location(&rval.handle().get().to_object())};
+///  let arr_len = get_array_length(cx, arr_obj_handle).ok().expect("could not get array length");
+///  assert_eq!(arr_len, 4);
+/// })
+/// });
+/// ```
+pub fn vec_to_array<T: ToJSValConvertible>(
+    context: *mut JSContext,
+    obj: MutableHandleValue,
+    vec: Vec<T>,
+) {
+    unsafe { vec.to_jsval(context, obj) };
+}
 
 /// check whether or not an Object is an Array
 pub fn object_is_array(context: *mut JSContext, obj: HandleObject) -> bool {
