@@ -25,9 +25,7 @@ pub fn as_string(cx: *mut JSContext, global: HandleObject, obj: HandleValue) -> 
     .ok()
     .expect("call_namespace_function_name failed");
 
-    jsapi_utils::es_value_to_str(cx, str_val.handle().get())
-        .ok()
-        .expect("could not convert to string")
+    jsapi_utils::es_value_to_str(cx, str_val.handle().get()).expect("could not convert to string")
 }
 
 // todo
