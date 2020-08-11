@@ -138,9 +138,8 @@ For a more detailed getting started you should see the examples in the [DOCS](ht
     http.doSomething();
  });
 ```
-* [ ] TypedArrays from and to Vecs
-* [ ] EsValueFacade rewrite for easier type support
-* [ ] Complete set of from/to primitives in EsValueFacade
+* [x] TypedArrays from and to Vecs
+* [x] EsValueFacade rewrite for easier type support
 
 ## 0.7 goals
 

@@ -222,6 +222,7 @@ pub fn new_es_value_from_str(context: *mut JSContext, s: &str, rval: MutableHand
 }
 
 /// convert a StringValue to a rust string
+// todo, refactor to use HandleValue
 #[allow(dead_code)]
 pub fn es_value_to_str(
     context: *mut JSContext,

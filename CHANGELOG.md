@@ -2,6 +2,7 @@
 
 * internals
   * refactored EsValueFacade.to_es_value to accept rval instead of returning JSVal
+  * changed console impl to Proxy
 * jsapi_utils
   * added freeze_object and deep_freeze_object utils to jsapi_utils::objects
   * added utils for working with typed_arrays in jsapi_utils::typed_arrays
