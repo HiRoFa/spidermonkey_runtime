@@ -71,7 +71,7 @@ pub fn compile_function(
         return Err(err);
     }
 
-    assert!(value_is_function(cx, *func_val));
+    assert!(value_is_function(cx, func_val.handle()));
 
     let mut rval = rval;
     let func_obj: *mut JSObject = func_val.to_object();
@@ -363,7 +363,7 @@ pub fn call_namespace_function_name2(
 }
 
 /// check whether an Value is a function
-pub fn value_is_function(context: *mut JSContext, val: JSVal) -> bool {
+pub fn value_is_function(context: *mut JSContext, val: HandleValue) -> bool {
     let js_type = get_type_of(context, val);
     js_type == JSType::JSTYPE_FUNCTION
 }
@@ -650,7 +650,7 @@ mod tests {
                     println!("getting value");
                     let p_value: mozjs::jsapi::Value = *rval;
                     println!("getting obj {}", p_value.is_object());
-                    return value_is_function(cx, p_value);
+                    return value_is_function(cx, rval.handle());
                 }
                 false
             })

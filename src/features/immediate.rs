@@ -1,4 +1,5 @@
 use crate::esruntime::EsRuntime;
+use crate::jsapi_utils;
 use crate::jsapi_utils::report_exception;
 use log::{error, trace};
 use mozjs::jsval::ObjectValue;
@@ -18,7 +19,10 @@ pub(crate) fn init(rt: &EsRuntime) {
 
             let func_val_handle = args.get(0);
             let func_val = *func_val_handle;
-            let is_func = crate::jsapi_utils::functions::value_is_function(cx, func_val);
+            let is_func = crate::jsapi_utils::functions::value_is_function(
+                cx,
+                jsapi_utils::handles::from_raw_handle(func_val_handle),
+            );
             if !is_func {
                 report_exception(cx, "setImmediate requires a function as its first argument");
                 return false;

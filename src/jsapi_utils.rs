@@ -37,11 +37,12 @@ use mozjs::jsapi::JS_IsExceptionPending;
 use mozjs::jsapi::JS_NewStringCopyN;
 use mozjs::jsapi::JS_TypeOfValue;
 use mozjs::jsapi::JS_GC;
-use mozjs::jsval::{JSVal, StringValue, UndefinedValue};
-use mozjs::rust::{HandleObject, MutableHandleValue, Runtime};
+use mozjs::jsval::{StringValue, UndefinedValue};
+use mozjs::rust::{HandleObject, HandleValue, MutableHandleValue, Runtime};
 use std::str;
 
 pub mod arrays;
+pub mod big_ints;
 pub mod functions;
 pub mod handles;
 pub mod modules;
@@ -54,9 +55,8 @@ pub mod typed_arrays;
 
 /// get the type of a JSVal
 /// this is the equivalent of calling ```typeof val``` in script
-pub fn get_type_of(context: *mut JSContext, val: JSVal) -> JSType {
-    rooted!(in(context) let val_root = val);
-    unsafe { JS_TypeOfValue(context, val_root.handle().into()) }
+pub fn get_type_of(context: *mut JSContext, val: HandleValue) -> JSType {
+    unsafe { JS_TypeOfValue(context, val.into()) }
 }
 
 #[cfg(not(target = "release"))]

@@ -4,6 +4,9 @@
   * refactored EsValueFacade.to_es_value to accept rval instead of returning JSVal
 * jsapi_utils
   * added freeze_object and deep_freeze_object utils to jsapi_utils::objects
+  * added utils for working with typed_arrays in jsapi_utils::typed_arrays
+  * added utils for converting between Vec<T> and Arrays in jsapi_utils::arrays
+  * added utils for working with BigInt
 
 # 0.5.0
 
