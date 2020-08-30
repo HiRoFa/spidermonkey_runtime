@@ -208,7 +208,7 @@ impl RustPromise {
 }
 
 pub trait EsValueConvertible {
-    fn to_es_value(&self, cx: *mut JSContext, return_val: MutableHandleValue);
+    fn to_js_value(&self, cx: *mut JSContext, return_val: MutableHandleValue);
 
     fn to_es_value_facade(self) -> EsValueFacade
     where
@@ -283,13 +283,13 @@ pub trait EsValueConvertible {
 struct EsUndefinedValue {}
 
 impl EsValueConvertible for EsUndefinedValue {
-    fn to_es_value(&self, _cx: *mut JSContext, _rval: MutableHandleValue) {
+    fn to_js_value(&self, _cx: *mut JSContext, _rval: MutableHandleValue) {
         //
     }
 }
 
 impl EsValueConvertible for CachedJSPromise {
-    fn to_es_value(&self, _cx: *mut JSContext, _rval: MutableHandleValue) {
+    fn to_js_value(&self, _cx: *mut JSContext, _rval: MutableHandleValue) {
         unimplemented!()
     }
 
@@ -318,7 +318,7 @@ impl EsValueConvertible for CachedJSPromise {
 }
 
 impl EsValueConvertible for RustPromise {
-    fn to_es_value(&self, cx: *mut JSContext, rval: MutableHandleValue) {
+    fn to_js_value(&self, cx: *mut JSContext, rval: MutableHandleValue) {
         let mut rval = rval;
         trace!("to_es_value.7 prepped_promise");
         let map: &mut PromiseAnswersMap = &mut PROMISE_ANSWERS.lock("to_es_value.7").unwrap();
@@ -457,7 +457,7 @@ impl CachedJSFunction {
 }
 
 impl EsValueConvertible for CachedJSFunction {
-    fn to_es_value(&self, _cx: *mut JSContext, _rval: MutableHandleValue) {
+    fn to_js_value(&self, _cx: *mut JSContext, _rval: MutableHandleValue) {
         unimplemented!()
     }
 
@@ -471,7 +471,7 @@ impl EsValueConvertible for CachedJSFunction {
 }
 
 impl EsValueConvertible for String {
-    fn to_es_value(&self, cx: *mut JSContext, rval: MutableHandleValue) {
+    fn to_js_value(&self, cx: *mut JSContext, rval: MutableHandleValue) {
         jsapi_utils::new_es_value_from_str(cx, self.as_str(), rval);
     }
 
@@ -485,7 +485,7 @@ impl EsValueConvertible for String {
 }
 
 impl EsValueConvertible for i32 {
-    fn to_es_value(&self, _cx: *mut JSContext, rval: MutableHandleValue) {
+    fn to_js_value(&self, _cx: *mut JSContext, rval: MutableHandleValue) {
         let mut rval = rval;
         rval.set(Int32Value(*self))
     }
@@ -500,7 +500,7 @@ impl EsValueConvertible for i32 {
 }
 
 impl EsValueConvertible for bool {
-    fn to_es_value(&self, _cx: *mut JSContext, rval: MutableHandleValue) {
+    fn to_js_value(&self, _cx: *mut JSContext, rval: MutableHandleValue) {
         let mut rval = rval;
         rval.set(BooleanValue(*self))
     }
@@ -514,7 +514,7 @@ impl EsValueConvertible for bool {
 }
 
 impl EsValueConvertible for f64 {
-    fn to_es_value(&self, _cx: *mut JSContext, rval: MutableHandleValue) {
+    fn to_js_value(&self, _cx: *mut JSContext, rval: MutableHandleValue) {
         let mut rval = rval;
         rval.set(DoubleValue(*self))
     }
@@ -528,7 +528,7 @@ impl EsValueConvertible for f64 {
 }
 
 impl EsValueConvertible for Vec<EsValueFacade> {
-    fn to_es_value(&self, cx: *mut JSContext, rval: MutableHandleValue) {
+    fn to_js_value(&self, cx: *mut JSContext, rval: MutableHandleValue) {
         rooted!(in (cx) let mut arr_root = NULL_JSOBJECT);
         // create the array
         new_array(cx, arr_root.handle_mut());
@@ -556,7 +556,7 @@ impl EsValueConvertible for Vec<EsValueFacade> {
 }
 
 impl EsValueConvertible for HashMap<String, EsValueFacade> {
-    fn to_es_value(&self, cx: *mut JSContext, rval: MutableHandleValue) {
+    fn to_js_value(&self, cx: *mut JSContext, rval: MutableHandleValue) {
         trace!("to_es_value.6");
         rooted!(in(cx) let mut obj_root = NULL_JSOBJECT);
         jsapi_utils::objects::new_object(cx, obj_root.handle_mut());
@@ -979,7 +979,7 @@ impl EsValueFacade {
     pub(crate) fn to_es_value(&self, context: *mut JSContext, return_val: MutableHandleValue) {
         trace!("to_es_value.1");
 
-        self.convertible.to_es_value(context, return_val)
+        self.convertible.to_js_value(context, return_val)
     }
 }
 
