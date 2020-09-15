@@ -103,13 +103,11 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
-mod debugmutex;
 mod enginehandleproducer;
 mod es_sys_scripts;
 #[macro_use]
 
 pub mod utils;
-mod eseventqueue;
 pub mod esreflection;
 pub mod esruntime;
 pub mod esruntimebuilder;
@@ -118,4 +116,3 @@ pub mod esvaluefacade;
 mod features;
 pub mod jsapi_utils;
 pub mod spidermonkeyruntimewrapper;
-mod taskmanager;

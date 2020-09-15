@@ -1,15 +1,15 @@
-use crate::eseventqueue::EsEventQueue;
 use crate::esruntime::ModuleCodeLoader;
 use crate::esvaluefacade::EsValueFacade;
 use crate::jsapi_utils::handles::from_raw_handle_mut;
 use crate::jsapi_utils::{report_exception2, EsErrorInfo};
 use crate::spidermonkeyruntimewrapper::SmRuntime;
+use hirofa_utils::single_threaded_event_queue::SingleThreadedEventQueue;
 use log::{debug, trace};
 use mozjs::jsapi::CallArgs;
 use std::sync::Arc;
 
 pub struct EsRuntimeInner {
-    pub(crate) event_queue: Arc<EsEventQueue>,
+    pub(crate) event_queue: Arc<SingleThreadedEventQueue>,
     pub(crate) _pre_cleanup_tasks: Vec<Box<dyn Fn(&EsRuntimeInner) + Send + Sync>>,
     pub(crate) module_source_loader: Option<Box<ModuleCodeLoader>>,
     pub(crate) module_cache_size: usize,
@@ -21,7 +21,7 @@ impl EsRuntimeInner {
         module_cache_size: usize,
     ) -> Self {
         EsRuntimeInner {
-            event_queue: EsEventQueue::new(),
+            event_queue: SingleThreadedEventQueue::new(),
             _pre_cleanup_tasks: vec![],
             module_source_loader,
             module_cache_size,

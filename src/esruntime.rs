@@ -11,9 +11,11 @@ use crate::jsapi_utils::EsErrorInfo;
 
 use crate::esruntimebuilder::EsRuntimeBuilder;
 use crate::spidermonkeyruntimewrapper::SmRuntime;
-use crate::taskmanager::TaskManager;
+
 use std::cell::RefCell;
 use std::time::Duration;
+
+use hirofa_utils::task_manager::TaskManager;
 
 lazy_static! {
     /// a static Multithreaded taskmanager used to run rust ops async and multithreaded ( in at least 2 threads)

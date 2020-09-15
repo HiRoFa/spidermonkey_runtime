@@ -1,7 +1,5 @@
 use log::trace;
 
-use crate::debugmutex::DebugMutex;
-use crate::eseventqueue::EsEventQueue;
 use crate::esruntime::EsRuntime;
 use crate::esruntimeinner::EsRuntimeInner;
 use crate::jsapi_utils::arrays::{get_array_element, get_array_length, new_array, object_is_array};
@@ -12,6 +10,8 @@ use crate::spidermonkeyruntimewrapper::SmRuntime;
 use crate::utils::AutoIdMap;
 use crate::{jsapi_utils, spidermonkeyruntimewrapper};
 use either::Either;
+use hirofa_utils::debug_mutex::DebugMutex;
+use hirofa_utils::single_threaded_event_queue::SingleThreadedEventQueue;
 use log::debug;
 use mozjs::jsapi::HandleValueArray;
 use mozjs::jsapi::JSContext;
@@ -307,7 +307,7 @@ impl EsValueConvertible for CachedJSPromise {
             )));
         }
 
-        if EsEventQueue::looks_like_eventqueue_thread() {
+        if SingleThreadedEventQueue::looks_like_eventqueue_thread() {
             log::error!("waiting for esvf prom from event queue thread, bad dev bad!");
             panic!("you really should not wait for promises in a RT's event queue thread");
         }

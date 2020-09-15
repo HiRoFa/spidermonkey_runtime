@@ -1,4 +1,4 @@
-use crate::eseventqueue::EsEventQueue;
+use hirofa_utils::single_threaded_event_queue::SingleThreadedEventQueue;
 use mozjs::rust::{JSEngine, JSEngineHandle};
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -11,7 +11,7 @@ thread_local! {
 }
 
 lazy_static! {
-    static ref EVENTQUEUE: Arc<EsEventQueue> = EsEventQueue::new();
+    static ref EVENTQUEUE: Arc<SingleThreadedEventQueue> = SingleThreadedEventQueue::new();
 }
 
 pub fn produce() -> JSEngineHandle {
