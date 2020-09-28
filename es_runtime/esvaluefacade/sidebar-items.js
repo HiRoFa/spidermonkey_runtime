@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["EsValueFacade","the EsValueFacade is a converter between rust variables and script objects when receiving a EsValueFacade from the script engine it's data is always a clone from the actual data so we need not worry about the value being garbage collected"]],"trait":[["EsValueConvertible",""]]});

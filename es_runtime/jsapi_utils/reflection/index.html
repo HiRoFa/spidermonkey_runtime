@@ -1,0 +1,84 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="API documentation for the Rust `reflection` mod in crate `es_runtime`."><meta name="keywords" content="rust, rustlang, rust-lang, reflection"><title>es_runtime::jsapi_utils::reflection - Rust</title><link rel="stylesheet" type="text/css" href="../../../normalize.css"><link rel="stylesheet" type="text/css" href="../../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../../dark.css"><link rel="stylesheet" type="text/css" href="../../../light.css" id="themeStyle"><script src="../../../storage.js"></script><noscript><link rel="stylesheet" href="../../../noscript.css"></noscript><link rel="shortcut icon" href="../../../favicon.ico"><style type="text/css">#crate-search{background-image:url("../../../down-arrow.svg");}</style></head><body class="rustdoc mod"><!--[if lte IE 8]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu">&#9776;</div><a href='../../../es_runtime/index.html'><div class='logo-container'><img src='../../../rust-logo.png' alt='logo'></div></a><p class='location'>Module reflection</p><div class="sidebar-elems"><div class="block items"><ul><li><a href="#structs">Structs</a></li><li><a href="#functions">Functions</a></li><li><a href="#types">Type Definitions</a></li></ul></div><p class='location'><a href='../../index.html'>es_runtime</a>::<wbr><a href='../index.html'>jsapi_utils</a></p><script>window.sidebarCurrent = {name: 'reflection', ty: 'mod', relpath: '../'};</script><script defer src="../sidebar-items.js"></script></div></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!"><img src="../../../brush.svg" width="18" alt="Pick another theme!"></button><div id="theme-choices"></div></div><script src="../../../theme.js"></script><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><a id="settings-menu" href="../../../settings.html"><img src="../../../wheel.svg" width="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><h1 class='fqn'><span class='out-of-band'><span id='render-detail'><a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">[<span class='inner'>&#x2212;</span>]</a></span><a class='srclink' href='../../../src/es_runtime/jsapi_utils/reflection.rs.html#1-1720' title='goto source code'>[src]</a></span><span class='in-band'>Module <a href='../../index.html'>es_runtime</a>::<wbr><a href='../index.html'>jsapi_utils</a>::<wbr><a class="mod" href=''>reflection</a></span></h1><div class='docblock'><h1 id="reflection" class="section-header"><a href="#reflection">Reflection</a></h1>
+<p>Using rust data from script</p>
+<p>U can use the Proxy struct in jsapi_utils::reflection to create a proxy object</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered">
+<span class="kw">use</span> <span class="ident">mozjs</span>::<span class="ident">rooted</span>;
+<span class="kw">use</span> <span class="ident">mozjs</span>::<span class="ident">rust</span>::<span class="ident">HandleValue</span>;
+<span class="kw">use</span> <span class="ident">mozjs</span>::<span class="ident">jsval</span>::{<span class="ident">Int32Value</span>, <span class="ident">UndefinedValue</span>};
+<span class="kw">use</span> <span class="ident">mozjs</span>::<span class="ident">jsapi</span>::<span class="ident">JSContext</span>;
+<span class="kw">use</span> <span class="ident">es_runtime</span>::<span class="ident">jsapi_utils</span>;
+<span class="kw">use</span> <span class="ident">log</span>::<span class="ident">debug</span>;
+<span class="kw">use</span> <span class="ident">es_runtime</span>::<span class="ident">esruntimebuilder</span>::<span class="ident">EsRuntimeBuilder</span>;
+
+<span class="kw">let</span> <span class="ident">rt</span> <span class="op">=</span> <span class="ident">EsRuntimeBuilder</span>::<span class="ident">new</span>().<span class="ident">build</span>();
+<span class="comment">// since we&#39;re working with jsapi we need to run in the event queue of the runtime</span>
+<span class="ident">rt</span>.<span class="ident">do_in_es_event_queue_sync</span>(<span class="op">|</span><span class="ident">sm_rt</span><span class="op">|</span> {
+    <span class="comment">// and then get our jsapi objects</span>
+    <span class="ident">sm_rt</span>.<span class="ident">do_with_jsapi</span>(<span class="op">|</span><span class="ident">_rt</span>, <span class="ident">cx</span>, <span class="ident">global</span><span class="op">|</span>{
+        <span class="kw">let</span> <span class="ident">proxy_arc</span> <span class="op">=</span> <span class="ident">jsapi_utils</span>::<span class="ident">reflection</span>::<span class="ident">ProxyBuilder</span>::<span class="ident">new</span>(<span class="macro">vec</span><span class="macro">!</span>[], <span class="string">&quot;TestClass1&quot;</span>)
+        <span class="comment">// if you want to create a proxy that can be constructed you need to pass a constructor</span>
+        <span class="comment">// you need to generate an id here for your object</span>
+        <span class="comment">// if you don&#39;t pass a constructor you can only use the static_* methods to create events, properties and methods</span>
+       .<span class="ident">constructor</span>(<span class="op">|</span><span class="ident">_cx</span>: <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="ident">JSContext</span>, <span class="ident">args</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">HandleValue</span><span class="op">&gt;</span><span class="op">|</span> {
+           <span class="comment">// this will run in the sm_rt event queue so global is rooted here</span>
+           <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;proxytest: construct&quot;</span>);
+           <span class="prelude-val">Ok</span>(<span class="number">1</span>)
+       })
+       <span class="comment">// create a property and pass a closure for the get and set action</span>
+       .<span class="ident">property</span>(<span class="string">&quot;foo&quot;</span>, <span class="op">|</span><span class="ident">_cx</span>, <span class="ident">obj_id</span>, <span class="kw-2">mut</span> <span class="ident">rval</span><span class="op">|</span> {
+           <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;proxy.get foo {}&quot;</span>, <span class="ident">obj_id</span>);
+           <span class="ident">rval</span>.<span class="ident">set</span>(<span class="ident">Int32Value</span>(<span class="number">123</span>));
+           <span class="prelude-val">Ok</span>(())
+       }, <span class="op">|</span><span class="ident">_cx</span>, <span class="ident">obj_id</span>, <span class="ident">_val</span><span class="op">|</span> {
+           <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;proxy.set foo {}&quot;</span>, <span class="ident">obj_id</span>);
+           <span class="prelude-val">Ok</span>(())
+       })
+       <span class="comment">// the finalizer is called when the instance is garbage collected, use this to drop your own object in rust</span>
+       .<span class="ident">finalizer</span>(<span class="op">|</span><span class="ident">id</span>: <span class="ident">i32</span><span class="op">|</span> {
+           <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;proxytest: finalize id {}&quot;</span>, <span class="ident">id</span>);
+       })
+       <span class="comment">// a method for your instance</span>
+       .<span class="ident">method</span>(<span class="string">&quot;methodA&quot;</span>, <span class="op">|</span><span class="ident">_cx</span>, <span class="ident">obj_id</span>, <span class="ident">args</span>, <span class="ident">_rval</span><span class="op">|</span> {
+           <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;proxy.methodA called for obj {} with {} args&quot;</span>, <span class="ident">obj_id</span>, <span class="ident">args</span>.<span class="ident">len</span>());
+           <span class="prelude-val">Ok</span>(())
+       })
+       <span class="comment">// and an event that may be dispatched</span>
+       .<span class="ident">event</span>(<span class="string">&quot;saved&quot;</span>)
+       <span class="comment">// when done build your proxy</span>
+       .<span class="ident">build</span>(<span class="ident">cx</span>, <span class="ident">global</span>);
+
+       <span class="kw">let</span> <span class="ident">esvf</span> <span class="op">=</span> <span class="ident">sm_rt</span>.<span class="ident">eval</span>(
+           <span class="string">&quot;// create a new instance of your Proxy\n\
+                let tp_obj = new TestClass1(&#39;bar&#39;); \n\
+            // you can set props that are not proxied \n\
+                tp_obj.abc = 1; console.log(&#39;tp_obj.abc = %s&#39;, tp_obj.abc); \n\
+           // test you getter and setter\n\
+               let i = tp_obj.foo; tp_obj.foo = 987; \n\
+           // test your method\n\
+               tp_obj.methodA(1, 2, 3); \n\
+           // add an event listener\n\
+                tp_obj.addEventListener(&#39;saved&#39;, (evt) =&gt; {console.log(&#39;tp_obj was saved&#39;);}); \n\
+           // dispatch an event from script\n\
+                tp_obj.dispatchEvent(&#39;saved&#39;, {}); \n\
+           // allow you object to be GCed\n\
+               tp_obj = null; i;&quot;</span>,
+           <span class="string">&quot;test_proxy.es&quot;</span>,
+       ).<span class="ident">ok</span>().<span class="ident">unwrap</span>();
+
+       <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="number">123</span>, <span class="ident">esvf</span>.<span class="ident">get_i32</span>());
+
+       <span class="comment">// dispatch event from rust</span>
+       <span class="macro">rooted</span><span class="macro">!</span>(<span class="kw">in</span> (<span class="ident">cx</span>) <span class="kw">let</span> <span class="ident">event_obj_root</span> <span class="op">=</span> <span class="ident">UndefinedValue</span>());
+       <span class="ident">proxy_arc</span>.<span class="ident">dispatch_event</span>(<span class="number">1</span>, <span class="string">&quot;saved&quot;</span>, <span class="ident">cx</span>, <span class="ident">event_obj_root</span>.<span class="ident">handle</span>().<span class="ident">into</span>());
+    });
+})</pre></div>
+</div><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table><tr class='module-item'><td><a class="struct" href="struct.Proxy.html" title='es_runtime::jsapi_utils::reflection::Proxy struct'>Proxy</a></td><td class='docblock-short'><p>create a class def in the runtime which constructs and calls methods in a rust proxy</p>
+</td></tr><tr class='module-item'><td><a class="struct" href="struct.ProxyBuilder.html" title='es_runtime::jsapi_utils::reflection::ProxyBuilder struct'>ProxyBuilder</a></td><td class='docblock-short'><p>the builder struct for Proxy</p>
+</td></tr></table><h2 id='functions' class='section-header'><a href="#functions">Functions</a></h2>
+<table><tr class='module-item'><td><a class="fn" href="fn.get_obj_id_for.html" title='es_runtime::jsapi_utils::reflection::get_obj_id_for fn'>get_obj_id_for</a></td><td class='docblock-short'><p>retrieve the object ID for an instance of a Proxy class</p>
+</td></tr><tr class='module-item'><td><a class="fn" href="fn.get_proxy.html" title='es_runtime::jsapi_utils::reflection::get_proxy fn'>get_proxy</a></td><td class='docblock-short'><p>find a ref to a proxy, use full canonical name as key, needs to run in the workerthread of the event queue</p>
+</td></tr><tr class='module-item'><td><a class="fn" href="fn.get_proxy_for.html" title='es_runtime::jsapi_utils::reflection::get_proxy_for fn'>get_proxy_for</a></td><td class='docblock-short'><p>Get the Proxy of which an object is an instance</p>
+</td></tr></table><h2 id='types' class='section-header'><a href="#types">Type Definitions</a></h2>
+<table><tr class='module-item'><td><a class="type" href="type.Constructor.html" title='es_runtime::jsapi_utils::reflection::Constructor type'>Constructor</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="type" href="type.Getter.html" title='es_runtime::jsapi_utils::reflection::Getter type'>Getter</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="type" href="type.Method.html" title='es_runtime::jsapi_utils::reflection::Method type'>Method</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="type" href="type.Setter.html" title='es_runtime::jsapi_utils::reflection::Setter type'>Setter</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="type" href="type.StaticGetter.html" title='es_runtime::jsapi_utils::reflection::StaticGetter type'>StaticGetter</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="type" href="type.StaticMethod.html" title='es_runtime::jsapi_utils::reflection::StaticMethod type'>StaticMethod</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="type" href="type.StaticSetter.html" title='es_runtime::jsapi_utils::reflection::StaticSetter type'>StaticSetter</a></td><td class='docblock-short'></td></tr></table></section><section id="search" class="content hidden"></section><section class="footer"></section><script>window.rootPath = "../../../";window.currentCrate = "es_runtime";</script><script src="../../../main.js"></script><script defer src="../../../search-index.js"></script></body></html>

@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["EsPersistentRooted","the EsPersistentRooted struct is used to keep an Object rooted while there are no references to it in the script Runtime the root will be released when this struct is dropped"]]});

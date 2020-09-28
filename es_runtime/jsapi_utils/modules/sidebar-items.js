@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["compile_module","compile a module script, this does not cache the module, use SmRuntime::load_module for that it runs CompileModule, ModuleInstantiate and ModuleEvaluate and returns an EsErrorInfo if any one fails"]]});

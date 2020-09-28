@@ -1,0 +1,80 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="API documentation for the Rust `es_runtime` crate."><meta name="keywords" content="rust, rustlang, rust-lang, es_runtime"><title>es_runtime - Rust</title><link rel="stylesheet" type="text/css" href="../normalize.css"><link rel="stylesheet" type="text/css" href="../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../dark.css"><link rel="stylesheet" type="text/css" href="../light.css" id="themeStyle"><script src="../storage.js"></script><noscript><link rel="stylesheet" href="../noscript.css"></noscript><link rel="shortcut icon" href="../favicon.ico"><style type="text/css">#crate-search{background-image:url("../down-arrow.svg");}</style></head><body class="rustdoc mod"><!--[if lte IE 8]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu">&#9776;</div><a href='../es_runtime/index.html'><div class='logo-container'><img src='../rust-logo.png' alt='logo'></div></a><p class='location'>Crate es_runtime</p><div class="sidebar-elems"><a id='all-types' href='all.html'><p>See all es_runtime's items</p></a><div class="block items"><ul><li><a href="#modules">Modules</a></li></ul></div><p class='location'></p><script>window.sidebarCurrent = {name: 'es_runtime', ty: 'mod', relpath: '../'};</script></div></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!"><img src="../brush.svg" width="18" alt="Pick another theme!"></button><div id="theme-choices"></div></div><script src="../theme.js"></script><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><a id="settings-menu" href="../settings.html"><img src="../wheel.svg" width="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><h1 class='fqn'><span class='out-of-band'><span id='render-detail'><a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">[<span class='inner'>&#x2212;</span>]</a></span><a class='srclink' href='../src/es_runtime/lib.rs.html#1-118' title='goto source code'>[src]</a></span><span class='in-band'>Crate <a class="mod" href=''>es_runtime</a></span></h1><div class='docblock'><h1 id="welcome-to-the-es_runtime-crate" class="section-header"><a href="#welcome-to-the-es_runtime-crate">Welcome to the es_runtime crate</a></h1>
+<p>es_runtime is aimed at making it possible for rust developers to integrate a script engine in their rust projects without having specialized knowledge about that script engines.</p>
+<p>The engine used is Mozilla SpiderMonkey (https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey).</p>
+<p>There are basicly two ways of using this lib</p>
+<h2 id="using-esvaluefacade" class="section-header"><a href="#using-esvaluefacade">Using EsValueFacade</a></h2>
+<p>If you don't feel like using the JSAPI, which comes with quite a learning curve. then you can use the utils in this project which use the EsValueFacade struct to pass variables around.</p>
+<h3 id="examples" class="section-header"><a href="#examples">Examples</a></h3>
+<p>Using EsValueFacade:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered">
+
+<span class="kw">use</span> <span class="ident">es_runtime</span>::<span class="ident">esvaluefacade</span>::<span class="ident">EsValueFacade</span>;
+<span class="kw">use</span> <span class="ident">es_runtime</span>::<span class="ident">jsapi_utils</span>::<span class="ident">EsErrorInfo</span>;
+<span class="kw">fn</span> <span class="ident">use_es_value_facade</span>() {
+    <span class="kw">let</span> <span class="ident">rt</span> <span class="op">=</span> <span class="ident">es_runtime</span>::<span class="ident">esruntime</span>::<span class="ident">EsRuntime</span>::<span class="ident">builder</span>().<span class="ident">build</span>();
+    <span class="ident">rt</span>.<span class="ident">eval_sync</span>(<span class="string">&quot;let my_public_method = function(a, b){console.log(\&quot;my_public_method called with: a=%s b=%s\&quot;, a, b);};&quot;</span>, <span class="string">&quot;my_script.es&quot;</span>);
+    <span class="kw">let</span> <span class="ident">a</span> <span class="op">=</span> <span class="ident">EsValueFacade</span>::<span class="ident">new_str</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;abc&quot;</span>));
+    <span class="kw">let</span> <span class="ident">b</span> <span class="op">=</span> <span class="ident">EsValueFacade</span>::<span class="ident">new_str</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;def&quot;</span>));
+    <span class="kw">let</span> <span class="ident">res</span>: <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">EsValueFacade</span>, <span class="ident">EsErrorInfo</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">rt</span>.<span class="ident">call_sync</span>(<span class="macro">vec</span><span class="macro">!</span>[], <span class="string">&quot;my_public_method&quot;</span>, <span class="macro">vec</span><span class="macro">!</span>[<span class="ident">a</span>, <span class="ident">b</span>]);
+    <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">res</span>.<span class="ident">is_ok</span>());
+}
+</pre></div>
+<p>you can also define a function in rust that may be called from script</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered">
+
+<span class="kw">use</span> <span class="ident">es_runtime</span>::<span class="ident">esvaluefacade</span>::<span class="ident">EsValueFacade</span>;
+<span class="kw">fn</span> <span class="ident">define_function</span>(){
+    <span class="kw">let</span> <span class="ident">rt</span> <span class="op">=</span> <span class="ident">es_runtime</span>::<span class="ident">esruntime</span>::<span class="ident">EsRuntime</span>::<span class="ident">builder</span>().<span class="ident">build</span>();
+    <span class="comment">// using the async variant means the function will return as a Promise</span>
+    <span class="ident">rt</span>.<span class="ident">add_global_async_function</span>(<span class="string">&quot;my_function&quot;</span>, <span class="op">|</span><span class="ident">args</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">EsValueFacade</span><span class="op">&gt;</span><span class="op">|</span> {
+         <span class="macro">println</span><span class="macro">!</span>(<span class="string">&quot;rust closure was called from script&quot;</span>);
+         <span class="prelude-val">Ok</span>(<span class="ident">EsValueFacade</span>::<span class="ident">undefined</span>())
+    });
+    <span class="ident">rt</span>.<span class="ident">eval_sync</span>(<span class="string">&quot;my_function();&quot;</span>, <span class="string">&quot;define_function.es&quot;</span>).<span class="ident">ok</span>().<span class="ident">unwrap</span>();
+}
+</pre></div>
+<h2 id="using-jsapi" class="section-header"><a href="#using-jsapi">Using JSAPI</a></h2>
+<p>There is also number of utils which allow you to use the JSAPI, these can be accessed by calling EsRuntimeWrapper.do_in_es_runtime_thread(_sync).</p>
+<p>utils can be found in the es_runtime::jsapi_utils package.</p>
+<h3 id="examples-1" class="section-header"><a href="#examples-1">Examples</a></h3>
+<p>Using JSAPI:</p>
+
+<div class="example-wrap"><pre class="rust rust-example-rendered">
+
+<span class="kw">use</span> <span class="ident">mozjs</span>::<span class="ident">rust</span>::{<span class="ident">Runtime</span>, <span class="ident">HandleObject</span>};
+<span class="kw">use</span> <span class="ident">mozjs</span>::<span class="ident">jsapi</span>::<span class="ident">JSContext</span>;
+<span class="kw">use</span> <span class="ident">es_runtime</span>::<span class="ident">spidermonkeyruntimewrapper</span>::<span class="ident">SmRuntime</span>;
+
+<span class="kw">fn</span> <span class="ident">use_jsapi</span>() {
+    <span class="kw">let</span> <span class="ident">rt</span> <span class="op">=</span> <span class="ident">es_runtime</span>::<span class="ident">esruntime</span>::<span class="ident">EsRuntime</span>::<span class="ident">builder</span>().<span class="ident">build</span>();
+    <span class="comment">// first of all we need to run a closure in the event queue for the engine</span>
+    <span class="kw">let</span> <span class="ident">res</span> <span class="op">=</span> <span class="ident">rt</span>.<span class="ident">do_in_es_event_queue_sync</span>(<span class="op">|</span><span class="ident">sm_rt</span>: <span class="kw-2">&amp;</span><span class="ident">SmRuntime</span><span class="op">|</span> {
+        <span class="comment">// then we tell the SmRuntime we want to use the JSAPI</span>
+        <span class="comment">// do_with_jsapi does a couple of things</span>
+        <span class="comment">// 1.  root the global obj</span>
+        <span class="comment">// 2.   enter the correct Compartment using AutoCompartment        </span>
+        <span class="ident">sm_rt</span>.<span class="ident">do_with_jsapi</span>(<span class="op">|</span><span class="ident">runtime</span>: <span class="kw-2">&amp;</span><span class="ident">Runtime</span>, <span class="ident">context</span>: <span class="kw-2">*</span><span class="kw-2">mut</span> <span class="ident">JSContext</span>, <span class="ident">global_handle</span>: <span class="ident">HandleObject</span><span class="op">|</span> {
+
+            <span class="comment">// work with JSAPI methods here</span>
+            <span class="comment">// there are utils in jsapi_utils.rs with examples of working with JSAPI objects and functions.</span>
+     
+            <span class="comment">// return a value</span>
+            <span class="bool-val">true</span>
+        });
+
+        <span class="comment">// you can also define a global function which can be called from script</span>
+        <span class="ident">sm_rt</span>.<span class="ident">add_global_function</span>(<span class="string">&quot;my_function&quot;</span>, <span class="op">|</span><span class="ident">_cx</span>, <span class="ident">_callargs</span><span class="op">|</span> {
+             <span class="macro">println</span><span class="macro">!</span>(<span class="string">&quot;rust function was called from script&quot;</span>);
+             <span class="bool-val">true</span>
+        });
+
+        <span class="bool-val">true</span>
+
+    });
+}</pre></div>
+</div><h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
+<table><tr class='module-item'><td><a class="mod" href="esreflection/index.html" title='es_runtime::esreflection mod'>esreflection</a></td><td class='docblock-short'><p>EsProxy</p>
+</td></tr><tr class='module-item'><td><a class="mod" href="esruntime/index.html" title='es_runtime::esruntime mod'>esruntime</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="mod" href="esruntimebuilder/index.html" title='es_runtime::esruntimebuilder mod'>esruntimebuilder</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="mod" href="esruntimeinner/index.html" title='es_runtime::esruntimeinner mod'>esruntimeinner</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="mod" href="esvaluefacade/index.html" title='es_runtime::esvaluefacade mod'>esvaluefacade</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="mod" href="jsapi_utils/index.html" title='es_runtime::jsapi_utils mod'>jsapi_utils</a></td><td class='docblock-short'><p>jsapi_utils</p>
+</td></tr><tr class='module-item'><td><a class="mod" href="spidermonkeyruntimewrapper/index.html" title='es_runtime::spidermonkeyruntimewrapper mod'>spidermonkeyruntimewrapper</a></td><td class='docblock-short'></td></tr><tr class='module-item'><td><a class="mod" href="utils/index.html" title='es_runtime::utils mod'>utils</a></td><td class='docblock-short'></td></tr></table></section><section id="search" class="content hidden"></section><section class="footer"></section><script>window.rootPath = "../";window.currentCrate = "es_runtime";</script><script src="../main.js"></script><script defer src="../search-index.js"></script></body></html>
