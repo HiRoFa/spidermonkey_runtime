@@ -1,3 +1,5 @@
+This project is currently low on attention from me, i'm currently doing a lot of work for the quickjs based alternative which is a bit more practical for me because it's easier to compile on sbc's like the raspberry pi. I am however planning to get back to this when i feel [quick_es_runtime](https://github.com/HiRoFa/quickjs_es_runtime) is where i want it to be..
+
 # es_runtime
 
 es_runtime is a crate aimed at making it possible for rust developers to integrate an ECMA-Script engine in their rust projects without having specialized knowledge about ECMA-Script engines.
