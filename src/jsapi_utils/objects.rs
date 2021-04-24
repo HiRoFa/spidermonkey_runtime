@@ -141,7 +141,7 @@ pub fn get_es_obj_prop_val_as_string(
     rooted!(in (context) let mut rval = UndefinedValue());
     let res = get_es_obj_prop_val(context, obj, prop_name, rval.handle_mut());
     if res.is_err() {
-        panic!(res.err().unwrap().message);
+        panic!("{}", res.err().unwrap().message);
     }
 
     es_value_to_str(context, *rval)
@@ -156,7 +156,7 @@ pub fn get_es_obj_prop_val_as_string_raw(
     rooted!(in (context) let mut rval = UndefinedValue());
     let res = get_es_obj_prop_val_raw(context, obj, prop_name, rval.handle_mut());
     if res.is_err() {
-        panic!(res.err().unwrap().message);
+        panic!("{}", res.err().unwrap().message);
     }
 
     es_value_to_str(context, *rval)
@@ -171,7 +171,7 @@ pub fn get_es_obj_prop_val_as_i32(
     rooted!(in (context) let mut rval = UndefinedValue());
     let res = get_es_obj_prop_val(context, obj, prop_name, rval.handle_mut());
     if res.is_err() {
-        panic!(res.err().unwrap().message);
+        panic!("{}", res.err().unwrap().message);
     }
 
     let val: JSVal = *rval;

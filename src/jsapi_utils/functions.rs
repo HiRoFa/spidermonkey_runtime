@@ -15,11 +15,11 @@ use mozjs::jsapi::JS_CallFunction;
 use mozjs::jsapi::JS_CallFunctionName;
 use mozjs::jsapi::JS_CallFunctionValue;
 use mozjs::jsapi::JS_DefineFunction;
-use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_NewFunction;
 use mozjs::jsapi::JS_NewObject;
 use mozjs::jsapi::JS_ObjectIsFunction;
 use mozjs::jsapi::MutableHandleObject as RawMutableHandleObject;
+use mozjs::jsapi::NewArrayObject;
 use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsval::JSVal;
 use mozjs::jsval::UndefinedValue;
@@ -91,7 +91,7 @@ pub fn call_function_name(
     let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*args) };
 
     // root the args here
-    rooted!(in(context) let _argument_object = unsafe {JS_NewArrayObject(context, &arguments_value_array)});
+    rooted!(in(context) let _argument_object = unsafe {NewArrayObject(context, &arguments_value_array)});
 
     call_function_name2(
         context,
@@ -151,7 +151,7 @@ pub fn call_function(
     let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*args) };
 
     // root the args here
-    rooted!(in(context) let _argument_object = unsafe {JS_NewArrayObject(context, &arguments_value_array)});
+    rooted!(in(context) let _argument_object = unsafe {NewArrayObject(context, &arguments_value_array)});
 
     call_function2(context, this_obj, function, arguments_value_array, ret_val)
 }
@@ -167,7 +167,7 @@ pub fn call_function_value(
     let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*args) };
 
     // root the args here
-    rooted!(in(context) let _argument_object = unsafe {JS_NewArrayObject(context, &arguments_value_array)});
+    rooted!(in(context) let _argument_object = unsafe {NewArrayObject(context, &arguments_value_array)});
 
     call_function_value2(
         context,
@@ -287,7 +287,7 @@ pub fn call_namespace_function_name(
     trace!("call_namespace_function_name: {}", function_name);
 
     // root the args here
-    rooted!(in(context) let _argument_object = unsafe {JS_NewArrayObject(context, &arguments_value_array)});
+    rooted!(in(context) let _argument_object = unsafe {NewArrayObject(context, &arguments_value_array)});
 
     call_namespace_function_name2(
         context,
@@ -683,7 +683,7 @@ mod tests {
                     rval.handle_mut(),
                 );
                 if fres.is_err() {
-                    panic!(fres.err().unwrap().message);
+                    panic!("{}", fres.err().unwrap().message);
                 }
                 let ret_val: JSVal = *rval;
                 let ret: i32 = ret_val.to_int32();
@@ -734,7 +734,7 @@ mod tests {
                     rval.handle_mut(),
                 );
                 if fres.is_err() {
-                    panic!(fres.err().unwrap().message);
+                    panic!("{}", fres.err().unwrap().message);
                 }
                 let ret_val: JSVal = *rval;
                 let ret: i32 = ret_val.to_int32();

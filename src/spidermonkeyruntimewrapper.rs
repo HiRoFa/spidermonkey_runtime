@@ -4,14 +4,15 @@ use crate::jsapi_utils;
 use crate::jsapi_utils::rooting::EsPersistentRooted;
 use crate::jsapi_utils::EsErrorInfo;
 use crate::utils::AutoIdMap;
+use hirofa_utils::eventloop::EventLoop;
 use log::{debug, trace};
 use mozjs::glue::{CreateJobQueue, JobQueueTraps};
 use mozjs::jsapi::CallArgs;
 use mozjs::jsapi::JSAutoRealm;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
-use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_NewGlobalObject;
+use mozjs::jsapi::NewArrayObject;
 use mozjs::jsapi::OnNewGlobalHookOption;
 use mozjs::jsapi::SetJobQueue;
 use mozjs::jsapi::JS::HandleValueArray;
@@ -409,7 +410,7 @@ where
     let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*values) };
     // root the hva itself
     trace!("sm_rt::do_with_rooted_esvf_vec, root hva");
-    rooted!(in(context) let _argument_object = unsafe { JS_NewArrayObject(context, &arguments_value_array) });
+    rooted!(in(context) let _argument_object = unsafe { NewArrayObject(context, &arguments_value_array) });
     trace!("sm_rt::do_with_rooted_esvf_vec, run consumer");
     consumer(arguments_value_array)
 }
@@ -501,13 +502,7 @@ unsafe extern "C" fn enqueue_promise_job(
             });
         };
 
-        SM_RT.with(move |sm_rt_rc| {
-            let sm_rt = &*sm_rt_rc.borrow();
-            let esrt_inner_opt = sm_rt.opt_esrt_inner.as_ref().unwrap().upgrade();
-            let esrt_inner: Arc<EsRuntimeInner> = esrt_inner_opt.unwrap();
-            let event_queue = esrt_inner.event_queue.clone();
-            event_queue.add_task_from_worker(task);
-        });
+        EventLoop::add_local_void(task);
         result = true
     });
     result
@@ -536,14 +531,17 @@ unsafe extern "C" fn get_incumbent_global(_: *const c_void, _: *mut JSContext) -
 #[allow(unsafe_code)]
 unsafe extern "C" fn empty(_extra: *const c_void) -> bool {
     trace!("empty called");
-    let mut result = false;
-    wrap_panic(&mut || {
-        result = SM_RT.with(|sm_rt_rc| {
-            let sm_rt = &*sm_rt_rc.borrow();
-            sm_rt.clone_esrt_inner().event_queue.is_empty()
-        })
-    });
-    result
+    //let mut result = false;
+    //wrap_panic(&mut || {
+    //result = SM_RT.with(|sm_rt_rc| {
+    // todo, create is_empty for EventLoop (AtomicUsize?)
+    //let sm_rt = &*sm_rt_rc.borrow();
+
+    //sm_rt.clone_esrt_inner().event_loop.is_empty()
+    false
+    //})
+    //});
+    //result
 }
 
 static JOB_QUEUE_TRAPS: JobQueueTraps = JobQueueTraps {

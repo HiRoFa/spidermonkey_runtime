@@ -6,13 +6,13 @@ use mozjs::conversions::{
     ConversionBehavior, ConversionResult, FromJSValConvertible, ToJSValConvertible,
 };
 use mozjs::glue::int_to_jsid;
+use mozjs::jsapi::GetArrayLength;
 use mozjs::jsapi::IsArray;
 use mozjs::jsapi::JSContext;
 use mozjs::jsapi::JSObject;
-use mozjs::jsapi::JS_GetArrayLength;
 use mozjs::jsapi::JS_GetPropertyById;
-use mozjs::jsapi::JS_NewArrayObject;
 use mozjs::jsapi::JS_SetElement;
+use mozjs::jsapi::NewArrayObject;
 use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsval::JSVal;
 use mozjs::rust::{HandleObject, HandleValue, MutableHandleObject, MutableHandleValue};
@@ -132,7 +132,7 @@ pub fn get_array_length(
 
     trace!("arrays::get_array_length");
 
-    let ok = unsafe { JS_GetArrayLength(context, arr_obj.into(), &mut l) };
+    let ok = unsafe { GetArrayLength(context, arr_obj.into(), &mut l) };
 
     if !ok {
         if let Some(err) = get_pending_exception(context) {
@@ -273,7 +273,7 @@ pub fn get_array_element(
 /// create a new array obj
 pub fn new_array(context: *mut JSContext, ret_val: MutableHandleObject) {
     let arguments_value_array = HandleValueArray::new();
-    let res = unsafe { JS_NewArrayObject(context, &arguments_value_array) };
+    let res = unsafe { NewArrayObject(context, &arguments_value_array) };
     let mut ret_val = ret_val;
     ret_val.set(res);
 }
@@ -281,7 +281,7 @@ pub fn new_array(context: *mut JSContext, ret_val: MutableHandleObject) {
 /// create a new array obj
 pub fn new_array2(context: *mut JSContext, items: Vec<JSVal>, ret_val: MutableHandleObject) {
     let arguments_value_array = unsafe { HandleValueArray::from_rooted_slice(&*items) };
-    let res = unsafe { JS_NewArrayObject(context, &arguments_value_array) };
+    let res = unsafe { NewArrayObject(context, &arguments_value_array) };
     let mut ret_val = ret_val;
     ret_val.set(res);
 }
@@ -341,7 +341,7 @@ mod tests {
                 rooted!(in (cx) let mut rval = UndefinedValue());
                 let res = get_array_element(cx, arr_val_obj.handle(), 2, rval.handle_mut());
                 if res.is_err() {
-                    panic!(res.err().unwrap().message);
+                    panic!("{}", res.err().unwrap().message);
                 }
                 let val_3: JSVal = *rval;
                 assert_eq!(val_3.to_int32(), 3);

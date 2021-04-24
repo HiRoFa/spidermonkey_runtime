@@ -3,13 +3,13 @@ use crate::esvaluefacade::EsValueFacade;
 use crate::jsapi_utils::handles::from_raw_handle_mut;
 use crate::jsapi_utils::{report_exception2, EsErrorInfo};
 use crate::spidermonkeyruntimewrapper::SmRuntime;
-use hirofa_utils::single_threaded_event_queue::SingleThreadedEventQueue;
+use hirofa_utils::eventloop::EventLoop;
 use log::{debug, trace};
 use mozjs::jsapi::CallArgs;
 use std::sync::Arc;
 
 pub struct EsRuntimeInner {
-    pub(crate) event_queue: Arc<SingleThreadedEventQueue>,
+    pub(crate) event_loop: EventLoop,
     pub(crate) _pre_cleanup_tasks: Vec<Box<dyn Fn(&EsRuntimeInner) + Send + Sync>>,
     pub(crate) module_source_loader: Option<Box<ModuleCodeLoader>>,
     pub(crate) module_cache_size: usize,
@@ -21,7 +21,7 @@ impl EsRuntimeInner {
         module_cache_size: usize,
     ) -> Self {
         EsRuntimeInner {
-            event_queue: SingleThreadedEventQueue::new(),
+            event_loop: EventLoop::new(),
             _pre_cleanup_tasks: vec![],
             module_source_loader,
             module_cache_size,
@@ -128,7 +128,7 @@ impl EsRuntimeInner {
             })
         };
 
-        self.event_queue.add_task(async_job);
+        self.event_loop.add_void(async_job);
     }
 
     pub fn do_in_es_event_queue_sync<R: Send + 'static, J>(&self, job: J) -> R
@@ -145,7 +145,7 @@ impl EsRuntimeInner {
             })
         };
 
-        self.event_queue.exe_task(job)
+        self.event_loop.exe(job)
     }
 
     pub fn add_global_async_function<F>(&self, name: &'static str, func: F)

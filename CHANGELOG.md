@@ -1,4 +1,9 @@
-# 0.6.0 (work in progress)
+# 0.7.0 (work in progress)
+
+* update mozjs (spidermonkey 88)
+* use EventLoop from utils
+
+# 0.6.0 
 
 * internals
   * refactored EsValueFacade.to_es_value to accept rval instead of returning JSVal

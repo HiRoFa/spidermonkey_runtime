@@ -13,7 +13,6 @@ use mozjs::jsapi::JSScript;
 use mozjs::rust::{
     transform_u16_to_source_text, HandleScript, MutableHandleScript, MutableHandleValue,
 };
-use std::ffi::CString;
 
 /// compile a script, return a JSScript object via rval which can be executed by calling execute_script
 /// ```no_run
@@ -52,9 +51,7 @@ pub fn compile_script(
     rval: MutableHandleScript,
 ) -> Result<(), EsErrorInfo> {
     let src_vec: Vec<u16> = src.encode_utf16().collect();
-    let file_name_cstr = CString::new(file_name).unwrap();
-    let options =
-        unsafe { mozjs::rust::CompileOptionsWrapper::new(cx, file_name_cstr.as_ptr(), 1) };
+    let options = unsafe { mozjs::rust::CompileOptionsWrapper::new(cx, file_name, 1) };
     let mut source = transform_u16_to_source_text(&src_vec);
 
     let compiled_script: *mut JSScript =

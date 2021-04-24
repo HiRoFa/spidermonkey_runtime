@@ -1,12 +1,8 @@
 This project is currently low on attention from me, i'm currently doing a lot of work for the quickjs based alternative which is a bit more practical for me because it's easier to compile on sbc's like the raspberry pi. I am however planning to get back to this when i feel [quick_es_runtime](https://github.com/HiRoFa/quickjs_es_runtime) is where i want it to be..
 
-# es_runtime
+# spidermonkey_runtime
 
-es_runtime is a crate aimed at making it possible for rust developers to integrate an ECMA-Script engine in their rust projects without having specialized knowledge about ECMA-Script engines.
-
-The engine used is the Mozilla SpiderMonkey engine (https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey).
-
-This project started as a hobby project for me to learn rust. I hope some of you find it useful to learn about using spidermonkey from rust.
+spidermonkey_runtime is a crate aimed at making it possible for rust developers to integrate the [SpiderMonkey](https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey) JavaScript engine in their rust projects without having specialized knowledge about the SpiderMonkey JavaScript engines.
 
 * [DOCS](https://drfos.github.io/es_runtime/es_runtime/index.html)
 
@@ -14,8 +10,9 @@ This project started as a hobby project for me to learn rust. I hope some of you
 
 Nowhere near production ready, it is untested...
 
-From 0.2.0 it works with the latest mozjs crate version 0.13.0.  
-0.1.0 and older worked with the mozjs 0.10.1 release. (mozjs does not publish new release anymore because of a [bug](https://github.com/rust-lang/cargo/issues/6917) in cargo)
+From 0.2.0 it works with the latest mozjs crate version 0.14.1 which uses SpiderMonkey version 88
+
+0.1.0 and older worked with the mozjs 0.10.1 release. (mozjs does not publish new release any more because of a [bug](https://github.com/rust-lang/cargo/issues/6917) in cargo)
 
 Please see the [CHANGELOG](CHANGELOG.md) for what's new.
 

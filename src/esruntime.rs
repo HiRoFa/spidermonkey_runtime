@@ -67,7 +67,7 @@ impl EsRuntime {
 
         // pass arc around inner to sm_rt thread
 
-        rt.inner.event_queue.exe_task(move || {
+        rt.inner.event_loop.exe(move || {
             // todo this should also be in init_info
 
             crate::spidermonkeyruntimewrapper::SM_RT.with(move |sm_rc: &RefCell<SmRuntime>| {

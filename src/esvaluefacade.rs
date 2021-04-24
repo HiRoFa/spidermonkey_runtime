@@ -11,7 +11,6 @@ use crate::utils::AutoIdMap;
 use crate::{jsapi_utils, spidermonkeyruntimewrapper};
 use either::Either;
 use hirofa_utils::debug_mutex::DebugMutex;
-use hirofa_utils::single_threaded_event_queue::SingleThreadedEventQueue;
 use log::debug;
 use mozjs::jsapi::HandleValueArray;
 use mozjs::jsapi::JSContext;
@@ -23,6 +22,7 @@ use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
+use hirofa_utils::eventloop::EventLoop;
 
 // placeholder for promises that were passed from the script engine to rust
 struct CachedJSPromise {
@@ -307,7 +307,7 @@ impl EsValueConvertible for CachedJSPromise {
             )));
         }
 
-        if SingleThreadedEventQueue::looks_like_eventqueue_thread() {
+        if EventLoop::is_a_pool_thread() {
             log::error!("waiting for esvf prom from event queue thread, bad dev bad!");
             panic!("you really should not wait for promises in a RT's event queue thread");
         }

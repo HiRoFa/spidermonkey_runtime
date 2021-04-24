@@ -6,7 +6,8 @@ use crate::jsapi_utils::{get_pending_exception, report_exception2, EsErrorInfo};
 use crate::spidermonkeyruntimewrapper::{register_cached_object, SmRuntime, SM_RT};
 use log::trace;
 use lru::LruCache;
-use mozjs::jsapi::FinishDynamicModuleImport;
+use mozjs::jsapi::DynamicImportStatus;
+use mozjs::jsapi::FinishDynamicModuleImport_NoTLA;
 use mozjs::jsapi::Handle as RawHandle;
 use mozjs::jsapi::HandleObject as RawHandleObject;
 use mozjs::jsapi::HandleValue as RawHandleValue;
@@ -21,7 +22,6 @@ use mozjs::jsval::UndefinedValue;
 use mozjs::jsval::{NullValue, ObjectValue, StringValue};
 use mozjs::rust::{transform_u16_to_source_text, Runtime};
 use std::cell::RefCell;
-use std::ffi::CString;
 use std::ptr;
 
 /// prepare a Runtime for working with modules
@@ -51,9 +51,7 @@ pub fn compile_module(
     trace!("{}", src);
 
     let src_vec: Vec<u16> = src.encode_utf16().collect();
-    let file_name_cstr = CString::new(file_name).unwrap();
-    let options =
-        unsafe { mozjs::rust::CompileOptionsWrapper::new(context, file_name_cstr.as_ptr(), 1) };
+    let options = unsafe { mozjs::rust::CompileOptionsWrapper::new(context, file_name, 1) };
     let mut source = transform_u16_to_source_text(&src_vec);
 
     let compiled_module: *mut JSObject =
@@ -107,9 +105,14 @@ pub fn compile_module(
     }
 
     trace!("ModuleEvaluate: {}", file_name);
-
-    let res =
-        unsafe { mozjs::rust::wrappers::ModuleEvaluate(context, module_script_root.handle()) };
+    rooted!(in (context) let mut _module_rval = UndefinedValue());
+    let res = unsafe {
+        mozjs::rust::wrappers::ModuleEvaluate(
+            context,
+            module_script_root.handle(),
+            _module_rval.handle_mut(),
+        )
+    };
     if !res {
         if let Some(err) = get_pending_exception(context) {
             return Err(err);
@@ -262,7 +265,7 @@ unsafe extern "C" fn module_dynamic_import(
                 if is_cached {
                     // resolve promise
                     trace!("dyn module {} was cached, finish import", file_name.as_str());
-                    FinishDynamicModuleImport(cx, reference_private_val_root.handle().into(), specifier_root.handle().into(), promise_root.handle().into());
+                    FinishDynamicModuleImport_NoTLA(cx, DynamicImportStatus::Ok , reference_private_val_root.handle().into(), specifier_root.handle().into(), promise_root.handle().into());
 
                 } else if let Some(script_code) = script {
 
@@ -283,7 +286,7 @@ unsafe extern "C" fn module_dynamic_import(
 
                         trace!("dyn module {} was loaded, compiled and cached, finish", file_name.as_str());
 
-                        FinishDynamicModuleImport(cx, reference_private_val_root.handle().into(), specifier_root.handle().into(), promise_root.handle().into());
+                        FinishDynamicModuleImport_NoTLA(cx, DynamicImportStatus::Ok, reference_private_val_root.handle().into(), specifier_root.handle().into(), promise_root.handle().into());
 
                     } else {
                         // reject promise

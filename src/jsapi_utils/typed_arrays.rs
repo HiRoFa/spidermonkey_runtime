@@ -35,7 +35,7 @@ macro_rules! typed_array {
             pub fn is_instance(obj: *mut JSObject) -> bool {
                 unsafe { mozjs::jsapi::$is_method(obj) }
             }
-            pub fn new_instance(cx: *mut JSContext, ret: MutableHandleObject, len: u32) {
+            pub fn new_instance(cx: *mut JSContext, ret: MutableHandleObject, len: usize) {
                 let mut ret = ret;
                 ret.set(unsafe { mozjs::jsapi::$new_method(cx, len) });
             }
@@ -70,9 +70,9 @@ macro_rules! typed_array {
             ) -> Result<(), EsErrorInfo> {
                 trace!("new_typed_array_from_vec / 1");
 
-                $struct_ident::new_instance(cx, ret, vec.len() as u32);
+                $struct_ident::new_instance(cx, ret, vec.len());
 
-                let mut len: u32 = 0;
+                let mut len: usize = 0;
                 let mut data = std::ptr::null_mut();
                 let mut is_shared_mem = false;
                 trace!("new_typed_array_from_vec / 2");
@@ -98,7 +98,7 @@ macro_rules! typed_array {
                 _cx: *mut JSContext,
                 arr: HandleObject,
             ) -> Result<Vec<$rust_type>, EsErrorInfo> {
-                let mut len: u32 = 0;
+                let mut len: usize = 0;
                 let mut data = std::ptr::null_mut();
                 let mut is_shared_mem = false;
                 trace!("to_vec / 1");
