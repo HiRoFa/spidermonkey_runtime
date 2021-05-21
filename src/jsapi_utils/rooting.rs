@@ -70,6 +70,7 @@ impl Drop for EsPersistentRooted {
 
 #[cfg(test)]
 mod tests {
+    use crate::esruntime::tests::init_test_runtime;
     use crate::jsapi_utils::objects::NULL_JSOBJECT;
     use crate::jsapi_utils::rooting::EsPersistentRooted;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
@@ -79,7 +80,7 @@ mod tests {
     fn test_rooting1() {
         log::info!("test_rooting1 ");
 
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
 
         let res = rt.do_with_inner(|inner| {
             inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {

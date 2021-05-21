@@ -7,10 +7,11 @@ use crate::jsapi_utils::objects::NULL_JSOBJECT;
 use crate::jsapi_utils::rooting::EsPersistentRooted;
 use crate::jsapi_utils::{objects, EsErrorInfo};
 use crate::spidermonkeyruntimewrapper::SmRuntime;
-use crate::utils::AutoIdMap;
 use crate::{jsapi_utils, spidermonkeyruntimewrapper};
 use either::Either;
+use hirofa_utils::auto_id_map::AutoIdMap;
 use hirofa_utils::debug_mutex::DebugMutex;
+use hirofa_utils::eventloop::EventLoop;
 use log::debug;
 use mozjs::jsapi::HandleValueArray;
 use mozjs::jsapi::JSContext;
@@ -22,7 +23,6 @@ use std::collections::HashMap;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError};
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-use hirofa_utils::eventloop::EventLoop;
 
 // placeholder for promises that were passed from the script engine to rust
 struct CachedJSPromise {
@@ -592,7 +592,7 @@ impl EsValueConvertible for HashMap<String, EsValueFacade> {
 /// # Example
 ///
 /// ```no_run
-/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+/// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
 ///
 /// let rt = EsRuntimeBuilder::default().build();
 /// let esvf = rt.eval_sync("123", "test_es_value_facade.es").ok().unwrap();
@@ -651,8 +651,8 @@ impl EsValueFacade {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     /// use std::time::Duration;
     ///
     /// let rt = EsRuntimeBuilder::new().build();
@@ -866,7 +866,7 @@ impl EsValueFacade {
     /// wait for a promise to resolve in rust
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use std::time::Duration;
     ///
     /// let rt = EsRuntimeBuilder::new().build();
@@ -893,7 +893,7 @@ impl EsValueFacade {
     /// get the value as a Map of EsValueFacades, this works when the value was an object in the script engine
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
     ///
     /// let rt = EsRuntimeBuilder::new().build();
     /// let esvf = rt.eval_sync("{a: 1, b: 2};", "test_get_object.es").ok().expect("script failed");
@@ -908,8 +908,8 @@ impl EsValueFacade {
     /// get the value as a Vec of EsValueFacades, this works when the value was an array in the script engine
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     ///
     /// let rt = EsRuntimeBuilder::new().build();
     /// let esvf = rt.eval_sync("[1, 2, 3];", "test_get_array.es").ok().expect("script failed");
@@ -923,8 +923,8 @@ impl EsValueFacade {
     /// invoke the function that was returned from the script engine
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     ///
     /// let rt = EsRuntimeBuilder::new().build();
     /// let func_esvf = rt.eval_sync("(function(a){return (a / 2);});", "test_invoke_function.es")
@@ -1013,11 +1013,10 @@ impl Drop for CachedJSFunction {
 #[cfg(test)]
 mod tests {
 
-    use crate::esruntime::EsRuntime;
+    use crate::esruntime::tests::init_test_runtime;
     use crate::esvaluefacade::EsValueFacade;
     use crate::jsapi_utils::EsErrorInfo;
     use std::collections::HashMap;
-    use std::sync::Arc;
     use std::time::Duration;
 
     #[test]
@@ -1025,7 +1024,7 @@ mod tests {
     fn in_and_output_vars() {
         log::info!("test: in_and_output_vars");
 
-        let rt: Arc<EsRuntime> = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         rt.add_global_sync_function("test_op_0", |args: Vec<EsValueFacade>| {
             let args1 = args.get(0).expect("did not get a first arg");
             let args2 = args.get(1).expect("did not get a second arg");
@@ -1086,7 +1085,7 @@ mod tests {
     fn test_wait_for_native_prom() {
         log::info!("test: test_wait_for_native_prom");
 
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         let esvf_prom = rt
             .eval_sync(
                 "let p = new Promise((resolve, reject) => {resolve(123);});p = p.then((v) => {return v;});p = p.then((v) => {return v;});p = p.then((v) => {return v;});p = p.then((v) => {return v;});p = p.then((v) => {return v;});p = p.then((v) => {return v;}); p;",
@@ -1110,7 +1109,7 @@ mod tests {
     fn test_wait_for_prom() {
         log::info!("test: test_wait_for_prom");
 
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         let esvf_prom = rt
             .eval_sync(
                 "let test_wait_for_prom_prom = new Promise((resolve, reject) => {resolve(123);}); test_wait_for_prom_prom;",
@@ -1134,7 +1133,7 @@ mod tests {
     fn test_wait_for_prom2() {
         log::info!("test: test_wait_for_prom2");
 
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
 
         let esvf_prom_res: Result<EsValueFacade, EsErrorInfo> = rt
             .eval_sync(
@@ -1168,7 +1167,7 @@ mod tests {
     fn test_wait_for_prom3() {
         log::info!("test: test_wait_for_prom3");
 
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
 
         let my_slow_prom_esvf = EsValueFacade::new_promise(|| {
             std::thread::sleep(Duration::from_secs(10));
@@ -1201,7 +1200,7 @@ mod tests {
     #[test]
     fn test_get_object() {
         log::info!("test: test_get_object");
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         let esvf = rt
             .eval_sync(
                 "({a: 1, b: true, c: 'hello', d: {a: 2}});",
@@ -1223,7 +1222,7 @@ mod tests {
     #[test]
     fn test_getset_array() {
         log::info!("test: test_getset_array");
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         let esvf = rt
             .eval_sync("([5, 7, 9]);", "test_getset_array.es")
             .ok()
@@ -1262,7 +1261,7 @@ mod tests {
     #[test]
     fn test_set_object() {
         log::info!("test: test_set_object");
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         let _esvf = rt
             .eval_sync(
                 "this.test_set_object = function test_set_object(obj, prop){return obj[prop];};",
@@ -1292,7 +1291,7 @@ mod tests {
     #[test]
     fn test_prepped_prom() {
         log::info!("test: test_prepped_prom");
-        let rt: &EsRuntime = &*crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
 
         let my_prep_func = || {
             std::thread::sleep(Duration::from_secs(5));
@@ -1342,7 +1341,7 @@ mod tests {
     #[test]
     fn test_prepped_prom_resolve() {
         log::info!("test: test_prepped_prom_resolve");
-        let rt: &EsRuntime = &*crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
 
         let my_prep_func = || {
             std::thread::sleep(Duration::from_secs(5));

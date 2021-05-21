@@ -181,11 +181,11 @@ pub fn call_function_value(
 /// call a function with a rooted arguments array
 /// # Example
 /// ```rust
-/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+/// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
 /// use mozjs::jsval::{UndefinedValue, Int32Value};
 /// use mozjs::{rooted, auto_root};
 /// use mozjs::jsapi::{HandleValueArray, JSFunction};
-/// use es_runtime::jsapi_utils::functions::{compile_function, call_function2};
+/// use spidermonkey_runtime::jsapi_utils::functions::{compile_function, call_function2};
 /// use std::ptr;
 /// let rt = EsRuntimeBuilder::new().build();
 /// rt.do_in_es_event_queue_sync(|sm_rt| {
@@ -548,9 +548,9 @@ thread_local! {
 /// create a new callback function based on a closure
 /// # Example
 /// ```no_run
-/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-/// use es_runtime::jsapi_utils::functions::{new_callback, call_function_name};
-/// use crate::es_runtime::jsapi_utils::objects::NULL_JSOBJECT;
+/// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+/// use spidermonkey_runtime::jsapi_utils::functions::{new_callback, call_function_name};
+/// use crate::spidermonkey_runtime::jsapi_utils::objects::NULL_JSOBJECT;
 /// use mozjs::rooted;
 /// use mozjs::jsval::{Int32Value, ObjectValue, UndefinedValue};
 /// use log::info;
@@ -614,6 +614,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::esruntime::tests::init_test_runtime;
     use crate::jsapi_utils;
     use crate::jsapi_utils::functions::{
         call_function, call_function_name, call_namespace_function_name, compile_function,
@@ -747,7 +748,7 @@ mod tests {
 
     #[test]
     fn test_callback() {
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         rt.eval_sync(
             "this.test_callback_func = function(cb){cb();};",
             "test_callback.es",
@@ -784,7 +785,7 @@ mod tests {
 
     #[test]
     fn test_compile_func() {
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         rt.do_in_es_event_queue_sync(|sm_rt| {
             sm_rt.do_with_jsapi(|_rt, cx, global| {
                 rooted!(in (cx) let mut function_root = ptr::null_mut::<JSFunction>());

@@ -3,7 +3,7 @@ use crate::esvaluefacade::EsValueFacade;
 use crate::jsapi_utils;
 use crate::jsapi_utils::rooting::EsPersistentRooted;
 use crate::jsapi_utils::EsErrorInfo;
-use crate::utils::AutoIdMap;
+use hirofa_utils::auto_id_map::AutoIdMap;
 use hirofa_utils::eventloop::EventLoop;
 use log::{debug, trace};
 use mozjs::glue::{CreateJobQueue, JobQueueTraps};
@@ -19,10 +19,10 @@ use mozjs::jsapi::JS::HandleValueArray;
 use mozjs::jsval::{ObjectValue, UndefinedValue};
 use mozjs::panic::wrap_panic;
 use mozjs::rust::wrappers::JS_CallFunctionValue;
-use mozjs::rust::HandleObject;
-use mozjs::rust::RealmOptions;
 use mozjs::rust::Runtime;
 use mozjs::rust::SIMPLE_GLOBAL_CLASS;
+use mozjs::rust::{HandleObject, JSEngine};
+use mozjs::rust::{JSEngineHandle, RealmOptions};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::os::raw::c_void;
@@ -31,8 +31,19 @@ use std::rc::Rc;
 use std::str;
 use std::sync::{Arc, Weak};
 
-/// the type for registering rust_ops in the script engine
+lazy_static! {
+    static ref ENGINE_HANDLE_PRODUCER: EventLoop = EventLoop::new();
+}
 
+thread_local! {
+    static ENGINE: RefCell<JSEngine> = RefCell::new(JSEngine::init().unwrap());
+}
+
+fn produce_engine_handle() -> JSEngineHandle {
+    ENGINE_HANDLE_PRODUCER.exe(|| ENGINE.with(|rc| (&*rc.borrow()).handle()))
+}
+
+/// the type for registering rust_ops in the script engine
 pub type GlobalOp = dyn Fn(*mut JSContext, CallArgs) -> bool + Send + 'static;
 
 /// wrapper for the SpiderMonkey runtime, this struct only lives as a thread_local in the worker
@@ -71,7 +82,7 @@ impl SmRuntime {
     /// this function will be callable from javascript just by using func_name();
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// use mozjs::jsval::Int32Value;
     /// use mozjs::jsapi::CallArgs;
     ///
@@ -111,7 +122,8 @@ impl SmRuntime {
     fn new() -> Self {
         debug!("init SmRuntime {}", thread_id::get());
 
-        let runtime = mozjs::rust::Runtime::new(crate::enginehandleproducer::produce());
+        // todo runtime is actually a context
+        let runtime = mozjs::rust::Runtime::new(produce_engine_handle());
 
         let context = runtime.cx();
         let h_option = OnNewGlobalHookOption::FireOnNewGlobalHook;
@@ -397,7 +409,6 @@ where
     C: FnOnce(HandleValueArray) -> R,
 {
     trace!("sm_rt::do_with_rooted_esvf_vec, vec_len={}", vec.len());
-
     auto_root!(in (context) let mut values = vec![]);
 
     for esvf in vec {
@@ -617,6 +628,7 @@ impl CallbackFunction {
 
 #[cfg(test)]
 mod tests {
+    use crate::esruntime::tests::init_test_runtime;
     use crate::esvaluefacade::EsValueFacade;
     use crate::jsapi_utils;
     use crate::jsapi_utils::EsErrorInfo;
@@ -627,7 +639,7 @@ mod tests {
     #[test]
     fn test_call_method_name() {
         log::info!("test: test_call_method_name");
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         let res = rt.do_with_inner(|inner| {
             inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
                 sm_rt.do_with_jsapi(|rt, cx, global| {
@@ -667,7 +679,7 @@ mod tests {
 
     fn _test_import() {
         log::info!("test: test_import");
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         let import_res: Result<EsValueFacade, EsErrorInfo> = rt.eval_sync(
             "import {foo, bar} from 'test_module';\n\n'ok';",
             "test_import.es",
@@ -683,7 +695,7 @@ mod tests {
     /// dynamic imports don't seem to be implemented in our version of JSAPI, so we'll skip this for now
     fn _test_dynamic_import() {
         log::info!("test: test_dynamic_import");
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         let import_res: Result<EsValueFacade, EsErrorInfo> = rt.eval_sync(
             "import('test_module').then((answer) => {console.log('imported module: ' + JSON.stringify(answer));});\n\n'ok';",
             "test_dynamic_import.es",
@@ -699,7 +711,7 @@ mod tests {
     #[test]
     fn test_call_method_obj_name() {
         log::info!("test: test_call_method_obj_name");
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         let res = rt.do_with_inner(|inner| {
             inner.do_in_es_event_queue_sync(
 
@@ -746,7 +758,7 @@ mod tests {
     // used for testing with gc_zeal opts
     // #[test]
     fn _test_simple_inner() {
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         rt.do_with_inner(|inner| {
             for _x in 0..5000 {
                 inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
@@ -768,7 +780,7 @@ mod tests {
         log::info!("test: test_hva");
         use mozjs::jsapi::HandleValueArray;
 
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         let ret = rt.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
             sm_rt.do_with_jsapi(|rt, cx, global| {
                 rooted!(in (cx) let mut func_root = UndefinedValue());

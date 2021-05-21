@@ -6,9 +6,9 @@
 //!
 //! ```no_run
 //!
-//! use es_runtime::esreflection::EsProxy;
-//! use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-//! use es_runtime::esvaluefacade::EsValueFacade;
+//! use spidermonkey_runtime::esreflection::EsProxy;
+//! use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+//! use spidermonkey_runtime::esvaluefacade::EsValueFacade;
 //! use std::collections::HashMap;
 //!
 //!     let rt = EsRuntimeBuilder::new().build();
@@ -105,9 +105,9 @@ impl EsProxy {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esreflection::EsProxyBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esreflection::EsProxyBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     ///
     ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
@@ -146,9 +146,9 @@ impl EsProxy {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esreflection::EsProxyBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esreflection::EsProxyBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     ///
     ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
@@ -184,9 +184,9 @@ impl EsProxy {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esreflection::EsProxyBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esreflection::EsProxyBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     ///
     ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass").build(&rt);
@@ -209,9 +209,9 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esreflection::EsProxyBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esreflection::EsProxyBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     ///
     ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass").build(&rt);
@@ -237,9 +237,9 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esreflection::EsProxyBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esreflection::EsProxyBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     ///
     ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
@@ -270,9 +270,9 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esreflection::EsProxyBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esreflection::EsProxyBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     ///
     ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
@@ -300,9 +300,9 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esreflection::EsProxyBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esreflection::EsProxyBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     ///
     ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
@@ -333,9 +333,9 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esreflection::EsProxyBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esreflection::EsProxyBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     ///
     ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
@@ -373,9 +373,9 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esreflection::EsProxyBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esreflection::EsProxyBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     ///
     ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
@@ -407,9 +407,9 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esreflection::EsProxyBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esreflection::EsProxyBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     ///
     ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
@@ -435,9 +435,9 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esreflection::EsProxyBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esreflection::EsProxyBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     ///
     ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")
@@ -471,9 +471,9 @@ impl EsProxyBuilder {
     /// # Example
     ///
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esreflection::EsProxyBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esreflection::EsProxyBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     ///
     ///let rt = EsRuntimeBuilder::default().build();
     ///let es_proxy = EsProxyBuilder::new(vec!["my", "biz"], "MyClass")

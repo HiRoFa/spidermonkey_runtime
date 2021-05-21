@@ -270,6 +270,7 @@ unsafe extern "C" fn console_assert(
 
 #[cfg(test)]
 mod tests {
+    use crate::esruntime::tests::init_test_runtime;
     use crate::features::console::parse_field_value;
 
     #[test]
@@ -318,7 +319,7 @@ mod tests {
 
     #[test]
     fn test_console() {
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         //let console: EsValueFacade = rt.eval_sync("(console);", "test_console.es").ok().unwrap();
 
         // assert!(console.is_object());

@@ -3,6 +3,7 @@
 * update mozjs (spidermonkey 88)
 * use EventLoop from utils
 * use js_utils::Script
+* renamed lib from spidermonkey_runtime to spidermonkey_runtime
 
 # 0.6.0 
 
@@ -64,7 +65,7 @@
 
 # 0.3.1 
 
-* removed necessity to box closures when calling EsRuntimeWrapper::run_in_es_runtime_thread*()
+* removed necessity to box closures when calling EsRuntimeWrapper::run_in_spidermonkey_runtime_thread*()
 * added possibility to invoke EsValueFacade when it wraps a JS function. E.g. when calling a rust-op with a function arguments to be used as consumer
 * added utils for constructing objects based on a constructor
 

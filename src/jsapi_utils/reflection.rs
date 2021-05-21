@@ -10,9 +10,9 @@
 //! use mozjs::rust::HandleValue;
 //! use mozjs::jsval::{Int32Value, UndefinedValue};
 //! use mozjs::jsapi::JSContext;
-//! use es_runtime::jsapi_utils;
+//! use spidermonkey_runtime::jsapi_utils;
 //! use log::debug;
-//! use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+//! use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
 //!
 //! let rt = EsRuntimeBuilder::new().build();
 //! // since we're working with jsapi we need to run in the event queue of the runtime
@@ -156,8 +156,8 @@ thread_local! {
 /// find a ref to a proxy, use full canonical name as key, needs to run in the workerthread of the event queue
 /// # Example
 /// ```no_run
-/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-/// use es_runtime::jsapi_utils::reflection::{ProxyBuilder, get_proxy};
+/// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+/// use spidermonkey_runtime::jsapi_utils::reflection::{ProxyBuilder, get_proxy};
 ///
 /// let rt = EsRuntimeBuilder::new().build();
 /// // since we're working with jsapi we need to run in the workerthread of the event queue
@@ -444,8 +444,8 @@ impl ProxyBuilder {
     /// create a new builder for a Proxy
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::jsapi_utils::reflection::ProxyBuilder;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::jsapi_utils::reflection::ProxyBuilder;
     ///
     /// let rt = EsRuntimeBuilder::new().build();
     /// rt.do_in_es_event_queue_sync(|sm_rt| {
@@ -476,8 +476,8 @@ impl ProxyBuilder {
     /// please not that if you do not add a constructor you can only use the static methods, getters, setters and events
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::jsapi_utils::reflection::ProxyBuilder;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::jsapi_utils::reflection::ProxyBuilder;
     ///
     /// let rt = EsRuntimeBuilder::new().build();
     /// rt.do_in_es_event_queue_sync(|sm_rt| {
@@ -537,8 +537,8 @@ impl ProxyBuilder {
     /// thse can be called from js as if it were members of the instance
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::jsapi_utils::reflection::ProxyBuilder;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::jsapi_utils::reflection::ProxyBuilder;
     ///
     /// let rt = EsRuntimeBuilder::new().build();
     /// rt.do_in_es_event_queue_sync(|sm_rt| {
@@ -608,6 +608,7 @@ impl ProxyBuilder {
 
 #[cfg(test)]
 mod tests {
+    use crate::esruntime::tests::init_test_runtime;
     use crate::jsapi_utils::es_value_to_str;
     use crate::jsapi_utils::reflection::*;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
@@ -618,7 +619,7 @@ mod tests {
     #[test]
     fn test_proxy() {
         log::info!("test_proxy");
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
 
         rt.do_with_inner(|inner| {
             inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
@@ -696,7 +697,7 @@ mod tests {
     #[test]
     fn test_static_proxy() {
         log::info!("test_static_proxy");
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
 
         rt.do_with_inner(|inner| {
             inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
@@ -755,7 +756,7 @@ mod tests {
     #[test]
     fn test_proxy_nonconstructable() {
         log::info!("test_proxy_nonconstructable");
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
 
         rt.do_with_inner(|inner| {
             inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {

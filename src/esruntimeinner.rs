@@ -118,7 +118,7 @@ impl EsRuntimeInner {
     where
         J: FnOnce(&SmRuntime) + Send + 'static,
     {
-        trace!("do_in_es_runtime_thread");
+        trace!("do_in_spidermonkey_runtime_thread");
         // this is executed in the single thread in the Threadpool, therefore Runtime and global are stored in a thread_local
 
         let async_job = || {
@@ -135,7 +135,7 @@ impl EsRuntimeInner {
     where
         J: FnOnce(&SmRuntime) -> R + Send + 'static,
     {
-        trace!("do_in_es_runtime_thread_sync");
+        trace!("do_in_spidermonkey_runtime_thread_sync");
         // this is executed in the single thread in the Threadpool, therefore Runtime and global are stored in a thread_local
 
         let job = || {

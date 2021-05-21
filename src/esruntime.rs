@@ -97,7 +97,7 @@ impl EsRuntime {
     /// load a script module and run it
     /// # Example
     /// ```rust
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
     /// let rt = EsRuntimeBuilder::new().build();
     /// rt.load_module_sync("console.log('running a module, you can import and export in and from modules');", "test_module.mes");
     /// ```
@@ -117,7 +117,7 @@ impl EsRuntime {
     /// call a function by name and wait for it to complete
     /// # Example
     /// ```rust
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
     ///
     /// let rt = EsRuntimeBuilder::new().build();
     /// rt.eval_sync("this.com = {stuff: {method: function(){console.log('my func');}}}", "test_call_sync.es").ok().expect("script failed");
@@ -186,8 +186,8 @@ impl EsRuntime {
     ///
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     ///
     /// let rt = EsRuntimeBuilder::new().build();
     /// rt.add_global_sync_function("test_add_global_sync", |_args| {
@@ -209,8 +209,8 @@ impl EsRuntime {
     /// this async variant will run the method in a separate thread and return the result as a Promise
     /// # Example
     /// ```no_run
-    /// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-    /// use es_runtime::esvaluefacade::EsValueFacade;
+    /// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+    /// use spidermonkey_runtime::esvaluefacade::EsValueFacade;
     /// use std::time::Duration;
     ///
     /// let rt = EsRuntimeBuilder::new().build();
@@ -240,15 +240,10 @@ pub mod tests {
     use crate::jsapi_utils::EsErrorInfo;
     use hirofa_utils::js_utils::Script;
     use log::LevelFilter;
-    use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
 
-    lazy_static! {
-        pub static ref TEST_RT: Arc<EsRuntime> = init_test_runtime();
-    }
-
-    fn init_test_runtime() -> Arc<EsRuntime> {
+    pub fn init_test_runtime() -> EsRuntime {
         log::info!("test: init_test_runtime");
         simple_logging::log_to_file("esruntime.log", LevelFilter::Trace)
             .ok()
@@ -280,7 +275,7 @@ pub mod tests {
             })
         });
 
-        Arc::new(rt)
+        rt
     }
 
     #[test]
@@ -330,11 +325,16 @@ pub mod tests {
             sm_rt.cleanup();
         });
         std::thread::sleep(Duration::from_secs(3));
+        println!("dropping rt");
+        drop(rt);
+        println!("dropped rt");
+        std::thread::sleep(Duration::from_secs(3));
+        println!("test done");
     }
 
     #[test]
     fn test_wasm() {
-        let esrt: Arc<EsRuntime> = TEST_RT.clone();
+        let esrt = init_test_runtime();
         let esvf = esrt
             .eval_sync("typeof WebAssembly;", "test_wasm.es")
             .ok()
@@ -346,7 +346,7 @@ pub mod tests {
     #[test]
     fn test_module() {
         log::info!("test: test_module");
-        let esrt: Arc<EsRuntime> = TEST_RT.clone();
+        let esrt = init_test_runtime();
 
         let load_mod_res = esrt.load_module_sync("import {other} from 'foo_test_mod.mes';\n\nlet test_method_0 = (a) => {return a * 11;};\n\nesses.test_method_1 = (a) => {return a * 12;};", "test_module_rt.mes");
 
@@ -387,7 +387,7 @@ pub mod tests {
     #[test]
     fn call_method() {
         log::debug!("test: call_method");
-        let rt: Arc<EsRuntime> = TEST_RT.clone();
+        let rt = init_test_runtime();
         rt.eval_sync(
             "this.myObj = {childObj: {myMethod: function(a, b){return a*b;}}};",
             "call_method",
@@ -408,7 +408,7 @@ pub mod tests {
     #[test]
     fn test_async_await() {
         log::info!("test: test_async_await");
-        let rt: Arc<EsRuntime> = TEST_RT.clone();
+        let rt = init_test_runtime();
 
         let code = "\
                     let async_method = async function(){\

@@ -7,8 +7,8 @@
 //! # Example
 //!
 //! ```no_run
-//!     use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-//!     use es_runtime::jsapi_utils;
+//!     use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+//!     use spidermonkey_runtime::jsapi_utils;
 //!
 //! let rt = EsRuntimeBuilder::new().build();
 //! rt.do_in_es_event_queue_sync(|sm_rt| {
@@ -262,6 +262,7 @@ pub fn gc(context: *mut JSContext) {
 mod tests {
     use crate::jsapi_utils::{es_value_to_str, get_pending_exception, EsErrorInfo};
 
+    use crate::esruntime::tests::init_test_runtime;
     use crate::esvaluefacade::EsValueFacade;
     use crate::jsapi_utils;
     use crate::spidermonkeyruntimewrapper::SmRuntime;
@@ -271,13 +272,13 @@ mod tests {
     where
         F: FnOnce(&SmRuntime) -> R + Send + 'static,
     {
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         rt.do_in_es_event_queue_sync(test_fn)
     }
 
     #[test]
     fn test_es_value_to_string() {
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
 
         let test_string: String = rt.do_with_inner(|inner| {
             inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
@@ -311,7 +312,7 @@ mod tests {
 
     #[test]
     fn test_eval() {
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         let res: String = rt.do_with_inner(|inner| {
             inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
                 let res: Result<EsValueFacade, EsErrorInfo> =
@@ -328,7 +329,7 @@ mod tests {
         use log::trace;
         //simple_logger::init().unwrap();
 
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         let res = rt.do_with_inner(|inner| {
             inner.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
                 sm_rt.do_with_jsapi(|rt, cx, global| {

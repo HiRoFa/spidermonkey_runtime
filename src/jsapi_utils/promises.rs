@@ -181,6 +181,7 @@ pub fn reject_promise(
 
 #[cfg(test)]
 mod tests {
+    use crate::esruntime::tests::init_test_runtime;
     use crate::jsapi_utils;
     use crate::jsapi_utils::get_pending_exception;
     use crate::jsapi_utils::promises::object_is_promise;
@@ -263,7 +264,7 @@ mod tests {
 
     #[test]
     fn test_promise_rejection_log() {
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         rt.eval_sync(
             "{let p = new Promise((res, rej) => {rej('poof');}); p.then((res) => {});}",
             "test_promise_rejection_log.es",

@@ -214,6 +214,7 @@ typed_array!(
 
 #[cfg(test)]
 pub mod tests {
+    use crate::esruntime::tests::init_test_runtime;
     use crate::jsapi_utils::arrays::{get_array_element, get_array_length, set_array_element_i32};
     use crate::jsapi_utils::objects::NULL_JSOBJECT;
     use crate::jsapi_utils::typed_arrays::Int8Array;
@@ -223,7 +224,7 @@ pub mod tests {
 
     #[test]
     fn test_typed_array() {
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         rt.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
             sm_rt.do_with_jsapi(|_rt, cx, _global| {
                 rooted!(in (cx) let mut arr_obj_root = NULL_JSOBJECT);
@@ -257,7 +258,7 @@ pub mod tests {
 
     #[test]
     fn test_typed_array_conversion() {
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
         rt.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
             sm_rt.do_with_jsapi(|_rt, cx, _global| {
                 let vec: Vec<i8> = vec![4, 8, 2, 105];

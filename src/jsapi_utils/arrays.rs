@@ -32,11 +32,11 @@ use mozjs::rust::{HandleObject, HandleValue, MutableHandleObject, MutableHandleV
 /// String
 /// # Example
 /// ```no_run
-/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-/// use es_runtime::jsapi_utils;
+/// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+/// use spidermonkey_runtime::jsapi_utils;
 /// use mozjs::jsval::UndefinedValue;
 /// use mozjs::rooted;
-/// use es_runtime::jsapi_utils::arrays::array_to_vec;
+/// use spidermonkey_runtime::jsapi_utils::arrays::array_to_vec;
 /// let rt = EsRuntimeBuilder::new().build();
 /// rt.do_in_es_event_queue_sync(|sm_rt| {
 /// sm_rt.do_with_jsapi(|rt, cx, global| {
@@ -73,11 +73,11 @@ pub fn array_to_vec<T: FromJSValConvertible<Config = ConversionBehavior>>(
 /// String
 /// # Example
 /// ```no_run
-/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
-/// use es_runtime::jsapi_utils;
+/// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
+/// use spidermonkey_runtime::jsapi_utils;
 /// use mozjs::rooted;
 /// use mozjs::jsval::UndefinedValue;
-/// use es_runtime::jsapi_utils::arrays::{array_to_vec, vec_to_array, get_array_length};
+/// use spidermonkey_runtime::jsapi_utils::arrays::{array_to_vec, vec_to_array, get_array_length};
 /// use mozjs::rust::HandleObject;
 ///   
 /// let vec = vec![2, 6, 0, 12];

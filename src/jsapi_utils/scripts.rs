@@ -16,13 +16,13 @@ use mozjs::rust::{
 
 /// compile a script, return a JSScript object via rval which can be executed by calling execute_script
 /// ```no_run
-/// use es_runtime::jsapi_utils::scripts::{execute_script, compile_script};
-/// use es_runtime::jsapi_utils;
+/// use spidermonkey_runtime::jsapi_utils::scripts::{execute_script, compile_script};
+/// use spidermonkey_runtime::jsapi_utils;
 /// use mozjs::rooted;
 /// use mozjs::jsapi::JSScript;
 /// use mozjs::jsval::UndefinedValue;
 /// use std::ptr;
-/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+/// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
 /// let rt = EsRuntimeBuilder::new().build();
 /// rt.do_in_es_event_queue_sync(|sm_rt| {
 ///     sm_rt.do_with_jsapi(|_rt, cx, _global| {
@@ -97,6 +97,7 @@ pub fn execute_script(
 
 #[cfg(test)]
 pub mod tests {
+    use crate::esruntime::tests::init_test_runtime;
     use crate::jsapi_utils;
     use crate::jsapi_utils::scripts::{compile_script, execute_script};
     use crate::spidermonkeyruntimewrapper::SmRuntime;
@@ -111,7 +112,7 @@ pub mod tests {
         log::info!("test_scripts");
         std::thread::sleep(Duration::from_secs(1));
 
-        let rt = crate::esruntime::tests::TEST_RT.clone();
+        let rt = init_test_runtime();
 
         rt.do_in_es_event_queue_sync(|sm_rt: &SmRuntime| {
             sm_rt.do_with_jsapi(|_rt, cx, _global| {

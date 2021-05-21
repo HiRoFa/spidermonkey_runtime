@@ -1,10 +1,10 @@
-This project is currently low on attention from me, i'm currently doing a lot of work for the quickjs based alternative which is a bit more practical for me because it's easier to compile on sbc's like the raspberry pi. I am however planning to get back to this when i feel [quick_es_runtime](https://github.com/HiRoFa/quickjs_es_runtime) is where i want it to be..
+This project is currently low on attention from me, i'm currently doing a lot of work for the quickjs based alternative which is a bit more practical for me because it's easier to compile on sbc's like the raspberry pi. I am however planning to get back to this when i feel [quick_spidermonkey_runtime](https://github.com/HiRoFa/quickjs_spidermonkey_runtime) is where i want it to be..
 
 # spidermonkey_runtime
 
 spidermonkey_runtime is a crate aimed at making it possible for rust developers to integrate the [SpiderMonkey](https://developer.mozilla.org/en-US/docs/Mozilla/Projects/SpiderMonkey) JavaScript engine in their rust projects without having specialized knowledge about the SpiderMonkey JavaScript engines.
 
-* [DOCS](https://drfos.github.io/es_runtime/es_runtime/index.html)
+* [DOCS](https://drfos.github.io/spidermonkey_runtime/spidermonkey_runtime/index.html)
 
 # Status
 
@@ -35,9 +35,9 @@ Cargo.toml
 ```toml
 [dependencies]
 # latest tag
-es_runtime = {git = "https://github.com/DRFos/es_runtime", tag = "0.5.0"}
+spidermonkey_runtime = {git = "https://github.com/DRFos/spidermonkey_runtime", tag = "0.5.0"}
 # or just get the latest
-# es_runtime = {git = "https://github.com/DRFos/es_runtime"}
+# spidermonkey_runtime = {git = "https://github.com/DRFos/spidermonkey_runtime"}
 
 ```
 
@@ -78,7 +78,7 @@ fn example() {
 }
 ```
 
-For a more detailed getting started you should see the examples in the [DOCS](https://drfos.github.io/es_runtime/es_runtime/index.html#examples)
+For a more detailed getting started you should see the examples in the [DOCS](https://drfos.github.io/spidermonkey_runtime/spidermonkey_runtime/index.html#examples)
 
 ## 0.1 Goals
 

@@ -7,7 +7,7 @@ use std::time::Duration;
 /// # Example
 ///
 /// ```no_run
-/// use es_runtime::esruntimebuilder::EsRuntimeBuilder;
+/// use spidermonkey_runtime::esruntimebuilder::EsRuntimeBuilder;
 ///
 /// let rt = EsRuntimeBuilder::default().build();
 /// ```

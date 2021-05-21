@@ -210,7 +210,7 @@ unsafe extern "C" fn module_dynamic_import(
     let rt_arc = SmRuntime::clone_current_esrt_inner_arc();
 
     // todo if the module is already cache we could just run an async job via
-    // rt_arc.do_in_es_runtime_thread
+    // rt_arc.do_in_spidermonkey_runtime_thread
     // instead of stepping into a different thread
 
     let load_task = move || {
@@ -234,7 +234,7 @@ unsafe extern "C" fn module_dynamic_import(
             // compile module / get from cache here
             // resolve or reject promise here (in event queue)
             trace!(
-                "module_dynamic_import: {}, load_task: back in do_in_es_runtime_thread",
+                "module_dynamic_import: {}, load_task: back in do_in_spidermonkey_runtime_thread",
                 file_name.as_str()
             );
             sm_rt.do_with_jsapi(|_rt, cx, _global| {
@@ -242,7 +242,7 @@ unsafe extern "C" fn module_dynamic_import(
                 // todo replace with a bool
 
                 trace!(
-                    "module_dynamic_import: {}, load_task: back in do_in_es_runtime_thread, check cache",
+                    "module_dynamic_import: {}, load_task: back in do_in_spidermonkey_runtime_thread, check cache",
                     file_name.as_str()
                 );
 
