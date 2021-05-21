@@ -2,6 +2,7 @@
 
 * update mozjs (spidermonkey 88)
 * use EventLoop from utils
+* use js_utils::Script
 
 # 0.6.0 
 

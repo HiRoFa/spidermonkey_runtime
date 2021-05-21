@@ -1,9 +1,10 @@
-use crate::esruntime::{EsRuntime, EsScriptCode};
+use crate::esruntime::EsRuntime;
 use crate::jsapi_utils;
 use crate::jsapi_utils::objects::NULL_JSOBJECT;
 use crate::jsapi_utils::rooting::EsPersistentRooted;
 use crate::jsapi_utils::{get_pending_exception, report_exception2, EsErrorInfo};
 use crate::spidermonkeyruntimewrapper::{register_cached_object, SmRuntime, SM_RT};
+use hirofa_utils::js_utils::Script;
 use log::trace;
 use lru::LruCache;
 use mozjs::jsapi::DynamicImportStatus;
@@ -218,7 +219,7 @@ unsafe extern "C" fn module_dynamic_import(
             file_name.as_str()
         );
         // load mod code here (in helper thread)
-        let script: Option<EsScriptCode> = if let Some(loader) = &rt_arc.module_source_loader {
+        let script: Option<Script> = if let Some(loader) = &rt_arc.module_source_loader {
             loader(file_name.as_str(), ref_path.as_str())
         } else {
             None
@@ -379,7 +380,7 @@ unsafe extern "C" fn import_module(
     };
 
     // see if we got a module code loader
-    let module_code_opt: Option<EsScriptCode> = SM_RT.with(|sm_rt_rc| {
+    let module_code_opt: Option<Script> = SM_RT.with(|sm_rt_rc| {
         let sm_rt = sm_rt_rc.borrow();
         let es_rt_inner = sm_rt.clone_esrt_inner();
         if let Some(module_source_loader) = &es_rt_inner.module_source_loader {
