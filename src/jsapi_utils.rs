@@ -215,7 +215,7 @@ pub fn eval(
 pub fn new_es_value_from_str(context: *mut JSContext, s: &str, rval: MutableHandleValue) {
     let js_string: *mut JSString =
         unsafe { JS_NewStringCopyN(context, s.as_ptr() as *const libc::c_char, s.len()) };
-    rooted!(in (context) let js_string_root = js_string);
+    rooted!(in (context) let _js_string_root = js_string);
     //mozjs::jsapi::JS_NewStringCopyZ(context, s.as_ptr() as *const libc::c_char);
     let mut rval = rval;
     rval.set(StringValue(unsafe { &*js_string }));

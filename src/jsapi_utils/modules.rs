@@ -402,7 +402,7 @@ unsafe extern "C" fn import_module(
             let err_str = format!("error loading module: {}", err.err_msg());
             log::debug!("error loading module, returning null: {}", err_str);
             report_exception2(cx, err_str);
-            return *ptr::null_mut::<*mut JSObject>();
+            return ptr::null_mut();
         }
 
         let compiled_module: *mut JSObject = compiled_mod_obj_res.ok().unwrap();
